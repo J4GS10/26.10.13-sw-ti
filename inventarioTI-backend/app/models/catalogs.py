@@ -1,0 +1,112 @@
+from sqlalchemy import Column, Integer, String, ForeignKey, Boolean, CheckConstraint
+from sqlalchemy.orm import relationship
+from app.db.base import Base
+
+
+# ==========================================
+# 1. TIPO DE ACTIVO
+# ==========================================
+class TipoActivo(Base):
+    __tablename__ = "INV_TIPO_ACTIVO"
+
+    TAC_Tipo_Activo = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    TAC_Nombre = Column(String(100), unique=True, nullable=False)
+    TAC_Prefijo = Column(String(10), nullable=True, unique=True)
+    TAC_Aplica_Depreciacion = Column(Boolean, default=True, nullable=False)
+
+    activos = relationship("app.models.core.Activo", back_populates="tipo_activo")
+
+
+# ==========================================
+# 2. MARCA
+# ==========================================
+class Marca(Base):
+    __tablename__ = "INV_MARCA"
+
+    MAR_Marca = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    MAR_Nombre = Column(String(100), unique=True, nullable=False)
+
+    modelos = relationship("Modelo", back_populates="marca")
+
+
+# ==========================================
+# 3. TIPO DE CONEXIÓN
+# ==========================================
+class TipoConexion(Base):
+    __tablename__ = "INV_TIPO_CONEXION"
+
+    TCN_Tipo_Conexion = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    TCN_Nombre = Column(String(50), unique=True, nullable=False)
+    TCN_Descripcion = Column(String(200), nullable=True)
+
+    modelos = relationship("Modelo", back_populates="tipo_conexion")
+
+
+# ==========================================
+# 4. MODELO
+# ==========================================
+class Modelo(Base):
+    __tablename__ = "INV_MODELO"
+
+    MOD_Modelo = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    MOD_Nombre = Column(String(150), nullable=False)
+    MOD_Anio_Lanzamiento = Column(Integer, nullable=True)
+
+    MAR_Marca = Column(
+        Integer,
+        ForeignKey("INV_MARCA.MAR_Marca", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    TCN_Tipo_Conexion = Column(
+        Integer,
+        ForeignKey("INV_TIPO_CONEXION.TCN_Tipo_Conexion", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # Tipo de componente al que pertenece el modelo (Mouse, Laptop…). Nullable
+    # para modelos legados; habilita la cascada de selección en la UI.
+    TAC_Tipo_Activo = Column(
+        Integer,
+        ForeignKey("INV_TIPO_ACTIVO.TAC_Tipo_Activo", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    marca = relationship("Marca", back_populates="modelos")
+    tipo_conexion = relationship("TipoConexion", back_populates="modelos")
+    tipo_activo = relationship("TipoActivo")
+    activos = relationship("app.models.core.Activo", back_populates="modelo")
+
+    __table_args__ = (
+        CheckConstraint(
+            '"MOD_Anio_Lanzamiento" IS NULL OR "MOD_Anio_Lanzamiento" BETWEEN 1970 AND 2100',
+            name="ck_modelo_anio_razonable",
+        ),
+    )
+
+
+# ==========================================
+# 5. ESTADO OPERATIVO
+# ==========================================
+class EstadoOperativo(Base):
+    __tablename__ = "INV_ESTADO_OPERATIVO"
+
+    EOP_Estado_Operativo = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    EOP_Nombre = Column(String(50), unique=True, nullable=False)
+    EOP_Descripcion = Column(String(200), nullable=True)
+
+    activos = relationship("app.models.core.Activo", back_populates="estado_operativo")
+
+
+# ==========================================
+# 6. TIPO DE ESPECIFICACIÓN
+# ==========================================
+class TipoEspecificacion(Base):
+    __tablename__ = "INV_TIPO_ESPECIFICACION"
+
+    TES_Tipo_Especificacion = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    TES_Nombre = Column(String(100), unique=True, nullable=False)
+    TES_Unidad_Medida = Column(String(20), nullable=True)
+
+    especificaciones = relationship(
+        "app.models.core.Especificacion", back_populates="tipo_especificacion"
+    )

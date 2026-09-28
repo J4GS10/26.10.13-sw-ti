@@ -1,0 +1,29 @@
+import type { TFunction } from 'i18next';
+import type { StatusVariant } from '../components/ui/StatusChip';
+
+/**
+ * Los estados operativos y tipos de movimiento vienen del catálogo de la BD
+ * en español ("En Bodega", "Asignación"). Los valores canónicos del sistema se
+ * traducen por una clave estable; los que agregue el usuario se muestran tal cual.
+ */
+export const catalogSlug = (value: string): string =>
+  (value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, '_');
+
+export const stateLabel = (t: TFunction, name?: string | null): string =>
+  name ? t(`catalog.states.${catalogSlug(name)}`, { defaultValue: name }) : '—';
+
+export const movementTypeLabel = (t: TFunction, name?: string | null): string =>
+  name ? t(`catalog.movement_types.${catalogSlug(name)}`, { defaultValue: name }) : '—';
+
+const STATE_VARIANT: Record<string, StatusVariant> = {
+  disponible: 'disponible',
+  asignado: 'asignado',
+  en_bodega: 'bodega',
+  en_reparacion: 'reparacion',
+  en_transito: 'por_vencer',
+  baja: 'baja',
+};
+
+/** Color del chip según el estado canónico (independiente del idioma). */
+export const stateVariant = (name?: string | null): StatusVariant =>
+  STATE_VARIANT[catalogSlug(name ?? '')] ?? 'default';

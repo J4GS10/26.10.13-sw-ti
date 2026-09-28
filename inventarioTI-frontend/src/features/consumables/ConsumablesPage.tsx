@@ -1,0 +1,148 @@
+import { useCallback, useEffect, useState } from 'react';
+import { Box, TableCell, TableRow, Button, IconButton, Chip, Tooltip, FormControlLabel, Switch, } from '@mui/material';
+import { PageHeader, DataTableShell } from '../../components/ui';
+import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import HistoryIcon from '@mui/icons-material/History';
+import { useTranslation } from 'react-i18next';
+import { useSnackbar } from 'notistack';
+import { SearchInput } from '../../components/SearchInput';
+import { consumableService } from './consumableService';
+import { Consumible } from '../../types/consumables';
+import { ConsumableDialog } from './ConsumableDialog';
+import { StockDialog } from './StockDialog';
+import { ConsumableHistoryDialog } from './ConsumableHistoryDialog';
+import { downloadCsv } from '../../api/downloadCsv';
+import { getApiErrorDetail } from '../../api/errors';
+import { ExportMenuButton } from '../../components/ExportMenuButton';
+import { usePermissions } from '../../hooks/usePermissions';
+import { CollapsibleToolbar } from '../../components/CollapsibleToolbar';
+import { useConfirm } from '../../components/confirm-context';
+export const ConsumablesPage = () => {
+    const { t } = useTranslation();
+    const { canOperate, canAdminInventory, canExport } = usePermissions();
+    const confirm = useConfirm();
+    const { enqueueSnackbar } = useSnackbar();
+    const [items, setItems] = useState<Consumible[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [search, setSearch] = useState('');
+    const [soloBajo, setSoloBajo] = useState(false);
+    const [dialogOpen, setDialogOpen] = useState(false);
+    const [toEdit, setToEdit] = useState<Consumible | null>(null);
+    const [stockModo, setStockModo] = useState<'entrada' | 'salida' | null>(null);
+    const [stockTarget, setStockTarget] = useState<Consumible | null>(null);
+    const [histTarget, setHistTarget] = useState<Consumible | null>(null);
+    const load = useCallback(async () => {
+        setLoading(true);
+        try {
+            setItems(await consumableService.list(soloBajo));
+        }
+        catch {
+            enqueueSnackbar(t('common.error_loading'), { variant: 'error' });
+        }
+        finally {
+            setLoading(false);
+        }
+    }, [enqueueSnackbar, soloBajo, t]);
+    useEffect(() => { load(); }, [load]);
+    const handleDelete = async (c: Consumible) => {
+        if (!(await confirm({ message: t('common.confirm_delete'), destructive: true, confirmText: t('common.delete') })))
+            return;
+        try {
+            await consumableService.remove(c.CON_Consumible);
+            load();
+        }
+        catch (err: unknown) {
+            const code = getApiErrorDetail(err);
+            enqueueSnackbar(code === 'CANNOT_DELETE_CONSUMABLE_HAS_MOVEMENTS'
+                ? t('consumables.error_has_movements')
+                : t('common.error_generic'), { variant: 'error' });
+        }
+    };
+    const filtered = items.filter((c) => c.CON_Nombre.toLowerCase().includes(search.toLowerCase()) ||
+        (c.CON_Categoria ?? '').toLowerCase().includes(search.toLowerCase()));
+    return (<Box>
+      <PageHeader
+        title={t('consumables.title')}
+        badge={filtered.length}
+        actions={<>
+          {canExport && <ExportMenuButton onExport={(lang) => downloadCsv('/export/consumibles.csv', 'consumibles.csv', lang)}/>}
+          {canAdminInventory && (<Button variant="contained" startIcon={<AddIcon />} onClick={() => { setToEdit(null); setDialogOpen(true); }}>
+            {t('consumables.new_btn')}
+          </Button>)}
+        </>}
+      />
+
+      <CollapsibleToolbar
+        storageKey="consumables"
+        search={<SearchInput value={search} onChange={setSearch}/>}
+        summary={soloBajo && <Chip size="small" color="warning" variant="outlined" label={t('consumables.only_low')}/>}
+      >
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, alignItems: 'center' }}>
+          <FormControlLabel control={<Switch checked={soloBajo} onChange={(e) => setSoloBajo(e.target.checked)} color="warning"/>} label={t('consumables.only_low')} sx={{ color: 'text.secondary' }}/>
+        </Box>
+      </CollapsibleToolbar>
+
+      <ConsumableDialog open={dialogOpen} toEdit={toEdit} onClose={(r) => { setDialogOpen(false); setToEdit(null); if (r)
+        load(); }}/>
+      <StockDialog open={!!stockModo} modo={stockModo ?? 'entrada'} consumible={stockTarget} onClose={(r) => { setStockModo(null); setStockTarget(null); if (r)
+        load(); }}/>
+      <ConsumableHistoryDialog open={!!histTarget} consumible={histTarget} onClose={() => setHistTarget(null)}/>
+
+      <DataTableShell
+        columns={[
+          { key: 'name', label: t('consumables.field_name') },
+          { key: 'category', label: t('consumables.field_category') },
+          { key: 'stock', label: t('consumables.stock') },
+          { key: 'min', label: t('consumables.field_min') },
+          { key: 'actions', label: t('common.actions'), align: 'right' },
+        ]}
+        rows={filtered}
+        loading={loading}
+        emptyTitle={t('common.no_records')}
+        renderRow={(c) => (<TableRow key={c.CON_Consumible} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
+            <TableCell sx={{ color: 'text.primary', fontWeight: 'bold' }}>{c.CON_Nombre}</TableCell>
+            <TableCell sx={{ color: 'text.secondary' }}>{c.CON_Categoria ?? '—'}</TableCell>
+            <TableCell>
+              <Chip icon={c.bajo_stock ? <WarningAmberIcon /> : undefined} label={`${c.CON_Stock_Actual} ${c.CON_Unidad}`} size="small" color={c.bajo_stock ? 'warning' : 'primary'} variant={c.bajo_stock ? 'filled' : 'outlined'}/>
+            </TableCell>
+            <TableCell sx={{ color: 'text.secondary' }}>{c.CON_Stock_Minimo}</TableCell>
+            <TableCell align="right">
+              {canOperate && (<>
+              <Tooltip title={t('consumables.entry_title') as string}>
+                <IconButton size="small" sx={{ color: 'success.main' }} onClick={() => { setStockTarget(c); setStockModo('entrada'); }}>
+                  <ArrowUpwardIcon fontSize="small"/>
+                </IconButton>
+              </Tooltip>
+              <Tooltip title={t('consumables.exit_title') as string}>
+                <IconButton size="small" sx={{ color: 'warning.main' }} onClick={() => { setStockTarget(c); setStockModo('salida'); }}>
+                  <ArrowDownwardIcon fontSize="small"/>
+                </IconButton>
+              </Tooltip>
+              </>)}
+              <Tooltip title={t('consumables.history') as string}>
+                <IconButton size="small" sx={{ color: 'text.secondary' }} onClick={() => setHistTarget(c)}>
+                  <HistoryIcon fontSize="small"/>
+                </IconButton>
+              </Tooltip>
+              {canAdminInventory && (<>
+              <Tooltip title={t('common.edit')}>
+                <IconButton size="small" sx={{ color: 'primary.main' }} onClick={() => { setToEdit(c); setDialogOpen(true); }}>
+                  <EditIcon fontSize="small"/>
+                </IconButton>
+              </Tooltip>
+              <Tooltip title={t('common.delete')}>
+                <IconButton size="small" sx={{ color: 'error.main' }} onClick={() => handleDelete(c)}>
+                  <DeleteIcon fontSize="small"/>
+                </IconButton>
+              </Tooltip>
+              </>)}
+            </TableCell>
+          </TableRow>)}
+      />
+    </Box>);
+};

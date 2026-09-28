@@ -1,0 +1,18 @@
+# Secretos del entorno de revisión local
+herramientas-qa/revision.env
+.env
+.env.*
+!.env.example
+
+# Datos reales del inventario (no se versionan)
+dataset/
+
+# Salidas locales
+graphify-out/
+herramientas-qa/shots/
+herramientas-qa/salidas/
+*.log
+__pycache__/
+.pytest_cache/
+node_modules/
+dist/

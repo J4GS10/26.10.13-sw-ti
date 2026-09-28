@@ -1,0 +1,226 @@
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
+import { ThemeProvider, CssBaseline, Box, Toolbar, CircularProgress, IconButton, AppBar, Typography, useMediaQuery, useTheme } from '@mui/material';
+import { SnackbarProvider } from 'notistack';
+import MenuIcon from '@mui/icons-material/Menu';
+import { useTranslation } from 'react-i18next';
+import { createAppTheme } from './theme/theme';
+import { AuthProvider } from './context/AuthContext';
+import { useAuth } from './context/auth-context';
+import { ConfigProvider } from './context/ConfigContext';
+import { useConfig } from './context/config-context';
+import { ConfirmProvider } from './components/ConfirmDialog';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { Sidebar } from './components/Sidebar';
+import { ProtectedRoute } from './router/ProtectedRoute';
+import { ADMIN_READER_ROLES, AUDIT_READER_ROLES, IAM_ROLES, INVENTORY_READER_ROLES } from './utils/roles';
+// Páginas
+const LoginPage = lazy(() => import('./features/auth/LoginPage').then((m) => ({ default: m.LoginPage })));
+const ResetPasswordPage = lazy(() => import('./features/auth/ResetPasswordPage').then((m) => ({ default: m.ResetPasswordPage })));
+const SsoCallbackPage = lazy(() => import('./features/auth/SsoCallbackPage').then((m) => ({ default: m.SsoCallbackPage })));
+const DashboardPage = lazy(() => import('./features/dashboard/DashboardPage').then((m) => ({ default: m.DashboardPage })));
+const AssetsPage = lazy(() => import('./features/assets/AssetsPage').then((m) => ({ default: m.AssetsPage })));
+const ScannerPage = lazy(() => import('./features/scanner/ScannerPage').then((m) => ({ default: m.ScannerPage })));
+const UsersPage = lazy(() => import('./features/users/UsersPage').then((m) => ({ default: m.UsersPage })));
+const BrandsPage = lazy(() => import('./features/catalogs/brands/BrandsPage').then((m) => ({ default: m.BrandsPage })));
+const LocationsPage = lazy(() => import('./features/locations/LocationsPage').then((m) => ({ default: m.LocationsPage })));
+const AssetTypesPage = lazy(() => import('./features/catalogs/types/AssetTypesPage').then((m) => ({ default: m.AssetTypesPage })));
+const MovementsPage = lazy(() => import('./features/operations/MovementsPage').then((m) => ({ default: m.MovementsPage })));
+const ModelsPage = lazy(() => import('./features/catalogs/models/ModelsPage').then((m) => ({ default: m.ModelsPage })));
+const SoftwarePage = lazy(() => import('./features/software/SoftwarePage').then((m) => ({ default: m.SoftwarePage })));
+const ConsumablesPage = lazy(() => import('./features/consumables/ConsumablesPage').then((m) => ({ default: m.ConsumablesPage })));
+const ProvidersPage = lazy(() => import('./features/procurement/ProvidersPage').then((m) => ({ default: m.ProvidersPage })));
+const PurchaseOrdersPage = lazy(() => import('./features/procurement/PurchaseOrdersPage').then((m) => ({ default: m.PurchaseOrdersPage })));
+const WarrantiesPage = lazy(() => import('./features/procurement/WarrantiesPage').then((m) => ({ default: m.WarrantiesPage })));
+const MaintenancePage = lazy(() => import('./features/maintenance/MaintenancePage').then((m) => ({ default: m.MaintenancePage })));
+const ConfigPage = lazy(() => import('./features/config/ConfigPage').then((m) => ({ default: m.ConfigPage })));
+const PersonsPage = lazy(() => import('./features/persons/PersonsPage').then((m) => ({ default: m.PersonsPage })));
+const DepartmentsPage = lazy(() => import('./features/departments/DepartmentsPage').then((m) => ({ default: m.DepartmentsPage })));
+const DirectoryPage = lazy(() => import('./features/directory/DirectoryPage').then((m) => ({ default: m.DirectoryPage })));
+const SecurityGate = lazy(() => import('./features/auth/security/SecurityGate').then((m) => ({ default: m.SecurityGate })));
+const AuditPage = lazy(() => import('./features/audit/AuditPage').then((m) => ({ default: m.AuditPage })));
+const PageFallback = () => (<Box role="status" aria-live="polite" sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: 320,
+        opacity: 0,
+        animation: 'fallbackFadeIn 160ms ease-out 120ms forwards',
+        '@keyframes fallbackFadeIn': {
+            from: { opacity: 0 },
+            to: { opacity: 1 },
+        },
+        '@media (prefers-reduced-motion: reduce)': {
+            animation: 'none',
+            opacity: 1,
+        },
+    }}>
+    <CircularProgress />
+  </Box>);
+const RouteTransition = () => {
+    const location = useLocation();
+    return (<Box key={location.pathname} sx={{
+            minWidth: 0,
+            animation: 'routeFadeIn 180ms ease-out',
+            '@keyframes routeFadeIn': {
+                from: { opacity: 0, transform: 'translateY(6px)' },
+                to: { opacity: 1, transform: 'translateY(0)' },
+            },
+            '@media (prefers-reduced-motion: reduce)': {
+                animation: 'none',
+            },
+        }}>
+      <Outlet />
+    </Box>);
+};
+const DashboardLayout = () => {
+    const { t } = useTranslation();
+    const { config } = useConfig();
+    const { isAuthenticated, isLoading, restriction } = useAuth();
+    const theme = useTheme();
+    const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
+    const [mobileOpen, setMobileOpen] = useState(false);
+    const [collapsed, setCollapsed] = useState(() => {
+        try {
+            return window.localStorage.getItem('app-sidebar-collapsed') === 'true';
+        }
+        catch {
+            return false;
+        }
+    });
+    useEffect(() => {
+        try {
+            window.localStorage.setItem('app-sidebar-collapsed', collapsed ? 'true' : 'false');
+        }
+        catch { /* sin storage */ }
+    }, [collapsed]);
+    if (isLoading)
+        return <PageFallback />;
+    if (!isAuthenticated)
+        return <Navigate to="/login" replace/>;
+    // Paso de seguridad pendiente: pantalla completa en lugar del sistema.
+    if (restriction)
+        return <SecurityGate restriction={restriction}/>;
+    return (<Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
+      {isDesktop
+            ? <Sidebar variant="permanent" collapsed={collapsed} onToggleCollapse={() => setCollapsed((c) => !c)}/>
+            : <Sidebar variant="temporary" open={mobileOpen} onClose={() => setMobileOpen(false)}/>}
+
+      {/* Barra superior solo en móvil/tablet: en escritorio la navegación es la barra lateral. */}
+      {!isDesktop && (<AppBar position="fixed" color="inherit" elevation={0} sx={{
+                bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider',
+            }}>
+          <Toolbar variant="dense" sx={{ gap: 1, minHeight: 56 }}>
+            <IconButton edge="start" onClick={() => setMobileOpen(true)} aria-label={t('common.show_navigation')}>
+              <MenuIcon />
+            </IconButton>
+            <Typography variant="subtitle1" sx={{ fontWeight: 800, color: 'primary.main' }} noWrap>
+              {config.SYS_Nombre_Empresa}
+            </Typography>
+          </Toolbar>
+        </AppBar>)}
+
+      <Box component="main" sx={{
+            flexGrow: 1,
+            minWidth: 0,
+            minHeight: '100vh',
+            px: { xs: 2, sm: 3, lg: 4 },
+            pt: { xs: 'calc(56px + 16px)', md: 3 },
+            pb: 4,
+        }}>
+        <Box sx={{ maxWidth: 1600, mx: 'auto' }}>
+          <RouteTransition />
+        </Box>
+      </Box>
+    </Box>);
+};
+// El tablero es de inventario: el administrador de seguridad entra a Usuarios y accesos.
+const HomeRoute = () => {
+    const { user } = useAuth();
+    if (user?.role === 'ADMIN_SEGURIDAD')
+        return <Navigate to="/usuarios" replace/>;
+    return <DashboardPage />;
+};
+// Wrapper que consume el ConfigContext y monta el ThemeProvider con los colores
+const ThemedApp = () => {
+    const { config, isLoaded } = useConfig();
+    if (!isLoaded) {
+        // Bloqueo breve mientras el config llega: evita "flash" con colores default.
+        return (<Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#f5f3ef' }}>
+        <CircularProgress />
+      </Box>);
+    }
+    const theme = createAppTheme(config.SYS_Color_Primario, config.SYS_Color_Secundario, config.SYS_Color_Fondo);
+    return (<ThemeProvider theme={theme}>
+      <CssBaseline />
+      <SnackbarProvider maxSnack={3} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
+        <ConfirmProvider>
+        <AuthProvider>
+          <BrowserRouter>
+            <Suspense fallback={<PageFallback />}>
+              <Routes>
+                <Route path="/login" element={<LoginPage />}/>
+                <Route path="/reset-password" element={<ResetPasswordPage />}/>
+                <Route path="/sso/callback" element={<SsoCallbackPage />}/>
+
+                <Route element={<DashboardLayout />}>
+                  <Route path="/" element={<HomeRoute />}/>
+
+                  {/* Lectura del inventario: operadores y auditor (las acciones se ocultan por rol). */}
+                  <Route element={<ProtectedRoute allowedRoles={INVENTORY_READER_ROLES}/>}>
+                    <Route path="/activos" element={<AssetsPage />}/>
+                    <Route path="/scanner" element={<ScannerPage />}/>
+                    <Route path="/operaciones/guia" element={<Navigate to="/operaciones/movimientos" replace/>}/>
+                    <Route path="/operaciones/flujo" element={<Navigate to="/operaciones/movimientos" replace/>}/>
+                    <Route path="/operaciones/movimientos" element={<MovementsPage />}/>
+                    <Route path="/mantenimiento" element={<MaintenancePage />}/>
+                    <Route path="/consumibles" element={<ConsumablesPage />}/>
+                  </Route>
+
+                  <Route element={<ProtectedRoute allowedRoles={ADMIN_READER_ROLES}/>}>
+                    <Route path="/departamentos" element={<DepartmentsPage />}/>
+                    <Route path="/empleados" element={<PersonsPage />}/>
+                    <Route path="/software" element={<SoftwarePage />}/>
+                    <Route path="/compras/proveedores" element={<ProvidersPage />}/>
+                    <Route path="/compras/ordenes" element={<PurchaseOrdersPage />}/>
+                    <Route path="/compras/garantias" element={<WarrantiesPage />}/>
+                  </Route>
+
+                  <Route element={<ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN_TI']}/>}>
+                    <Route path="/config/marcas" element={<BrandsPage />}/>
+                    <Route path="/config/ubicaciones" element={<LocationsPage />}/>
+                    <Route path="/config/tipos" element={<AssetTypesPage />}/>
+                    <Route path="/config/modelos" element={<ModelsPage />}/>
+                    <Route path="/config/directorio" element={<DirectoryPage />}/>
+                  </Route>
+
+                  <Route element={<ProtectedRoute allowedRoles={IAM_ROLES}/>}>
+                    <Route path="/usuarios" element={<UsersPage />}/>
+                  </Route>
+
+                  <Route element={<ProtectedRoute allowedRoles={AUDIT_READER_ROLES}/>}>
+                    <Route path="/auditoria" element={<AuditPage />}/>
+                  </Route>
+
+                  <Route element={<ProtectedRoute allowedRoles={['SUPER_ADMIN']}/>}>
+                    <Route path="/config" element={<ConfigPage />}/>
+                  </Route>
+                </Route>
+
+                <Route path="*" element={<Navigate to="/" replace/>}/>
+              </Routes>
+            </Suspense>
+          </BrowserRouter>
+        </AuthProvider>
+        </ConfirmProvider>
+      </SnackbarProvider>
+    </ThemeProvider>);
+};
+function App() {
+    return (<ErrorBoundary>
+      <ConfigProvider>
+        <ThemedApp />
+      </ConfigProvider>
+    </ErrorBoundary>);
+}
+export default App;
