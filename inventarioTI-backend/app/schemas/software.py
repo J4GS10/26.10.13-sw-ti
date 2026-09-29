@@ -1,6 +1,8 @@
 from typing import Optional, List
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 from app.schemas.common import Esquema
+from decimal import Decimal
+from app.core.currency import CurrencyCode
 from datetime import date, datetime
 import uuid
 
@@ -63,6 +65,9 @@ class LicenciaBase(Esquema):
     LIC_Clave_Activacion: Optional[str] = Field(None, description="Serial Key")
     LIC_Fecha_Vencimiento: Optional[date] = None
     LIC_Cantidad_Total: int = Field(..., gt=0, description="Total de asientos comprados")
+    # Costo de la licencia (o de su renovación) en la moneda en que se paga.
+    LIC_Costo: Optional[Decimal] = Field(None, ge=0, max_digits=14, decimal_places=2)
+    LIC_Moneda: Optional[CurrencyCode] = None
     
     # FKs
     SOF_Software: int
@@ -85,6 +90,8 @@ class LicenciaUpdate(Esquema):
     LIC_Clave_Activacion: Optional[str] = Field(None, max_length=255)
     LIC_Fecha_Vencimiento: Optional[date] = None
     LIC_Cantidad_Total: Optional[int] = Field(None, gt=0)
+    LIC_Costo: Optional[Decimal] = Field(None, ge=0, max_digits=14, decimal_places=2)
+    LIC_Moneda: Optional[CurrencyCode] = None
 
 class LicenciaResponse(LicenciaBase):
     LIC_Licencia: int
@@ -109,11 +116,14 @@ class InstalacionBase(Esquema):
         return self
 
 class InstalacionCreate(InstalacionBase):
-    pass
+    # Solo al desinstalar: por qué se retira (queda en el historial).
+    motivo: Optional[str] = Field(None, max_length=255)
 
 class InstalacionResponse(InstalacionBase):
     INS_Instalacion: int
     INS_Estado: bool
+    INS_Fecha_Retiro: Optional[datetime] = None
+    INS_Motivo_Retiro: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 

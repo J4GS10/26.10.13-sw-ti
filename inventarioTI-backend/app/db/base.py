@@ -20,7 +20,18 @@ import app.models.core
 # 3. Resto de módulos
 import app.models.software      
 import app.models.traceability  
-import app.models.governance    
+import app.models.governance
+import app.models.kardex
+import app.models.inventario_fisico    
 
-# 4. Unicidad sin distinguir mayúsculas ni espacios (índices funcionales)
-import app.db.unicidad  # noqa: E402,F401
+# 4. Unicidad sin distinguir mayúsculas ni espacios (índices funcionales):
+#    se registran al crear las tablas (evita la importación circular).
+from sqlalchemy import event as _event  # noqa: E402
+
+
+def _registrar_unicidad(*_args, **_kwargs) -> None:
+    from app.db.unicidad import registrar_indices
+    registrar_indices()
+
+
+_event.listen(Base.metadata, "before_create", _registrar_unicidad)

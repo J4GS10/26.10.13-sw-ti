@@ -41,7 +41,8 @@ class EspecificacionBase(Esquema):
     ESP_Valor: str = Field(..., min_length=1, max_length=255)
 
 class EspecificacionCreate(EspecificacionBase):
-    pass
+    # Por qué se agrega o cambia (p. ej. "ampliación de RAM"): queda en el kardex.
+    motivo: Optional[str] = Field(None, max_length=255)
 
 class EspecificacionResponse(EspecificacionBase):
     ESP_Especificacion: int
@@ -59,6 +60,7 @@ class EspecificacionDetalle(Esquema):
 
 class EspecificacionValorUpdate(Esquema):
     ESP_Valor: str = Field(..., min_length=1, max_length=255)
+    motivo: Optional[str] = Field(None, max_length=255)
 
 # =======================
 # ACTIVO (CORE)
@@ -109,6 +111,12 @@ class ActivoUpdate(Esquema):
 
 class ActivoResponse(ActivoBase):
     ACT_Activo: uuid.UUID
+    ARE_Area_Ubicacion: Optional[int] = None
+    ACT_Baja_Motivo: Optional[str] = None
+    ACT_Baja_Destino: Optional[str] = None
+    ACT_Baja_Fecha: Optional[date] = None
+    ACT_Baja_Documento: Optional[str] = None
+    ACT_Baja_Observacion: Optional[str] = None
     # Incluimos las specs en la respuesta
     especificaciones: List[EspecificacionResponse] = []
     
@@ -150,3 +158,50 @@ class ActivoFilter(Esquema):
     fecha_compra_end: Optional[date] = None
     page: int = Field(1, ge=1, description="Página 1-indexed")
     per_page: int = Field(20, ge=1, le=200, description="Tamaño de página, máximo 200")
+
+
+# =======================
+# BAJA FORMAL
+# =======================
+MOTIVOS_BAJA = ("OBSOLESCENCIA", "DANO_IRREPARABLE", "ROBO", "PERDIDA", "FIN_ARRENDAMIENTO",
+                "GARANTIA_REEMPLAZO", "OTRO")
+DESTINOS_BAJA = ("DESTRUCCION", "RECICLAJE", "DONACION", "VENTA", "DEVOLUCION_PROVEEDOR", "RESGUARDO", "OTRO")
+
+
+class BajaActivo(Esquema):
+    motivo: str = Field(..., pattern="^(" + "|".join(MOTIVOS_BAJA) + ")$")
+    destino: str = Field(..., pattern="^(" + "|".join(DESTINOS_BAJA) + ")$")
+    fecha: Optional[date] = None
+    documento: Optional[str] = Field(None, max_length=120)
+    observacion: Optional[str] = Field(None, max_length=500)
+    # Retirar en el mismo paso los componentes instalados en el equipo.
+    retirar_componentes: bool = False
+
+    @model_validator(mode="after")
+    def _otro_exige_detalle(self):
+        if (self.motivo == "OTRO" or self.destino == "OTRO") and not (self.observacion or "").strip():
+            raise ValueError("OBSERVATION_REQUIRED_FOR_OTHER")
+        return self
+
+
+# =======================
+# COMPONENTES
+# =======================
+class ComponenteInstalar(Esquema):
+    ACT_Componente: uuid.UUID
+    motivo: Optional[str] = Field(None, max_length=255)
+
+
+class ComponenteRetirar(Esquema):
+    motivo: Optional[str] = Field(None, max_length=255)
+    # Estado en que queda el componente retirado.
+    estado_destino: str = Field("En Bodega", pattern="^(Disponible|En Bodega)$")
+
+
+class ComponenteResumen(Esquema):
+    ACT_Activo: uuid.UUID
+    ACT_Codigo_Interno: str
+    ACT_Serie_Fabricante: str
+    TAC_Tipo_Activo: int
+    MOD_Modelo: int
+    model_config = ConfigDict(from_attributes=True)

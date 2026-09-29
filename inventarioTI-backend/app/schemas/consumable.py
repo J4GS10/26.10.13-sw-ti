@@ -4,6 +4,8 @@ import uuid
 
 from pydantic import BaseModel, Field, ConfigDict
 from app.schemas.common import Esquema
+from decimal import Decimal
+from app.core.currency import CurrencyCode
 
 
 # =======================
@@ -38,6 +40,9 @@ class ConsumibleResponse(ConsumibleBase):
     CON_Consumible: int
     CON_Stock_Actual: int
     CON_Activo: bool
+    # Último costo unitario de compra y su moneda (valoriza el stock).
+    CON_Costo_Unitario: Optional[Decimal] = None
+    CON_Moneda: Optional[str] = None
     # Calculado: stock actual <= mínimo (y mínimo > 0).
     bajo_stock: bool = False
     model_config = ConfigDict(from_attributes=True)
@@ -51,6 +56,15 @@ class StockMovimientoCreate(Esquema):
     MOC_Cantidad: int = Field(..., gt=0)
     MOC_Motivo: Optional[str] = Field(None, max_length=255)
     PER_Persona: Optional[uuid.UUID] = None
+    # Solo en entradas: costo unitario de la compra y su moneda.
+    precio_unitario: Optional[Decimal] = Field(None, ge=0, max_digits=14, decimal_places=2)
+    moneda: Optional[CurrencyCode] = None
+
+
+class StockAjusteCreate(Esquema):
+    """Ajuste por conteo físico: fija la existencia real."""
+    CON_Stock_Real: int = Field(..., ge=0)
+    MOC_Motivo: str = Field(..., min_length=5, max_length=255)
 
 
 class MovimientoConsumibleResponse(Esquema):
@@ -58,6 +72,9 @@ class MovimientoConsumibleResponse(Esquema):
     MOC_Tipo: str
     MOC_Cantidad: int
     MOC_Stock_Resultante: int
+    # Diálogo: la salida dejó el stock en o bajo el mínimo → proponer una compra.
+    bajo_minimo: bool = False
+    CON_Stock_Minimo: Optional[int] = None
     MOC_Motivo: Optional[str] = None
     MOC_Fecha: datetime
     CON_Consumible: int

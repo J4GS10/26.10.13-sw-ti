@@ -9,7 +9,7 @@ from app.api.idempotency import _IdempotencyGuard, idempotency_guard
 from app.core.limiter import limiter
 from app.db.session import get_db, get_read_db
 from app.schemas.procurement import (
-    GarantiaItem, OrdenCreate, OrdenDetalleResponse, OrdenEstadoUpdate, OrdenResponse,
+    GarantiaItem, OrdenCreate, OrdenDetalleResponse, OrdenCierre, OrdenEstadoUpdate, RecepcionResponse, OrdenResponse,
     ProveedorCreate, ProveedorResponse, ProveedorUpdate, RecepcionOrden, RecepcionResultado,
 )
 from app.services.procurement import ProcurementService
@@ -97,7 +97,22 @@ async def cambiar_estado_orden(
     id: int, schema: OrdenEstadoUpdate, request: Request, current_user: CurrentUser,
     service: ProcurementService = Depends(get_service),
 ):
-    return await service.cambiar_estado(id, schema.OCO_Estado, **_ctx(request, current_user))
+    return await service.cambiar_estado(id, schema.OCO_Estado, motivo=schema.motivo, **_ctx(request, current_user))
+
+
+@router.post("/ordenes/{id}/cerrar", response_model=OrdenDetalleResponse, dependencies=ADMIN)
+async def cerrar_orden_con_faltante(
+    id: int, schema: OrdenCierre, request: Request, current_user: CurrentUser,
+    service: ProcurementService = Depends(get_service),
+):
+    """Cierra una orden parcialmente recibida aceptando que lo pendiente no llegará (con motivo)."""
+    return await service.cerrar_con_faltante(id, schema.motivo, **_ctx(request, current_user))
+
+
+@router.get("/ordenes/{id}/recepciones", response_model=List[RecepcionResponse])
+async def listar_recepciones(id: int, service: ProcurementService = Depends(get_service)):
+    """Entregas registradas de la orden (documento, cantidades y diferencias)."""
+    return await service.list_recepciones(id)
 
 
 @router.post("/ordenes/{id}/recibir", response_model=RecepcionResultado, dependencies=ADMIN)

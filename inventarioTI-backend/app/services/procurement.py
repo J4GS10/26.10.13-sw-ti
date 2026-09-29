@@ -131,6 +131,7 @@ class ProcurementService(BaseService[ProcurementRepository]):
                 OCL_Cantidad=ln.OCL_Cantidad,
                 OCL_Precio_Unitario=Decimal(ln.OCL_Precio_Unitario),
                 OCL_Subtotal=subtotal,
+                OCL_Tipo=ln.OCL_Tipo,
                 ACT_Activo=ln.ACT_Activo,
                 CON_Consumible=ln.CON_Consumible,
                 LIC_Licencia=ln.LIC_Licencia,
@@ -148,85 +149,201 @@ class ProcurementService(BaseService[ProcurementRepository]):
         return await self.repo.get_orden(orden.OCO_Orden, with_lineas=True)
 
     @transactional
-    async def cambiar_estado(self, id: int, estado: str, usuario_id=None, ip=None):
-        orden = await self.repo.get_orden(id, with_lineas=False)
+    async def cambiar_estado(self, id: int, estado: str, usuario_id=None, ip=None, motivo: str | None = None):
+        orden = await self.repo.get_orden(id, with_lineas=True)
         if not orden:
             raise HTTPException(404, "PURCHASE_ORDER_NOT_FOUND")
         if orden.OCO_Estado == "CANCELADA":
             raise HTTPException(409, "ORDER_ALREADY_CANCELLED")
         # Máquina de estados de la orden: por aquí solo se cancela un borrador.
-        # "Recibida" se alcanza únicamente recibiendo (POST /recibir), y
-        # "Recibida"/"Cancelada" son finales: reabrir una orden recibida
-        # permitía recibirla dos veces y duplicar stock y activos.
+        # "Parcial"/"Recibida" se alcanzan únicamente recibiendo (POST /recibir)
+        # y "Cerrada con faltante" con POST /cerrar. Recibida, Cerrada y
+        # Cancelada son finales: reabrir una orden recibida permitía recibirla
+        # dos veces y duplicar stock y activos.
         if orden.OCO_Estado == estado:
-            return await self.repo.get_orden(id, with_lineas=True)
+            return orden
+        if orden.OCO_Estado == "PARCIAL" and estado == "CANCELADA":
+            raise HTTPException(409, "ORDER_HAS_RECEIPTS_CLOSE_WITH_SHORTAGE")
         if not (orden.OCO_Estado == "BORRADOR" and estado == "CANCELADA"):
             raise HTTPException(409, "ORDER_STATE_TRANSITION_NOT_ALLOWED")
         await self.repo.set_estado_orden(id, estado)
+        if motivo:
+            orden.OCO_Motivo_Cierre = motivo
         await self.gov_repo.create_audit_log(
             "UPDATE", "INV_ORDEN_COMPRA",
-            {"id": id, "diff": {"OCO_Estado": {"antes": orden.OCO_Estado, "despues": estado}}},
+            {"id": id, "diff": {"OCO_Estado": {"antes": orden.OCO_Estado, "despues": estado}}, "motivo": motivo},
             usuario_id=usuario_id, ip_origen=ip, sede_id=orden.SED_Sede,
         )
         return await self.repo.get_orden(id, with_lineas=True)
 
-    # =====================================================================
-    # RECEPCIÓN — lazo cerrado: suma stock de consumibles + da de alta activos
-    # =====================================================================
     @transactional
-    async def recibir_orden(self, id: int, schema: RecepcionOrden, usuario_id=None, ip=None):
+    async def cerrar_con_faltante(self, id: int, motivo: str, usuario_id=None, ip=None):
+        """Cierra una orden PARCIAL aceptando que lo pendiente no llegará."""
         orden = await self.repo.get_orden(id, with_lineas=True, lock=True)
         if not orden:
             raise HTTPException(404, "PURCHASE_ORDER_NOT_FOUND")
-        if orden.OCO_Estado != "BORRADOR":
-            raise HTTPException(409, "ORDER_NOT_RECEIVABLE")  # ya recibida o cancelada
+        if orden.OCO_Estado != "PARCIAL":
+            raise HTTPException(409, "ONLY_PARTIAL_ORDERS_CAN_BE_CLOSED")
+        faltantes = [
+            {"linea": ln.OCL_Linea, "descripcion": ln.OCL_Descripcion,
+             "pendiente": ln.OCL_Cantidad - (ln.OCL_Cantidad_Recibida or 0)}
+            for ln in orden.lineas if (ln.OCL_Cantidad_Recibida or 0) < ln.OCL_Cantidad
+        ]
+        await self.repo.set_estado_orden(id, "CERRADA_CON_FALTANTE")
+        orden.OCO_Motivo_Cierre = motivo
+        await self.gov_repo.create_audit_log(
+            "CLOSE_WITH_SHORTAGE", "INV_ORDEN_COMPRA",
+            {"id": id, "numero": orden.OCO_Numero, "motivo": motivo, "faltantes": faltantes},
+            usuario_id=usuario_id, ip_origen=ip, sede_id=orden.SED_Sede,
+        )
+        self._avisar_diferencias(orden, "cierre_con_faltante", faltantes, [], motivo)
+        return await self.repo.get_orden(id, with_lineas=True)
 
+    async def list_recepciones(self, id: int):
+        await self.get_orden(id)
+        from sqlalchemy import select as _select
+        from sqlalchemy.orm import selectinload
+        from app.models.procurement import Recepcion
+        return (await self.db.execute(
+            _select(Recepcion).options(selectinload(Recepcion.lineas))
+            .where(Recepcion.OCO_Orden == id).order_by(Recepcion.REC_Fecha, Recepcion.REC_Recepcion)
+        )).scalars().all()
+
+    def _avisar_diferencias(self, orden, motivo_aviso: str, faltantes: list, diferencias: list, texto=None) -> None:
+        """Aviso post-commit a los administradores (faltantes, sobrantes, precios)."""
+        if not faltantes and not diferencias:
+            return
+        from app.core.email import send_notification
+        from app.core.transactional import schedule_post_commit
+        contexto = {
+            "numero": orden.OCO_Numero, "motivo_aviso": motivo_aviso,
+            "faltantes": faltantes, "diferencias": diferencias, "motivo": texto or "",
+        }
+        schedule_post_commit(self, lambda: send_notification("recepcion_diferencias", contexto, to=()))
+
+    # =====================================================================
+    # RECEPCIÓN — documento de entrada con control de diferencias
+    # =====================================================================
+    @transactional
+    async def recibir_orden(self, id: int, schema: RecepcionOrden, usuario_id=None, ip=None):
+        """
+        Registra una ENTREGA del proveedor (una orden puede recibirse en varias):
+
+        - Cada línea acepta a lo sumo lo pendiente (pedido − recibido). Recibir
+          de más solo con una diferencia justificada y aceptar_sobrante.
+        - Un precio real fuera de la tolerancia (RECEPCION_TOLERANCIA_PRECIO_PCT)
+          exige una justificación.
+        - Una línea solo recibe lo que es (activo, consumible o licencia) y, si
+          la línea indica el consumible, solo ese consumible.
+        - La orden queda RECIBIDA si no falta nada, o PARCIAL con lo pendiente.
+        Todo en una transacción: si algo falla, no entra nada.
+        """
+        from app.core.config import settings
+        from app.core.data_scope import elevated
+        from app.models.procurement import Recepcion, RecepcionLinea
+        from app.services.kardex import KardexService
+
+        orden = await self.repo.get_orden(id, with_lineas=True, lock=True)
+        if not orden:
+            raise HTTPException(404, "PURCHASE_ORDER_NOT_FOUND")
+        if orden.OCO_Estado not in ("BORRADOR", "PARCIAL"):
+            raise HTTPException(409, "ORDER_NOT_RECEIVABLE")  # recibida, cerrada o cancelada
         if not (schema.consumibles or schema.activos or schema.licencias):
             raise HTTPException(400, "EMPTY_RECEIPT")
 
         lineas_validas = {ln.OCL_Linea: ln for ln in orden.lineas}
-
+        justificacion = {d.OCL_Linea: d for d in schema.diferencias}
+        kardex = KardexService(self.db)
         con_repo = ConsumibleRepository(self.db)
         core_repo = CoreRepository(self.db)
         cat_repo = CatalogRepository(self.db)
         sw_service = SoftwareService(self.db)
+        documento = ("RECEPCION", f"OC {orden.OCO_Numero}" + (f" · {schema.documento}" if schema.documento else ""))
 
-        cantidades_por_linea: dict[int, int] = {}
-        for rc in schema.consumibles:
-            cantidades_por_linea[rc.OCL_Linea] = cantidades_por_linea.get(rc.OCL_Linea, 0) + rc.cantidad
-        for ra in schema.activos:
-            cantidades_por_linea[ra.OCL_Linea] = cantidades_por_linea.get(ra.OCL_Linea, 0) + 1
-        for rl in schema.licencias:
-            cantidades_por_linea[rl.OCL_Linea] = cantidades_por_linea.get(rl.OCL_Linea, 0) + int(rl.cantidad or 0)
-        for linea_id, cantidad in cantidades_por_linea.items():
+        # --- 0. Validaciones por línea: tipo, cantidad y precio ---
+        por_linea: dict[int, dict] = {}
+
+        def acumular(linea_id: int, tipo: str, cantidad: int, precio) -> None:
             linea = lineas_validas.get(linea_id)
-            if not linea:
+            if linea is None:
                 raise HTTPException(400, "LINE_NOT_IN_ORDER")
-            if cantidad > linea.OCL_Cantidad:
-                raise HTTPException(400, "RECEIPT_QUANTITY_EXCEEDS_ORDER_LINE")
+            if linea.OCL_Tipo and linea.OCL_Tipo != tipo:
+                raise HTTPException(400, f"LINE_TYPE_MISMATCH:{linea_id}")
+            item = por_linea.setdefault(linea_id, {"tipo": tipo, "cantidad": 0, "precios": []})
+            if item["tipo"] != tipo:
+                raise HTTPException(400, f"LINE_TYPE_MISMATCH:{linea_id}")
+            item["cantidad"] += cantidad
+            if precio is not None:
+                item["precios"].append(Decimal(precio))
 
-        from app.core.data_scope import elevated
-        series_payload = [ra.ACT_Serie_Fabricante.strip() for ra in schema.activos]
+        for rc in schema.consumibles:
+            acumular(rc.OCL_Linea, "CONSUMIBLE", rc.cantidad, rc.precio_unitario)
+            linea = lineas_validas[rc.OCL_Linea]
+            if linea.CON_Consumible and linea.CON_Consumible != rc.CON_Consumible:
+                raise HTTPException(400, f"CONSUMABLE_DOES_NOT_MATCH_LINE:{rc.OCL_Linea}")
+        for ra in schema.activos:
+            acumular(ra.OCL_Linea, "ACTIVO", 1, ra.ACT_Costo)
+        for rl in schema.licencias:
+            acumular(rl.OCL_Linea, "LICENCIA", int(rl.cantidad or 0), rl.precio_unitario)
+
+        tolerancia = Decimal(str(settings.RECEPCION_TOLERANCIA_PRECIO_PCT)) / Decimal(100)
+        diferencias: list[dict] = []
+        for linea_id, item in por_linea.items():
+            linea = lineas_validas[linea_id]
+            pendiente = linea.OCL_Cantidad - (linea.OCL_Cantidad_Recibida or 0)
+            item["diferencia"] = None
+            if item["cantidad"] > pendiente:
+                just = justificacion.get(linea_id)
+                if not (just and just.aceptar_sobrante):
+                    raise HTTPException(400, f"RECEIPT_EXCEEDS_PENDING:{linea_id}:{max(pendiente, 0)}")
+                item["diferencia"] = "SOBRANTE"
+                diferencias.append({
+                    "OCL_Linea": linea_id, "tipo": "SOBRANTE", "motivo": just.motivo,
+                    "detalle": f"{linea.OCL_Descripcion}: pendiente {max(pendiente, 0)}, recibido {item['cantidad']}",
+                })
+            precio_orden = Decimal(linea.OCL_Precio_Unitario or 0)
+            fuera = [p for p in item["precios"] if abs(p - precio_orden) > precio_orden * tolerancia]
+            if fuera:
+                just = justificacion.get(linea_id)
+                if not just:
+                    raise HTTPException(400, f"PRICE_DIFFERENCE_REQUIRES_JUSTIFICATION:{linea_id}")
+                item["diferencia"] = item["diferencia"] or "PRECIO"
+                diferencias.append({
+                    "OCL_Linea": linea_id, "tipo": "PRECIO", "motivo": just.motivo,
+                    "detalle": f"{linea.OCL_Descripcion}: orden {precio_orden} {orden.OCO_Moneda}, "
+                               f"real {fuera[0]} {orden.OCO_Moneda}",
+                })
+            item["precio_real"] = item["precios"][0] if item["precios"] else None
+
+        series_payload = [ra.ACT_Serie_Fabricante.strip().lower() for ra in schema.activos]
         if len(series_payload) != len(set(series_payload)):
             raise HTTPException(400, "DUPLICATE_SERIAL_NUMBER_IN_RECEIPT")
 
         # --- 1. Consumibles: sumar stock (entrada auditada) ---
         reabastecidos = 0
         for rc in schema.consumibles:
-            if rc.OCL_Linea not in lineas_validas:
-                raise HTTPException(400, "LINE_NOT_IN_ORDER")
             con = await con_repo.get_by_id(rc.CON_Consumible)
             if not con:
                 raise HTTPException(404, "CONSUMABLE_NOT_FOUND")
+            linea = lineas_validas[rc.OCL_Linea]
+            precio = rc.precio_unitario if rc.precio_unitario is not None else linea.OCL_Precio_Unitario
             await con_repo.incrementar_stock(rc.CON_Consumible, rc.cantidad)
             refreshed = await con_repo.get_by_id(rc.CON_Consumible)
+            # Último costo de compra: valoriza el stock en la moneda de la orden.
+            refreshed.CON_Costo_Unitario = precio
+            refreshed.CON_Moneda = orden.OCO_Moneda
             await con_repo.add_movimiento(MovimientoConsumible(
                 CON_Consumible=rc.CON_Consumible, MOC_Tipo="ENTRADA",
                 MOC_Cantidad=rc.cantidad, MOC_Stock_Resultante=refreshed.CON_Stock_Actual,
                 MOC_Motivo=f"Recepción OC {orden.OCO_Numero}", USU_Usuario=usuario_id,
             ))
-            # Enlazar la línea al consumible si no lo estaba.
-            lineas_validas[rc.OCL_Linea].CON_Consumible = rc.CON_Consumible
+            await kardex.registrar(
+                "CONSUMIBLE_ENTRADA", consumible_id=con.CON_Consumible, referencia=con.CON_Nombre,
+                cantidad=rc.cantidad, saldo=refreshed.CON_Stock_Actual, costo=precio, moneda=orden.OCO_Moneda,
+                destino={"sede": con.SED_Sede}, documento=documento, usuario_id=usuario_id,
+                motivo=f"Recepción OC {orden.OCO_Numero}",
+            )
+            linea.CON_Consumible = rc.CON_Consumible
             await self.gov_repo.create_audit_log(
                 "STOCK_IN", "INV_CONSUMIBLE",
                 {"id": rc.CON_Consumible, "cantidad": rc.cantidad,
@@ -248,8 +365,6 @@ class ProcurementService(BaseService[ProcurementRepository]):
 
         codigos_creados: list[str] = []
         for ra in schema.activos:
-            if ra.OCL_Linea not in lineas_validas:
-                raise HTTPException(400, "LINE_NOT_IN_ORDER")
             tipo = await cat_repo.get_tipo_activo_by_id(ra.TAC_Tipo_Activo)
             if not tipo:
                 raise HTTPException(404, "ASSET_TYPE_NOT_FOUND")
@@ -273,13 +388,15 @@ class ProcurementService(BaseService[ProcurementRepository]):
             if ra.ACT_Fin_Garantia and ra.ACT_Fin_Garantia < ra.ACT_Fecha_Compra:
                 raise HTTPException(400, "WARRANTY_DATE_CANNOT_BE_BEFORE_PURCHASE_DATE")
 
+            linea = lineas_validas[ra.OCL_Linea]
+            costo = ra.ACT_Costo if ra.ACT_Costo is not None else linea.OCL_Precio_Unitario
             nuevo = await core_repo.create_activo(ActivoCreate(
                 ACT_Codigo_Interno=codigo,
                 ACT_Serie_Fabricante=ra.ACT_Serie_Fabricante,
                 ACT_Hostname=ra.ACT_Hostname,
                 ACT_Fecha_Compra=ra.ACT_Fecha_Compra,
                 ACT_Fin_Garantia=ra.ACT_Fin_Garantia,
-                ACT_Costo=ra.ACT_Costo if ra.ACT_Costo is not None else lineas_validas[ra.OCL_Linea].OCL_Precio_Unitario,
+                ACT_Costo=costo,
                 # El costo del activo está en la moneda en que se pagó la orden.
                 ACT_Moneda=orden.OCO_Moneda,
                 MOD_Modelo=ra.MOD_Modelo,
@@ -288,12 +405,14 @@ class ProcurementService(BaseService[ProcurementRepository]):
                 SED_Sede=orden.SED_Sede,
             ))
             # Enlazar la línea al activo recién creado (alimenta garantías↔proveedor).
-            if lineas_validas[ra.OCL_Linea].ACT_Activo is None:
-                lineas_validas[ra.OCL_Linea].ACT_Activo = nuevo.ACT_Activo
-            self.db.add(OrdenCompraLineaActivo(
-                OCL_Linea=ra.OCL_Linea,
-                ACT_Activo=nuevo.ACT_Activo,
-            ))
+            if linea.ACT_Activo is None:
+                linea.ACT_Activo = nuevo.ACT_Activo
+            self.db.add(OrdenCompraLineaActivo(OCL_Linea=ra.OCL_Linea, ACT_Activo=nuevo.ACT_Activo))
+            await kardex.registrar(
+                "RECEPCION", activo=nuevo, destino={"sede": orden.SED_Sede},
+                costo=costo, moneda=orden.OCO_Moneda, documento=documento, usuario_id=usuario_id,
+                motivo=f"Recepción OC {orden.OCO_Numero}",
+            )
             await self.gov_repo.create_audit_log(
                 "CREATE", "INV_ACTIVO",
                 {"codigo": codigo, "serie": ra.ACT_Serie_Fabricante,
@@ -306,8 +425,8 @@ class ProcurementService(BaseService[ProcurementRepository]):
         licencias_creadas = 0
         claves_creadas = 0
         for rl in schema.licencias:
-            if rl.OCL_Linea not in lineas_validas:
-                raise HTTPException(400, "LINE_NOT_IN_ORDER")
+            linea = lineas_validas[rl.OCL_Linea]
+            precio = rl.precio_unitario if rl.precio_unitario is not None else linea.OCL_Precio_Unitario
             licencia = await sw_service.create_licencia_in_transaction(
                 LicenciaCreate(
                     LIC_Clave_Activacion=rl.LIC_Clave_Activacion,
@@ -316,33 +435,69 @@ class ProcurementService(BaseService[ProcurementRepository]):
                     SOF_Software=rl.SOF_Software,
                     TLI_Tipo_Licencia=rl.TLI_Tipo_Licencia,
                     LIC_Claves=rl.claves,
+                    LIC_Costo=(Decimal(precio) * int(rl.cantidad or 0)) if precio is not None else None,
+                    LIC_Moneda=orden.OCO_Moneda,
                 ),
                 usuario_id=usuario_id,
                 ip=ip,
                 origen=f"Recepcion OC {orden.OCO_Numero}",
+                documento=documento,
+                sede=orden.SED_Sede,
             )
-            lineas_validas[rl.OCL_Linea].LIC_Licencia = licencia.LIC_Licencia
+            linea.LIC_Licencia = licencia.LIC_Licencia
             licencias_creadas += 1
             claves_creadas += len(rl.claves)
 
-        # --- 4. Marcar la orden como recibida ---
-        await self.repo.set_estado_orden(id, "RECIBIDA")
+        # --- 4. Documento de entrada, acumulados y estado de la orden ---
+        for linea_id, item in por_linea.items():
+            linea = lineas_validas[linea_id]
+            linea.OCL_Cantidad_Recibida = (linea.OCL_Cantidad_Recibida or 0) + item["cantidad"]
+            if not linea.OCL_Tipo:
+                linea.OCL_Tipo = item["tipo"]
+        pendientes = [
+            {"OCL_Linea": ln.OCL_Linea, "descripcion": ln.OCL_Descripcion, "tipo": ln.OCL_Tipo,
+             "pedido": ln.OCL_Cantidad, "recibido": ln.OCL_Cantidad_Recibida or 0,
+             "pendiente": ln.OCL_Cantidad - (ln.OCL_Cantidad_Recibida or 0)}
+            for ln in orden.lineas if (ln.OCL_Cantidad_Recibida or 0) < ln.OCL_Cantidad
+        ]
+        nuevo_estado = "PARCIAL" if pendientes else "RECIBIDA"
+        recepcion = Recepcion(
+            OCO_Orden=id, REC_Documento=schema.documento, REC_Observacion=schema.observacion,
+            REC_Resultado="PARCIAL" if pendientes else "COMPLETA", USU_Usuario=usuario_id,
+        )
+        for linea_id, item in por_linea.items():
+            just = justificacion.get(linea_id)
+            recepcion.lineas.append(RecepcionLinea(
+                OCL_Linea=linea_id, RCL_Cantidad=item["cantidad"], RCL_Precio_Real=item["precio_real"],
+                RCL_Diferencia=item["diferencia"], RCL_Motivo=just.motivo if (just and item["diferencia"]) else None,
+            ))
+        self.db.add(recepcion)
+        await self.db.flush()
+
+        estado_anterior = orden.OCO_Estado
+        await self.repo.set_estado_orden(id, nuevo_estado)
         await self.gov_repo.create_audit_log(
-            "UPDATE", "INV_ORDEN_COMPRA",
-            {"id": id, "diff": {"OCO_Estado": {"antes": "BORRADOR", "despues": "RECIBIDA"}},
+            "RECEIVE", "INV_ORDEN_COMPRA",
+            {"id": id, "numero": orden.OCO_Numero, "recepcion": recepcion.REC_Recepcion,
+             "documento": schema.documento,
+             "diff": {"OCO_Estado": {"antes": estado_anterior, "despues": nuevo_estado}},
              "consumibles_reabastecidos": reabastecidos,
              "activos_creados": len(codigos_creados),
              "licencias_creadas": licencias_creadas,
-             "licencias_claves_creadas": claves_creadas},
-            usuario_id=usuario_id, ip_origen=ip,
+             "licencias_claves_creadas": claves_creadas,
+             "pendientes": pendientes, "diferencias": diferencias},
+            usuario_id=usuario_id, ip_origen=ip, sede_id=orden.SED_Sede,
         )
+        self._avisar_diferencias(orden, "recepcion", pendientes if diferencias else [], diferencias)
         return {
-            "OCO_Orden": id, "OCO_Estado": "RECIBIDA",
+            "OCO_Orden": id, "OCO_Estado": nuevo_estado, "REC_Recepcion": recepcion.REC_Recepcion,
             "consumibles_reabastecidos": reabastecidos,
             "activos_creados": len(codigos_creados),
             "licencias_creadas": licencias_creadas,
             "licencias_claves_creadas": claves_creadas,
             "activos_codigos": codigos_creados,
+            "pendientes": pendientes,
+            "diferencias": diferencias,
         }
 
     # =====================================================================

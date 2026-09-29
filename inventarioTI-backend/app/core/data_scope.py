@@ -217,6 +217,9 @@ def _scope_options(scope: DataScope) -> list:
     from app.models.consumable import Consumible, MovimientoConsumible
     from app.models.core import Activo, Especificacion
     from app.models.governance import AuditoriaSistema
+    from app.models.inventario_fisico import LecturaToma, TomaInventario
+    from app.models.kardex import Kardex
+    from app.models.procurement import Recepcion, RecepcionLinea
     from app.models.organization import Persona
     from app.models.procurement import OrdenCompra, OrdenCompraLinea, OrdenCompraLineaActivo
     from app.models.software import Instalacion
@@ -276,6 +279,20 @@ def _scope_options(scope: DataScope) -> list:
         AuditoriaSistema: or_(
             AuditoriaSistema.AUD_Sede.in_(sedes),
             AuditoriaSistema.USU_Usuario == scope.usuario_id,
+        ),
+        Kardex: or_(
+            Kardex.SED_Sede.in_(sedes),
+            Kardex.KDX_Origen_Sede.in_(sedes),
+            Kardex.KDX_Destino_Sede.in_(sedes),
+            Kardex.USU_Usuario == scope.usuario_id,
+        ),
+        Recepcion: Recepcion.OCO_Orden.in_(ordenes),
+        RecepcionLinea: RecepcionLinea.REC_Recepcion.in_(
+            select(Recepcion.REC_Recepcion).where(Recepcion.OCO_Orden.in_(ordenes))
+        ),
+        TomaInventario: TomaInventario.SED_Sede.in_(sedes),
+        LecturaToma: LecturaToma.TOM_Toma.in_(
+            select(TomaInventario.TOM_Toma).where(TomaInventario.SED_Sede.in_(sedes))
         ),
     }
     return [

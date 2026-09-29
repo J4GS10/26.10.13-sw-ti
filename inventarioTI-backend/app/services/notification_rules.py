@@ -53,6 +53,7 @@ CONFIGURABLE_EVENTS: dict[str, RuleDefaults] = {
     "mantenimiento_cerrado": RuleDefaults(notificar_afectado=False),
     "stock_bajo": RuleDefaults(notificar_afectado=False),
     "garantia_por_vencer": RuleDefaults(notificar_afectado=False),
+    "recepcion_diferencias": RuleDefaults(notificar_afectado=False),
 }
 
 

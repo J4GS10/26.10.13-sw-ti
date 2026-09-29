@@ -16,6 +16,7 @@ from app.api.v1.endpoints import (
     procurement,
     twofactor,
     directory,
+    inventario,
 )
 from app.api import deps
 
@@ -74,6 +75,10 @@ api_router.include_router(
 )
 api_router.include_router(
     procurement.router, prefix="/compras", tags=["Compras y Garantías"],
+    dependencies=_business
+)
+api_router.include_router(
+    inventario.router, prefix="/inventario", tags=["Trazabilidad e inventario"],
     dependencies=_business
 )
 

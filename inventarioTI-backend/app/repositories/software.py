@@ -17,6 +17,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.software import Instalacion, Licencia, LicenciaClave, Software, TipoLicencia
 from app.repositories.base import BaseRepository
+from app.core.errors import utcnow_naive
 from app.schemas.software import (
     InstalacionCreate,
     LicenciaCreate,
@@ -283,7 +284,7 @@ class SoftwareRepository(BaseRepository):
     # INSTALACIONES
     # =====================================================================
     async def create_instalacion(self, schema: InstalacionCreate) -> Instalacion:
-        obj = Instalacion(**schema.model_dump())
+        obj = Instalacion(**schema.model_dump(exclude={"motivo"}))
         self.db.add(obj)
         await self.db.flush()
         return obj
@@ -349,6 +350,7 @@ class SoftwareRepository(BaseRepository):
         *,
         activo_id: uuid.UUID | None = None,
         persona_id: uuid.UUID | None = None,
+        motivo: str | None = None,
     ) -> bool:
         """
         UPDATE condicional: solo desactiva si está activa. Retorna True si
@@ -369,7 +371,7 @@ class SoftwareRepository(BaseRepository):
                 Instalacion.LIC_Licencia == licencia_id,
                 Instalacion.INS_Estado.is_(True),
             )
-            .values(INS_Estado=False)
+            .values(INS_Estado=False, INS_Fecha_Retiro=utcnow_naive(), INS_Motivo_Retiro=(motivo or None) and motivo[:255])
         )
         return result.rowcount == 1
 
@@ -378,7 +380,11 @@ class SoftwareRepository(BaseRepository):
         *,
         activos_ids: list[uuid.UUID] | None = None,
         persona_id: uuid.UUID | None = None,
+        motivo: str | None = None,
     ) -> int:
+        """Libera las instalaciones activas; deja en `ultimas_liberadas` qué
+        (licencia, activo, persona, clave) se liberó para el kardex."""
+        self.ultimas_liberadas = []
         conditions = []
         if activos_ids:
             conditions.append(Instalacion.ACT_Activo.in_(activos_ids))
@@ -411,8 +417,13 @@ class SoftwareRepository(BaseRepository):
         await self.db.execute(
             update(Instalacion)
             .where(Instalacion.INS_Instalacion.in_(ids), Instalacion.INS_Estado.is_(True))
-            .values(INS_Estado=False)
+            .values(INS_Estado=False, INS_Fecha_Retiro=utcnow_naive(),
+                    INS_Motivo_Retiro=(motivo or None) and motivo[:255])
         )
+        self.ultimas_liberadas = [
+            (inst.LIC_Licencia, inst.ACT_Activo, inst.PER_Persona, inst.LCL_Licencia_Clave)
+            for inst in instalaciones
+        ]
         for licencia_id, cantidad in conteo_por_licencia.items():
             await self.db.execute(
                 update(Licencia)

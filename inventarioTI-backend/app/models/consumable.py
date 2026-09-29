@@ -8,7 +8,7 @@ debajo del mínimo se considera "bajo stock" (alerta). Los movimientos de stock
 """
 import uuid
 from sqlalchemy import (
-    Column, Integer, String, Boolean, DateTime, ForeignKey, Uuid, func,
+    Column, Integer, String, Boolean, DateTime, ForeignKey, Numeric, Uuid, func,
     CheckConstraint,
 )
 from sqlalchemy.orm import relationship
@@ -32,6 +32,9 @@ class Consumible(Base):
 
     CON_Stock_Actual = Column(Integer, nullable=False, default=0)
     CON_Stock_Minimo = Column(Integer, nullable=False, default=0)
+    # Último costo unitario de compra (valoriza el stock) y su moneda.
+    CON_Costo_Unitario = Column(Numeric(14, 2), nullable=True)
+    CON_Moneda = Column(String(3), nullable=True)
 
     CON_Activo = Column(Boolean, nullable=False, default=True)
 

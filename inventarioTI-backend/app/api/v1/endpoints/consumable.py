@@ -10,7 +10,7 @@ from app.core.limiter import limiter
 from app.db.session import get_db
 from app.schemas.consumable import (
     ConsumibleCreate, ConsumibleResponse, ConsumibleUpdate,
-    MovimientoConsumibleResponse, StockMovimientoCreate,
+    MovimientoConsumibleResponse, StockAjusteCreate, StockMovimientoCreate,
 )
 from app.services.consumable import ConsumableService
 
@@ -94,6 +94,16 @@ async def registrar_salida(
         lambda: service.registrar_salida(id, schema, **_ctx(request, current_user)),
         status_code=201,
     )
+
+
+@router.post("/{id}/ajuste", response_model=MovimientoConsumibleResponse, status_code=201, dependencies=ADMIN)
+@limiter.limit("30/minute")
+async def registrar_ajuste(
+    id: int, schema: StockAjusteCreate, request: Request, current_user: CurrentUser,
+    service: ConsumableService = Depends(get_service),
+):
+    """Fija la existencia real tras un conteo físico (queda en el kardex con su motivo)."""
+    return await service.registrar_ajuste(id, schema, **_ctx(request, current_user))
 
 
 @router.get("/{id}/movimientos", response_model=List[MovimientoConsumibleResponse])

@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy import (
-    Column, Integer, String, ForeignKey, Date, DateTime, Boolean, Uuid,
+    Column, Integer, String, ForeignKey, Date, DateTime, Boolean, Numeric, Uuid,
     CheckConstraint, UniqueConstraint, Index, func,
 )
 from sqlalchemy.orm import relationship
@@ -53,6 +53,9 @@ class Licencia(Base):
     LIC_Fecha_Vencimiento = Column(Date, nullable=True)
     LIC_Cantidad_Total = Column(Integer, default=1, nullable=False)
     LIC_Cantidad_Usada = Column(Integer, default=0, nullable=False)
+    # Costo de la licencia o de su renovación, en la moneda en que se paga.
+    LIC_Costo = Column(Numeric(14, 2), nullable=True)
+    LIC_Moneda = Column(String(3), nullable=True)
 
     SOF_Software = Column(
         Integer,
@@ -123,6 +126,9 @@ class Instalacion(Base):
     INS_Instalacion = Column(Integer, primary_key=True, index=True, autoincrement=True)
     INS_Fecha_Instalacion = Column(Date, nullable=False)
     INS_Estado = Column(Boolean, default=True, nullable=False)
+    # Historial: cuándo y por qué se retiró (la fila se conserva desactivada).
+    INS_Fecha_Retiro = Column(DateTime, nullable=True)
+    INS_Motivo_Retiro = Column(String(255), nullable=True)
 
     ACT_Activo = Column(
         Uuid,

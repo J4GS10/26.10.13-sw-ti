@@ -96,6 +96,7 @@ async def test_prestamo_transiciona_a_asignado(client, auth_headers, domain_seed
         json={
             "ACT_Activo": d["act_2"], "PER_Persona": d["alice"],
             "ARE_Area": d["area"], "TMO_Tipo_Movimiento": d["tmo_pres"],
+            "MOV_Fecha_Prevista_Devolucion": "2099-12-31",
         },
         headers=auth_headers,
     )

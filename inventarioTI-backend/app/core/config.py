@@ -222,6 +222,14 @@ class Settings(BaseSettings):
     # las personas vinculadas (o AD devuelve 0 usuarios), no desactiva a nadie
     # y lo informa; un administrador puede confirmarlo con forzar_bajas.
     AD_SYNC_MAX_BAJAS_PCT: int = 10
+
+    # Recepción de compras: diferencia máxima (%) entre el precio real y el de
+    # la orden que se acepta sin justificación.
+    RECEPCION_TOLERANCIA_PRECIO_PCT: float = 2.0
+    # Toma de inventario y alertas de préstamos / licencias (días de anticipación).
+    ALERTA_LICENCIAS_DIAS: int = 60
+    # Zona horaria de la organización para fechas en actas, CSV y correos.
+    ORG_TIMEZONE: str = "America/Guatemala"
     AD_DEFAULT_DEPARTMENT: str = "Sin departamento"
     AD_DEFAULT_CARGO: str = "Sin cargo"
 

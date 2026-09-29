@@ -134,6 +134,18 @@ def _policies() -> dict[str, list[tuple[str, str, str | None, str | None]]]:
     linea_visible = _exists(
         "INV_ORDEN_COMPRA_LINEA", "l", 'l."OCL_Linea" = "INV_ORDEN_COMPRA_LINEA_ACTIVO"."OCL_Linea"'
     )
+    kardex_visible = "({} OR {} OR {} OR {})".format(
+        _sede('"INV_KARDEX"."SED_Sede"'),
+        _sede('"INV_KARDEX"."KDX_Origen_Sede"'),
+        _sede('"INV_KARDEX"."KDX_Destino_Sede"'),
+        '"INV_KARDEX"."USU_Usuario" = (SELECT inv_rls_usuario())',
+    )
+    recepcion_linea_visible = _exists(
+        "INV_RECEPCION", "r", 'r."REC_Recepcion" = "INV_RECEPCION_LINEA"."REC_Recepcion"'
+    )
+    toma_visible = _exists(
+        "INV_TOMA_INVENTARIO", "t", 't."TOM_Toma" = "INV_TOMA_LECTURA"."TOM_Toma"'
+    )
     auditoria_visible = "({} OR {})".format(
         _sede('"INV_AUDITORIA_SISTEMA"."AUD_Sede"'),
         '"INV_AUDITORIA_SISTEMA"."USU_Usuario" = (SELECT inv_rls_usuario())',
@@ -166,6 +178,17 @@ def _policies() -> dict[str, list[tuple[str, str, str | None, str | None]]]:
         "INV_ORDEN_COMPRA_LINEA_ACTIVO": [("todo", "ALL", linea_visible, linea_visible)],
         "INV_CONSUMIBLE": [("todo", "ALL", _sede('"INV_CONSUMIBLE"."SED_Sede"'), _sede('"INV_CONSUMIBLE"."SED_Sede"'))],
         "INV_MOVIMIENTO_CONSUMIBLE": [("todo", "ALL", consumible_visible, consumible_visible)],
+        "INV_RECEPCION": [("todo", "ALL", orden_visible("INV_RECEPCION"), orden_visible("INV_RECEPCION"))],
+        "INV_RECEPCION_LINEA": [("todo", "ALL", recepcion_linea_visible, recepcion_linea_visible)],
+        "INV_TOMA_INVENTARIO": [
+            ("todo", "ALL", _sede('"INV_TOMA_INVENTARIO"."SED_Sede"'), _sede('"INV_TOMA_INVENTARIO"."SED_Sede"')),
+        ],
+        "INV_TOMA_LECTURA": [("todo", "ALL", toma_visible, toma_visible)],
+        # Kardex: igual que la bitácora, de solo inserción.
+        "INV_KARDEX": [
+            ("leer", "SELECT", kardex_visible, None),
+            ("registrar", "INSERT", None, "true"),
+        ],
         # Bitácora: se lee lo de las sedes del alcance y lo propio; se inserta
         # siempre (toda acción debe quedar registrada); nunca se modifica ni borra.
         "INV_AUDITORIA_SISTEMA": [
@@ -217,6 +240,7 @@ def install_rls(conn: Connection, *, strict: bool = False) -> bool:
         f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO "{role}"',
         # La bitácora es inmutable para las peticiones de usuario.
         f'REVOKE UPDATE, DELETE ON "INV_AUDITORIA_SISTEMA" FROM "{role}"',
+        f'REVOKE UPDATE, DELETE ON "INV_KARDEX" FROM "{role}"',
         # Identidades: las políticas leen el alcance de INV_USUARIO e
         # INV_USUARIO_SEDE, así que el rol restringido no puede alterarlas (una
         # inyección SQL no puede darse alcance global ni sedes). Las altas y

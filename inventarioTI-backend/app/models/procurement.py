@@ -48,8 +48,10 @@ class OrdenCompra(Base):
 
     OCO_Numero = Column(String(50), nullable=False, unique=True)
     OCO_Fecha = Column(Date, nullable=False)
-    # BORRADOR -> RECIBIDA | CANCELADA
-    OCO_Estado = Column(String(15), nullable=False, default="BORRADOR")
+    # BORRADOR → PARCIAL → RECIBIDA | CERRADA_CON_FALTANTE ; BORRADOR → CANCELADA
+    OCO_Estado = Column(String(25), nullable=False, default="BORRADOR")
+    # Motivo con que se cerró una orden con faltante (o se canceló).
+    OCO_Motivo_Cierre = Column(String(500), nullable=True)
     OCO_Moneda = Column(String(3), nullable=False, default=DEFAULT_CURRENCY)
     OCO_Total = Column(Numeric(14, 2), nullable=False, default=0)
     OCO_Notas = Column(String(500), nullable=True)
@@ -82,7 +84,7 @@ class OrdenCompra(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "\"OCO_Estado\" IN ('BORRADOR', 'RECIBIDA', 'CANCELADA')",
+            "\"OCO_Estado\" IN ('BORRADOR', 'PARCIAL', 'RECIBIDA', 'CERRADA_CON_FALTANTE', 'CANCELADA')",
             name="ck_orden_estado_valido",
         ),
         CheckConstraint('"OCO_Total" >= 0', name="ck_orden_total_no_negativo"),
@@ -105,6 +107,12 @@ class OrdenCompraLinea(Base):
     OCL_Cantidad = Column(Integer, nullable=False, default=1)
     OCL_Precio_Unitario = Column(Numeric(14, 2), nullable=False, default=0)
     OCL_Subtotal = Column(Numeric(14, 2), nullable=False, default=0)
+    # Qué se compra en la línea (ACTIVO, CONSUMIBLE, LICENCIA u OTRO). Si se
+    # deja vacío, lo fija la primera recepción; después no se puede recibir
+    # otra cosa en esa línea.
+    OCL_Tipo = Column(String(12), nullable=True)
+    # Unidades recibidas acumuladas (entre todas las recepciones).
+    OCL_Cantidad_Recibida = Column(Integer, nullable=False, default=0, server_default="0")
 
     OCO_Orden = Column(
         Integer,
@@ -140,6 +148,11 @@ class OrdenCompraLinea(Base):
 
     __table_args__ = (
         CheckConstraint('"OCL_Cantidad" > 0', name="ck_linea_cantidad_positiva"),
+        CheckConstraint('"OCL_Cantidad_Recibida" >= 0', name="ck_linea_recibida_no_negativa"),
+        CheckConstraint(
+            "\"OCL_Tipo\" IS NULL OR \"OCL_Tipo\" IN ('ACTIVO', 'CONSUMIBLE', 'LICENCIA', 'OTRO')",
+            name="ck_linea_tipo_valido",
+        ),
         CheckConstraint('"OCL_Precio_Unitario" >= 0', name="ck_linea_precio_no_negativo"),
     )
 
@@ -166,4 +179,55 @@ class OrdenCompraLineaActivo(Base):
 
     __table_args__ = (
         UniqueConstraint("ACT_Activo", name="uq_orden_linea_activo_activo"),
+    )
+
+
+# ==========================================
+# 5. RECEPCIÓN (documento de entrada)
+# ==========================================
+class Recepcion(Base):
+    """Una entrega del proveedor: una orden puede recibirse en varias."""
+    __tablename__ = "INV_RECEPCION"
+
+    REC_Recepcion = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    OCO_Orden = Column(
+        Integer, ForeignKey("INV_ORDEN_COMPRA.OCO_Orden", ondelete="RESTRICT"), nullable=False, index=True,
+    )
+    REC_Fecha = Column(DateTime, server_default=func.now(), nullable=False)
+    # Guía de remisión o factura con que llegó la mercadería.
+    REC_Documento = Column(String(100), nullable=True)
+    REC_Observacion = Column(String(500), nullable=True)
+    # COMPLETA (la orden quedó recibida) o PARCIAL (quedan pendientes).
+    REC_Resultado = Column(String(10), nullable=False)
+    USU_Usuario = Column(Uuid, ForeignKey("INV_USUARIO.USU_Usuario", ondelete="SET NULL"), nullable=True)
+
+    lineas = relationship("RecepcionLinea", back_populates="recepcion", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        CheckConstraint("\"REC_Resultado\" IN ('COMPLETA', 'PARCIAL')", name="ck_recepcion_resultado"),
+    )
+
+
+class RecepcionLinea(Base):
+    __tablename__ = "INV_RECEPCION_LINEA"
+
+    RCL_Recepcion_Linea = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    REC_Recepcion = Column(
+        Integer, ForeignKey("INV_RECEPCION.REC_Recepcion", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    OCL_Linea = Column(
+        Integer, ForeignKey("INV_ORDEN_COMPRA_LINEA.OCL_Linea", ondelete="RESTRICT"), nullable=False, index=True,
+    )
+    RCL_Cantidad = Column(Integer, nullable=False)
+    # Precio unitario real facturado (si difiere del de la orden).
+    RCL_Precio_Real = Column(Numeric(14, 2), nullable=True)
+    # SOBRANTE o PRECIO: diferencia aceptada con su justificación.
+    RCL_Diferencia = Column(String(10), nullable=True)
+    RCL_Motivo = Column(String(500), nullable=True)
+
+    recepcion = relationship("Recepcion", back_populates="lineas")
+    linea = relationship("OrdenCompraLinea")
+
+    __table_args__ = (
+        CheckConstraint('"RCL_Cantidad" > 0', name="ck_recepcion_linea_cantidad"),
     )

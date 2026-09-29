@@ -53,7 +53,7 @@ class CoreRepository(BaseRepository["Activo"]):
         if schema.especificaciones:
             for spec_schema in schema.especificaciones:
                 db_spec = Especificacion(
-                    **spec_schema.model_dump(),
+                    **spec_schema.model_dump(exclude={"motivo"}),
                     activo=db_activo,
                 )
                 self.db.add(db_spec)

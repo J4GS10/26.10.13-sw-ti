@@ -44,11 +44,24 @@ class Activo(Base):
         nullable=False,
     )
 
+    # Componente instalado dentro de otro equipo (disco, memoria, monitor…).
     ACT_Activo_Padre = Column(
         Uuid,
         ForeignKey("INV_ACTIVO.ACT_Activo", ondelete="SET NULL"),
         nullable=True,
+        index=True,
     )
+    # Ubicación física actual (área): la fija la asignación/transferencia o la
+    # devolución a una bodega; vacía si no se conoce.
+    ARE_Area_Ubicacion = Column(
+        Integer, ForeignKey("INV_AREA.ARE_Area", ondelete="SET NULL"), nullable=True,
+    )
+    # Baja formal: motivo, destino y respaldo (el estado es "Baja").
+    ACT_Baja_Motivo = Column(String(30), nullable=True)
+    ACT_Baja_Destino = Column(String(30), nullable=True)
+    ACT_Baja_Fecha = Column(Date, nullable=True)
+    ACT_Baja_Documento = Column(String(120), nullable=True)
+    ACT_Baja_Observacion = Column(String(500), nullable=True)
     # Sede a la que pertenece el activo (también en bodega). Se actualiza al
     # asignarlo o transferirlo a un área de otra sede. Base del RLS por sede.
     SED_Sede = Column(

@@ -187,6 +187,12 @@ async def get_licencia(id: int, service: SoftwareService = Depends(get_service))
     return await service.get_licencia(id)
 
 
+@router.get("/licencias/{id}/historial")
+async def historial_licencia(id: int, service: SoftwareService = Depends(get_service)):
+    """Asignaciones de la licencia, vigentes y retiradas (fecha y motivo del retiro)."""
+    return await service.historial_licencia(id)
+
+
 @router.get(
     "/licencias/{id}/claves",
     response_model=List[LicenciaClaveResponse],

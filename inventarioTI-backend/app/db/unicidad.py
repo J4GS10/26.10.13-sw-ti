@@ -58,7 +58,8 @@ CODIGO_POR_RESTRICCION.update({
 })
 
 
-def _registrar() -> None:
+def registrar_indices() -> None:
+    """Añade los índices a las tablas del metadata (idempotente)."""
     for nombre, tabla, texto, exactas, _codigo in INDICES_CI:
         t = Base.metadata.tables[tabla]
         if any(ix.name == nombre for ix in t.indexes):
@@ -68,8 +69,6 @@ def _registrar() -> None:
         Index(nombre, *[t.c[c] for c in exactas], *[func.lower(func.trim(t.c[c])) for c in texto], *extra,
               unique=True)
 
-
-_registrar()
 
 
 def codigo_de_violacion(error: Exception) -> str | None:

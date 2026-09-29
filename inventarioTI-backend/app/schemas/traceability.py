@@ -1,7 +1,7 @@
 from typing import Optional, List
 from pydantic import BaseModel, Field, ConfigDict
 from app.schemas.common import Esquema
-from datetime import datetime
+from datetime import date, datetime
 import uuid
 
 # =======================
@@ -52,11 +52,17 @@ class MovimientoCreate(MovimientoBase):
     # Opcional: al asignar un equipo a un nuevo usuario, permite fijar/cambiar
     # el hostname del activo. Si es None, el activo conserva su hostname actual.
     ACT_Hostname: Optional[str] = Field(None, max_length=100)
+    # Préstamos: fecha comprometida de devolución (obligatoria en un préstamo).
+    MOV_Fecha_Prevista_Devolucion: Optional[date] = None
+    MOV_Motivo: Optional[str] = Field(None, max_length=255)
 
 class MovimientoResponse(MovimientoBase):
     MOV_Movimiento: uuid.UUID
     MOV_Fecha_Asignacion: datetime
     MOV_Fecha_Devolucion: Optional[datetime] = None
+    MOV_Motivo: Optional[str] = None
+    MOV_Fecha_Prevista_Devolucion: Optional[date] = None
+    MOV_Usuario_Registra: Optional[uuid.UUID] = None
     
     # --- AQUÍ ESTÁ LA MAGIA QUE FALTABA ---
     # Estos campos coinciden con los nombres de las relaciones en el Modelo SQLAlchemy
@@ -72,6 +78,12 @@ class MovimientoResponse(MovimientoBase):
 # =======================
 class DevolucionCreate(Esquema):
     ACT_Activo: uuid.UUID
+    # Por qué se devuelve (renuncia, cambio de equipo, fin de préstamo…).
+    MOV_Motivo: Optional[str] = Field(None, max_length=255)
+    # Bodega o área donde queda el equipo (su ubicación física).
+    ARE_Area_Destino: Optional[int] = None
+    # Estado en que llega: CON_DANO propone abrir un ticket de mantenimiento.
+    condicion: Optional[str] = Field(None, pattern="^(BUENO|CON_DANO)$")
 
 # =======================
 # TRANSFERENCIA
@@ -81,6 +93,7 @@ class TransferenciaCreate(Esquema):
     PER_Persona_Destino: uuid.UUID
     ARE_Area_Destino: int
     MOV_Observacion: Optional[str] = Field(None, max_length=1000)
+    MOV_Motivo: Optional[str] = Field(None, max_length=255)
 
 # Request para descarga por lote
 class ActaLoteRequest(Esquema):

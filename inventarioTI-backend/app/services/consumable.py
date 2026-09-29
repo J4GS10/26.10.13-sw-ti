@@ -11,6 +11,7 @@ from app.models.consumable import MovimientoConsumible
 from app.repositories.consumable import ConsumibleRepository
 from app.repositories.governance import GovernanceRepository
 from app.services.base import BaseService
+from app.services.kardex import KardexService
 from app.schemas.consumable import (
     ConsumibleCreate, ConsumibleUpdate, StockMovimientoCreate,
 )
@@ -114,6 +115,8 @@ class ConsumableService(BaseService[ConsumibleRepository]):
     async def _mover_stock(self, id: int, schema, tipo: str, usuario_id, ip):
         obj = await self.get_or_404(id, "CONSUMABLE_NOT_FOUND")
         sede = obj.SED_Sede
+        if not obj.CON_Activo:
+            raise HTTPException(400, "CONSUMABLE_INACTIVE")
         if schema.PER_Persona is not None:
             from app.models.organization import Persona as _Persona
             if not await self.db.get(_Persona, schema.PER_Persona):
@@ -147,6 +150,19 @@ class ConsumableService(BaseService[ConsumibleRepository]):
             USU_Usuario=usuario_id,
         )
         await self.repo.add_movimiento(mov)
+        costo = moneda = None
+        if tipo == "ENTRADA" and getattr(schema, "precio_unitario", None) is not None:
+            refreshed.CON_Costo_Unitario = schema.precio_unitario
+            refreshed.CON_Moneda = schema.moneda or refreshed.CON_Moneda or "GTQ"
+            costo, moneda = schema.precio_unitario, refreshed.CON_Moneda
+        await KardexService(self.db).registrar(
+            "CONSUMIBLE_ENTRADA" if tipo == "ENTRADA" else "CONSUMIBLE_SALIDA",
+            consumible_id=id, referencia=nombre, cantidad=schema.MOC_Cantidad, saldo=stock_despues,
+            costo=costo or refreshed.CON_Costo_Unitario, moneda=moneda or refreshed.CON_Moneda,
+            destino={"persona": schema.PER_Persona, "sede": sede} if tipo == "SALIDA" else {"sede": sede},
+            origen={"sede": sede} if tipo == "SALIDA" else None,
+            motivo=schema.MOC_Motivo, usuario_id=usuario_id,
+        )
 
         await self.gov_repo.create_audit_log(
             "STOCK_IN" if tipo == "ENTRADA" else "STOCK_OUT", "INV_CONSUMIBLE",
@@ -167,6 +183,37 @@ class ConsumableService(BaseService[ConsumibleRepository]):
                     nombre, stock_despues, minimo, unidad, categoria, usuario_id,
                 ),
             )
+        mov.bajo_minimo = minimo > 0 and stock_despues <= minimo
+        mov.CON_Stock_Minimo = minimo
+        return mov
+
+    @transactional
+    async def registrar_ajuste(self, id: int, schema, usuario_id=None, ip=None):
+        """Ajuste por conteo físico: la existencia pasa a CON_Stock_Real."""
+        obj = await self.get_or_404(id, "CONSUMABLE_NOT_FOUND")
+        antes = obj.CON_Stock_Actual
+        if schema.CON_Stock_Real == antes:
+            raise HTTPException(400, "STOCK_ALREADY_MATCHES")
+        obj.CON_Stock_Actual = schema.CON_Stock_Real
+        mov = MovimientoConsumible(
+            CON_Consumible=id, MOC_Tipo="AJUSTE", MOC_Cantidad=abs(schema.CON_Stock_Real - antes),
+            MOC_Stock_Resultante=schema.CON_Stock_Real, MOC_Motivo=schema.MOC_Motivo, USU_Usuario=usuario_id,
+        )
+        await self.repo.add_movimiento(mov)
+        await KardexService(self.db).registrar(
+            "CONSUMIBLE_AJUSTE", consumible_id=id, referencia=obj.CON_Nombre,
+            cantidad=schema.CON_Stock_Real - antes, saldo=schema.CON_Stock_Real,
+            destino={"sede": obj.SED_Sede}, motivo=schema.MOC_Motivo, usuario_id=usuario_id,
+            detalle={"stock_antes": antes, "stock_despues": schema.CON_Stock_Real},
+        )
+        await self.gov_repo.create_audit_log(
+            "STOCK_ADJUST", "INV_CONSUMIBLE",
+            {"id": id, "nombre": obj.CON_Nombre, "antes": antes, "despues": schema.CON_Stock_Real,
+             "motivo": schema.MOC_Motivo},
+            usuario_id=usuario_id, ip_origen=ip, sede_id=obj.SED_Sede,
+        )
+        await self.db.flush()
+        await self.db.refresh(mov)
         return mov
 
     async def _notificar_stock_bajo(self, nombre, stock_actual, minimo, unidad, categoria, usuario_id):

@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy import (
-    Column, Integer, String, ForeignKey, DateTime, Text, Numeric, func, Uuid,
+    Column, Integer, String, ForeignKey, Date, DateTime, Text, Numeric, func, Uuid,
     CheckConstraint, Index,
 )
 from sqlalchemy.orm import relationship
@@ -40,6 +40,12 @@ class Movimiento(Base):
     MOV_Fecha_Asignacion = Column(DateTime, server_default=func.now(), nullable=False)
     MOV_Fecha_Devolucion = Column(DateTime, nullable=True)
     MOV_Observacion = Column(Text, nullable=True)
+    # Quién registró el movimiento (antes solo quedaba en la bitácora general).
+    MOV_Usuario_Registra = Column(Uuid, nullable=True)
+    # Motivo de la transferencia o de la devolución.
+    MOV_Motivo = Column(String(255), nullable=True)
+    # Solo préstamos: fecha comprometida de devolución (alerta si vence).
+    MOV_Fecha_Prevista_Devolucion = Column(Date, nullable=True)
 
     ACT_Activo = Column(
         Uuid,

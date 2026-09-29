@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 from app.core.data_scope import elevated, require_sede
 from app.services.base import BaseService
+from app.services.kardex import KardexService
 from app.repositories.core import CoreRepository
 from app.repositories.catalogs import CatalogRepository
 from app.repositories.governance import GovernanceRepository
@@ -93,6 +94,17 @@ class CoreService(BaseService[CoreRepository]):
 
         # 5. CREACIÓN
         nuevo_activo = await self.repo.create_activo(schema)
+        kardex = KardexService(self.db)
+        await kardex.registrar(
+            "ALTA", activo=nuevo_activo, usuario_id=usuario_id, destino={"sede": schema.SED_Sede},
+            costo=schema.ACT_Costo, moneda=schema.ACT_Moneda, motivo="Alta manual en el inventario",
+        )
+        if schema.ACT_Activo_Padre:
+            await kardex.registrar(
+                "COMPONENTE_INSTALADO", activo=nuevo_activo, usuario_id=usuario_id,
+                destino={"activo": schema.ACT_Activo_Padre, "sede": schema.SED_Sede},
+                motivo="Registrado como componente al darlo de alta",
+            )
 
         # Nota: no creamos un movimiento "automático" de ingreso. El alta
         # del activo NO implica asignación. Si se desea registrar quién
@@ -177,7 +189,20 @@ class CoreService(BaseService[CoreRepository]):
             if existe:
                 raise HTTPException(status_code=400, detail="NEW_SERIAL_NUMBER_ALREADY_EXISTS")
 
+        estado_antes, sede_antes = activo_actual.EOP_Estado_Operativo, activo_actual.SED_Sede
         resultado = await self.repo.update_activo(activo_id, schema)
+        kardex = KardexService(self.db)
+        if schema.EOP_Estado_Operativo is not None and schema.EOP_Estado_Operativo != estado_antes:
+            await kardex.registrar(
+                "CAMBIO_ESTADO", activo=resultado, usuario_id=usuario_id,
+                detalle={"estado_antes": estado_antes, "estado_despues": schema.EOP_Estado_Operativo},
+                motivo="Cambio de estado de almacén",
+            )
+        if sede_final != sede_antes:
+            await kardex.registrar(
+                "TRASLADO_SEDE", activo=resultado, usuario_id=usuario_id,
+                origen={"sede": sede_antes}, destino={"sede": sede_final}, motivo="Cambio de sede",
+            )
 
         # Auditoría
         await self.gov_repo.create_audit_log(
@@ -216,46 +241,44 @@ class CoreService(BaseService[CoreRepository]):
     # =================================================================
     @transactional
     async def delete_activo(self, activo_id: uuid.UUID, usuario_id: uuid.UUID | None = None):
+        """Compatibilidad con DELETE /core/activos/{id}: baja sin detalle."""
+        from app.schemas.core import BajaActivo
+        return await self.dar_de_baja(
+            activo_id,
+            BajaActivo(motivo="OTRO", destino="RESGUARDO", observacion="Baja registrada sin detalle"),
+            usuario_id=usuario_id,
+        )
+
+    @transactional
+    async def dar_de_baja(self, activo_id: uuid.UUID, schema, usuario_id: uuid.UUID | None = None):
+        """
+        Baja formal: motivo, destino, fecha y documento de respaldo. Valida que el
+        equipo no esté asignado, en reparación ni instalado dentro de otro;
+        retira (si se pide) sus componentes, libera sus licencias y deja todo
+        en el kardex como SALIDA del inventario.
+        """
+        from datetime import date as _date
+        from sqlalchemy import update as _upd
+        from app.models.core import Activo as _Act
+        from app.models.traceability import Mantenimiento
+        from app.repositories.software import SoftwareRepository
+
         activo = await self.repo.get_by_id_simple(activo_id)
         if not activo:
             raise HTTPException(status_code=404, detail="ASSET_NOT_FOUND")
-
-        # Verificar que NO esté asignado actualmente
-        q_check = select(Movimiento).where(
-            Movimiento.ACT_Activo == activo_id,
-            Movimiento.MOV_Fecha_Devolucion == None
-        )
-        res_check = await self.db.execute(q_check)
-        if res_check.first():
-            raise HTTPException(
-                status_code=400,
-                detail="CANNOT_DELETE_ASSIGNED_ASSET_RETURN_IT_FIRST"
-            )
-
-        # Un equipo con ticket abierto se cierra primero (o se da de baja desde
-        # el cierre del ticket si no tiene reparación).
-        from app.models.traceability import Mantenimiento
-        ticket = (await self.db.execute(
-            select(Mantenimiento.MAN_Mantenimiento).where(
-                Mantenimiento.ACT_Activo == activo_id, Mantenimiento.MAN_Fecha_Cierre.is_(None),
-            )
-        )).first()
-        if ticket:
+        if (await self.db.execute(select(Movimiento).where(
+                Movimiento.ACT_Activo == activo_id, Movimiento.MOV_Fecha_Devolucion.is_(None)))).first():
+            raise HTTPException(status_code=400, detail="CANNOT_DELETE_ASSIGNED_ASSET_RETURN_IT_FIRST")
+        if (await self.db.execute(select(Mantenimiento.MAN_Mantenimiento).where(
+                Mantenimiento.ACT_Activo == activo_id, Mantenimiento.MAN_Fecha_Cierre.is_(None)))).first():
             raise HTTPException(status_code=409, detail="ASSET_HAS_OPEN_MAINTENANCE")
+        if activo.ACT_Activo_Padre is not None:
+            raise HTTPException(status_code=409, detail="ASSET_INSTALLED_AS_COMPONENT")
 
-        # Buscar Estado "BAJA"
-        q_estado = select(EstadoOperativo).where(EstadoOperativo.EOP_Nombre.ilike("Baja"))
-        res_estado = await self.db.execute(q_estado)
-        estado_baja = res_estado.scalar_one_or_none()
-
+        estado_baja = (await self.db.execute(
+            select(EstadoOperativo).where(EstadoOperativo.EOP_Nombre.ilike("Baja")))).scalar_one_or_none()
         if not estado_baja:
-            raise HTTPException(
-                status_code=500,
-                detail="SYSTEM_CONFIGURATION_ERROR_MISSING_STATUS_BAJA"
-            )
-
-        # Validar la transición con la máquina de estados (p. ej. un equipo en
-        # tránsito primero llega a destino). Dar de baja algo ya de baja es un no-op.
+            raise HTTPException(status_code=500, detail="SYSTEM_CONFIGURATION_ERROR_MISSING_STATUS_BAJA")
         actual = await self.cat_repo.get_estado_operativo_by_id(activo.EOP_Estado_Operativo)
         estado_actual = estado_enum_de_nombre(actual.EOP_Nombre if actual else None)
         if estado_actual == EstadoOperativoEnum.BAJA:
@@ -264,32 +287,46 @@ class CoreService(BaseService[CoreRepository]):
                 estado_actual, EstadoOperativoEnum.BAJA):
             raise HTTPException(status_code=400, detail="INVALID_STATE_TRANSITION")
 
-        # Soft Delete: el estado se fija directamente (ActivoUpdate ya no
-        # permite pasar a "Baja" por edición).
-        from sqlalchemy import update as _upd
-        from app.models.core import Activo as _Act
-        await self.db.execute(
-            _upd(_Act).where(_Act.ACT_Activo == activo_id)
-            .values(EOP_Estado_Operativo=estado_baja.EOP_Estado_Operativo)
-        )
-        # Las licencias instaladas en el equipo vuelven a quedar disponibles.
-        from app.repositories.software import SoftwareRepository
-        await SoftwareRepository(self.db).liberar_instalaciones_por_destino(
-            activos_ids=[activo_id], persona_id=None,
-        )
-        resultado = await self.repo.get_by_id(activo_id)
+        kardex = KardexService(self.db)
+        componentes = await self._componentes_de(activo_id)
+        if componentes and not schema.retirar_componentes:
+            raise HTTPException(status_code=409, detail=f"ASSET_HAS_COMPONENTS:{len(componentes)}")
+        for comp in componentes:
+            await self._retirar(activo, comp, "Retiro por baja del equipo", "En Bodega", usuario_id, kardex)
 
-        # Auditoría
+        await self.db.execute(
+            _upd(_Act).where(_Act.ACT_Activo == activo_id).values(
+                EOP_Estado_Operativo=estado_baja.EOP_Estado_Operativo,
+                ACT_Baja_Motivo=schema.motivo, ACT_Baja_Destino=schema.destino,
+                ACT_Baja_Fecha=schema.fecha or _date.today(),
+                ACT_Baja_Documento=schema.documento, ACT_Baja_Observacion=schema.observacion,
+                ARE_Area_Ubicacion=None,
+            ).execution_options(synchronize_session="fetch")
+        )
+        sw_repo = SoftwareRepository(self.db)
+        await sw_repo.liberar_instalaciones_por_destino(
+            activos_ids=[activo_id], persona_id=None, motivo="Baja del equipo",
+        )
+        for lic_id, act_id, per_id, clave_id in getattr(sw_repo, "ultimas_liberadas", []):
+            await kardex.registrar(
+                "LICENCIA_RETIRADA", licencia_id=lic_id, clave_id=clave_id, referencia=f"Licencia #{lic_id}",
+                origen={"activo": act_id, "sede": activo.SED_Sede}, cantidad=1,
+                motivo="Baja del equipo", usuario_id=usuario_id,
+            )
+        await kardex.registrar(
+            "BAJA", activo=activo, usuario_id=usuario_id, origen={"sede": activo.SED_Sede},
+            costo=activo.ACT_Costo, moneda=activo.ACT_Moneda,
+            documento=("BAJA", schema.documento) if schema.documento else None,
+            motivo=schema.observacion,
+            detalle={"motivo": schema.motivo, "destino": schema.destino, "fecha": schema.fecha or _date.today()},
+        )
         await self.gov_repo.create_audit_log(
-            accion="DELETE_LOGIC",
-            entidad="INV_ACTIVO",
-            snapshot={"activo_id": str(activo_id), "codigo": activo.ACT_Codigo_Interno},
+            accion="DELETE_LOGIC", entidad="INV_ACTIVO",
+            snapshot={"activo_id": str(activo_id), "codigo": activo.ACT_Codigo_Interno,
+                      "motivo": schema.motivo, "destino": schema.destino, "documento": schema.documento},
             usuario_id=usuario_id, sede_id=activo.SED_Sede,
         )
-
-        # Resolver info del operador dentro de la transacción activa.
         op_name, op_role, op_email = await self._operator_info(usuario_id)
-
         NotificationService.schedule_baja(
             activo_codigo=activo.ACT_Codigo_Interno,
             activo_serie=activo.ACT_Serie_Fabricante,
@@ -298,7 +335,117 @@ class CoreService(BaseService[CoreRepository]):
             operador_email=op_email,
             operador_rol=op_role,
         )
-        return resultado
+        return await self.repo.get_by_id(activo_id)
+
+    # =================================================================
+    # COMPONENTES (disco, memoria, monitor… instalados en un equipo)
+    # =================================================================
+    async def _componentes_de(self, equipo_id: uuid.UUID) -> list:
+        from app.models.core import Activo as _Act
+        return list((await self.db.execute(
+            select(_Act).where(_Act.ACT_Activo_Padre == equipo_id).order_by(_Act.ACT_Codigo_Interno)
+        )).scalars().all())
+
+    async def listar_componentes(self, equipo_id: uuid.UUID) -> dict:
+        equipo = await self.repo.get_by_id_simple(equipo_id)
+        if not equipo:
+            raise HTTPException(404, "ASSET_NOT_FOUND")
+        from app.models.kardex import Kardex
+        historial = (await self.db.execute(
+            select(Kardex).where(
+                Kardex.KDX_Tipo.in_(("COMPONENTE_INSTALADO", "COMPONENTE_RETIRADO")),
+                (Kardex.KDX_Destino_Activo == equipo_id) | (Kardex.KDX_Origen_Activo == equipo_id),
+            ).order_by(Kardex.KDX_Fecha.desc(), Kardex.KDX_Evento.desc())
+        )).scalars().all()
+        return {
+            "equipo": equipo_id,
+            "instalado_en": equipo.ACT_Activo_Padre,
+            "actuales": await self._componentes_de(equipo_id),
+            "historial": historial,
+        }
+
+    @transactional
+    async def instalar_componente(self, equipo_id: uuid.UUID, schema, usuario_id=None):
+        from sqlalchemy import update as _upd
+        from app.models.core import Activo as _Act
+        from app.models.traceability import Mantenimiento
+        equipo = await self.repo.get_by_id_simple(equipo_id)
+        comp = await self.repo.get_by_id_simple(schema.ACT_Componente)
+        if not equipo or not comp:
+            raise HTTPException(404, "ASSET_NOT_FOUND")
+        if comp.ACT_Activo == equipo.ACT_Activo:
+            raise HTTPException(400, "COMPONENT_CANNOT_BE_ITSELF")
+        if comp.ACT_Activo_Padre is not None:
+            raise HTTPException(409, "COMPONENT_ALREADY_INSTALLED")
+        # Sin ciclos: el equipo no puede estar instalado (directa o indirectamente) en el componente.
+        padre = equipo.ACT_Activo_Padre
+        while padre is not None:
+            if padre == comp.ACT_Activo:
+                raise HTTPException(400, "COMPONENT_CYCLE")
+            padre = (await self.db.execute(select(_Act.ACT_Activo_Padre).where(_Act.ACT_Activo == padre))).scalar()
+        for estado in (comp, equipo):
+            nombre = await self.cat_repo.get_estado_operativo_by_id(estado.EOP_Estado_Operativo)
+            if estado_enum_de_nombre(nombre.EOP_Nombre if nombre else None) == EstadoOperativoEnum.BAJA:
+                raise HTTPException(400, "ASSET_DECOMMISSIONED")
+        if await self.trace_repo.get_movimiento_vigente(comp.ACT_Activo):
+            raise HTTPException(400, "COMPONENT_IS_ASSIGNED_RETURN_IT_FIRST")
+        if (await self.db.execute(select(Mantenimiento.MAN_Mantenimiento).where(
+                Mantenimiento.ACT_Activo == comp.ACT_Activo, Mantenimiento.MAN_Fecha_Cierre.is_(None)))).first():
+            raise HTTPException(409, "ASSET_IN_MAINTENANCE")
+        if comp.SED_Sede is not None and equipo.SED_Sede is not None and comp.SED_Sede != equipo.SED_Sede:
+            raise HTTPException(400, "COMPONENT_IN_OTHER_SEDE")
+        await self.db.execute(
+            _upd(_Act).where(_Act.ACT_Activo == comp.ACT_Activo)
+            .values(ACT_Activo_Padre=equipo.ACT_Activo, SED_Sede=equipo.SED_Sede,
+                    ARE_Area_Ubicacion=equipo.ARE_Area_Ubicacion)
+            .execution_options(synchronize_session="fetch")
+        )
+        await KardexService(self.db).registrar(
+            "COMPONENTE_INSTALADO", activo=comp, usuario_id=usuario_id,
+            destino={"activo": equipo.ACT_Activo, "sede": equipo.SED_Sede, "area": equipo.ARE_Area_Ubicacion},
+            motivo=schema.motivo, detalle={"equipo": equipo.ACT_Codigo_Interno},
+        )
+        await self.gov_repo.create_audit_log(
+            "COMPONENT_INSTALL", "INV_ACTIVO",
+            {"equipo": equipo.ACT_Codigo_Interno, "componente": comp.ACT_Codigo_Interno, "motivo": schema.motivo},
+            usuario_id=usuario_id, sede_id=equipo.SED_Sede,
+        )
+        return await self.listar_componentes(equipo_id)
+
+    async def _retirar(self, equipo, comp, motivo, estado_destino, usuario_id, kardex) -> None:
+        from sqlalchemy import update as _upd
+        from app.models.core import Activo as _Act
+        estado = (await self.db.execute(
+            select(EstadoOperativo).where(EstadoOperativo.EOP_Nombre.ilike(estado_destino)))).scalar_one_or_none()
+        valores = {"ACT_Activo_Padre": None}
+        if estado is not None:
+            valores["EOP_Estado_Operativo"] = estado.EOP_Estado_Operativo
+        await self.db.execute(
+            _upd(_Act).where(_Act.ACT_Activo == comp.ACT_Activo).values(**valores)
+            .execution_options(synchronize_session="fetch")
+        )
+        await kardex.registrar(
+            "COMPONENTE_RETIRADO", activo=comp, usuario_id=usuario_id,
+            origen={"activo": equipo.ACT_Activo, "sede": equipo.SED_Sede},
+            destino={"sede": comp.SED_Sede}, motivo=motivo,
+            detalle={"equipo": equipo.ACT_Codigo_Interno, "estado_destino": estado_destino},
+        )
+
+    @transactional
+    async def retirar_componente(self, equipo_id: uuid.UUID, componente_id: uuid.UUID, schema, usuario_id=None):
+        equipo = await self.repo.get_by_id_simple(equipo_id)
+        comp = await self.repo.get_by_id_simple(componente_id)
+        if not equipo or not comp:
+            raise HTTPException(404, "ASSET_NOT_FOUND")
+        if comp.ACT_Activo_Padre != equipo.ACT_Activo:
+            raise HTTPException(400, "COMPONENT_NOT_INSTALLED_IN_ASSET")
+        await self._retirar(equipo, comp, schema.motivo, schema.estado_destino, usuario_id, KardexService(self.db))
+        await self.gov_repo.create_audit_log(
+            "COMPONENT_REMOVE", "INV_ACTIVO",
+            {"equipo": equipo.ACT_Codigo_Interno, "componente": comp.ACT_Codigo_Interno, "motivo": schema.motivo},
+            usuario_id=usuario_id, sede_id=equipo.SED_Sede,
+        )
+        return await self.listar_componentes(equipo_id)
 
     # =================================================================
     # HELPERS PRIVADOS
@@ -332,13 +479,17 @@ class CoreService(BaseService[CoreRepository]):
         return await self.repo.list_especificaciones(activo_id)
 
     @transactional
-    async def add_especificacion(self, activo_id, tes_id, valor, usuario_id=None, ip=None):
+    async def add_especificacion(self, activo_id, tes_id, valor, usuario_id=None, ip=None, motivo=None):
         activo = await self.repo.get_by_id_simple(activo_id)
         if not activo:
             raise HTTPException(404, "ASSET_NOT_FOUND")
         if not await self.cat_repo.get_tipo_especificacion_by_id(tes_id):
             raise HTTPException(404, "SPECIFICATION_TYPE_NOT_FOUND")
         obj = await self.repo.add_especificacion(activo_id, tes_id, valor)
+        await KardexService(self.db).registrar(
+            "ESPECIFICACION", activo=activo, usuario_id=usuario_id, motivo=motivo,
+            detalle={"tipo": tes_id, "antes": None, "despues": valor[:120]},
+        )
         await self.gov_repo.create_audit_log(
             "CREATE", "INV_ESPECIFICACION",
             {"activo": str(activo_id), "tipo": tes_id, "valor": valor[:120]},
@@ -347,21 +498,34 @@ class CoreService(BaseService[CoreRepository]):
         return obj
 
     @transactional
-    async def update_especificacion(self, esp_id, valor, usuario_id=None, ip=None):
-        if not await self.repo.get_especificacion(esp_id):
+    async def update_especificacion(self, esp_id, valor, usuario_id=None, ip=None, motivo=None):
+        esp = await self.repo.get_especificacion(esp_id)
+        if not esp:
             raise HTTPException(404, "SPECIFICATION_NOT_FOUND")
+        antes = esp.ESP_Valor
+        activo = await self.repo.get_by_id_simple(esp.ACT_Activo)
         await self.repo.update_especificacion(esp_id, valor)
+        if antes != valor:
+            await KardexService(self.db).registrar(
+                "ESPECIFICACION", activo=activo, usuario_id=usuario_id, motivo=motivo,
+                detalle={"tipo": esp.TES_Tipo_Especificacion, "antes": (antes or "")[:120], "despues": valor[:120]},
+            )
         await self.gov_repo.create_audit_log(
             "UPDATE", "INV_ESPECIFICACION", {"id": esp_id, "valor": valor[:120]},
             usuario_id=usuario_id, ip_origen=ip,
         )
 
     @transactional
-    async def delete_especificacion(self, esp_id, usuario_id=None, ip=None):
+    async def delete_especificacion(self, esp_id, usuario_id=None, ip=None, motivo=None):
         obj = await self.repo.get_especificacion(esp_id)
         if not obj:
             raise HTTPException(404, "SPECIFICATION_NOT_FOUND")
+        activo = await self.repo.get_by_id_simple(obj.ACT_Activo)
         await self.repo.delete_especificacion(esp_id)
+        await KardexService(self.db).registrar(
+            "ESPECIFICACION", activo=activo, usuario_id=usuario_id, motivo=motivo,
+            detalle={"tipo": obj.TES_Tipo_Especificacion, "antes": (obj.ESP_Valor or "")[:120], "despues": None},
+        )
         await self.gov_repo.create_audit_log(
             "DELETE", "INV_ESPECIFICACION", {"id": esp_id},
             usuario_id=usuario_id, ip_origen=ip,

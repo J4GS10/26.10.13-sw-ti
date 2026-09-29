@@ -140,6 +140,10 @@ async def test_acta_traducida_completa(client, auth_headers, domain_seed, sessio
     params = {"formato": formato, "tipo": tipo, "lang": lang}
     if tipo == "descargo":
         params["mensajero"] = "Pedro Pérez"
+        # La hoja de descargo certifica una devolución: primero se devuelve.
+        r = await client.post("/api/v1/trazabilidad/devolucion", headers=auth_headers,
+                              json={"ACT_Activo": domain_seed["act_1"]})
+        assert r.status_code == 200, r.text
     r = await client.get(f"/api/v1/trazabilidad/acta/{mid}", params=params, headers=auth_headers)
     assert r.status_code == 200, r.text
 

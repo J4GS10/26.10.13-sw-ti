@@ -13,10 +13,11 @@ from app.core.security import encrypt_field, decrypt_field, fingerprint_field
 from app.core.transactional import transactional
 from app.models.core import Activo
 from app.models.organization import Persona
-from app.models.software import Software as SoftwareModel
+from app.models.software import Instalacion, Licencia, Software as SoftwareModel
 from app.repositories.governance import GovernanceRepository
 from app.repositories.software import SoftwareRepository
 from app.services.base import BaseService
+from app.services.kardex import KardexService
 from app.schemas.software import (
     InstalacionCreate,
     LicenciaCreate,
@@ -173,11 +174,14 @@ class SoftwareService(BaseService[SoftwareRepository]):
         usuario_id=None,
         ip=None,
         origen: str | None = None,
+        documento: tuple[str, str | None] | None = None,
+        sede: int | None = None,
     ):
         sw = await self.db.execute(
             select(SoftwareModel).where(SoftwareModel.SOF_Software == schema.SOF_Software)
         )
-        if not sw.scalar_one_or_none():
+        software = sw.scalar_one_or_none()
+        if not software:
             raise HTTPException(404, detail="SOFTWARE_NOT_FOUND")
         if not await self.repo.get_tipo_licencia_by_id(schema.TLI_Tipo_Licencia):
             raise HTTPException(404, detail="LICENSE_TYPE_NOT_FOUND")
@@ -219,6 +223,12 @@ class SoftwareService(BaseService[SoftwareRepository]):
             usuario_id=usuario_id, ip_origen=ip,
         )
         await self.db.flush()
+        await KardexService(self.db).registrar(
+            "LICENCIA_ALTA", licencia_id=obj.LIC_Licencia, referencia=_ref_software(software),
+            cantidad=schema.LIC_Cantidad_Total, saldo=0, costo=schema.LIC_Costo, moneda=schema.LIC_Moneda,
+            documento=documento, motivo=origen, usuario_id=usuario_id, sede=sede,
+            detalle={"claves_individuales": len(claves), "vencimiento": schema.LIC_Fecha_Vencimiento},
+        )
         return await self._decorate_licencia_counts(obj)
 
     @transactional
@@ -346,7 +356,15 @@ class SoftwareService(BaseService[SoftwareRepository]):
         if data.LIC_Clave_Activacion is not None:
             data = data.model_copy(update={"LIC_Clave_Activacion": encrypt_field(data.LIC_Clave_Activacion)})
 
+        total_antes = obj.LIC_Cantidad_Total
         updated = await self.repo.update_licencia(id, data)
+        if schema.LIC_Cantidad_Total is not None and schema.LIC_Cantidad_Total != total_antes:
+            await KardexService(self.db).registrar(
+                "LICENCIA_AJUSTE", licencia_id=id, referencia=await self._ref_licencia(id),
+                cantidad=schema.LIC_Cantidad_Total - total_antes, saldo=updated.LIC_Cantidad_Usada,
+                usuario_id=usuario_id,
+                detalle={"total_antes": total_antes, "total_despues": schema.LIC_Cantidad_Total},
+            )
         await self.gov_repo.create_audit_log(
             "UPDATE", "INV_LICENCIA",
             {"id": id, "cambios": schema.model_dump(exclude_unset=True, exclude={"LIC_Clave_Activacion"})},
@@ -452,6 +470,15 @@ class SoftwareService(BaseService[SoftwareRepository]):
 
         schema_to_create = schema.model_copy(update={"LCL_Licencia_Clave": clave_reservada_id})
         instalacion = await self.repo.create_instalacion(schema_to_create)
+        licencia_actual = await self.repo.get_licencia_by_id(schema.LIC_Licencia)
+        await KardexService(self.db).registrar(
+            "LICENCIA_ASIGNADA", licencia_id=schema.LIC_Licencia, clave_id=clave_reservada_id,
+            referencia=await self._ref_licencia(schema.LIC_Licencia),
+            destino={"persona": schema.PER_Persona, "activo": schema.ACT_Activo,
+                     "sede": await self._sede_destino_instalacion(schema)},
+            cantidad=1, saldo=licencia_actual.LIC_Cantidad_Usada if licencia_actual else None,
+            usuario_id=usuario_id,
+        )
         await self.gov_repo.create_audit_log(
             "INSTALL", "INV_INSTALACION",
             {
@@ -486,6 +513,7 @@ class SoftwareService(BaseService[SoftwareRepository]):
             schema.LIC_Licencia,
             activo_id=schema.ACT_Activo,
             persona_id=schema.PER_Persona,
+            motivo=schema.motivo,
         )
         if not desactivado:
             raise HTTPException(404, detail="INSTALLATION_NOT_FOUND_OR_ALREADY_REMOVED")
@@ -493,6 +521,16 @@ class SoftwareService(BaseService[SoftwareRepository]):
         await self.repo.liberar_cupo_licencia(schema.LIC_Licencia)
         if instalacion_actual.LCL_Licencia_Clave is not None:
             await self.repo.liberar_clave_licencia(instalacion_actual.LCL_Licencia_Clave)
+        licencia_actual = await self.repo.get_licencia_by_id(schema.LIC_Licencia)
+        await KardexService(self.db).registrar(
+            "LICENCIA_RETIRADA", licencia_id=schema.LIC_Licencia,
+            clave_id=instalacion_actual.LCL_Licencia_Clave,
+            referencia=await self._ref_licencia(schema.LIC_Licencia),
+            origen={"persona": schema.PER_Persona, "activo": schema.ACT_Activo,
+                    "sede": await self._sede_destino_instalacion(schema)},
+            cantidad=1, saldo=licencia_actual.LIC_Cantidad_Usada if licencia_actual else None,
+            motivo=schema.motivo, usuario_id=usuario_id,
+        )
 
         await self.gov_repo.create_audit_log(
             "UNINSTALL", "INV_INSTALACION",
@@ -505,3 +543,59 @@ class SoftwareService(BaseService[SoftwareRepository]):
             usuario_id=usuario_id, ip_origen=ip,
         )
         return {"status": "success", "message": "SOFTWARE_UNINSTALLED_SUCCESSFULLY"}
+
+    # =====================================================================
+    # HISTORIAL Y REFERENCIAS
+    # =====================================================================
+    async def _ref_licencia(self, licencia_id: int) -> str | None:
+        row = (await self.db.execute(
+            select(SoftwareModel).join(Licencia, Licencia.SOF_Software == SoftwareModel.SOF_Software)
+            .where(Licencia.LIC_Licencia == licencia_id)
+        )).scalar_one_or_none()
+        return f"{_ref_software(row)} · licencia #{licencia_id}" if row else f"Licencia #{licencia_id}"
+
+    async def _sede_destino_instalacion(self, schema) -> int | None:
+        if getattr(schema, "ACT_Activo", None):
+            return (await self.db.execute(
+                select(Activo.SED_Sede).where(Activo.ACT_Activo == schema.ACT_Activo)
+            )).scalar_one_or_none()
+        if getattr(schema, "PER_Persona", None):
+            return (await self.db.execute(
+                select(Persona.SED_Sede).where(Persona.PER_Persona == schema.PER_Persona)
+            )).scalar_one_or_none()
+        return None
+
+    async def historial_licencia(self, licencia_id: int) -> list[dict]:
+        """Todas las asignaciones de la licencia (vigentes y retiradas), en orden."""
+        if not await self.repo.get_licencia_by_id(licencia_id):
+            raise HTTPException(404, "LICENSE_NOT_FOUND")
+        from sqlalchemy.orm import aliased
+        filas = (await self.db.execute(
+            select(Instalacion, Activo.ACT_Codigo_Interno, Persona.PER_Primer_Nombre, Persona.PER_Primer_Apellido)
+            .join(Activo, Activo.ACT_Activo == Instalacion.ACT_Activo, isouter=True)
+            .join(Persona, Persona.PER_Persona == Instalacion.PER_Persona, isouter=True)
+            .where(Instalacion.LIC_Licencia == licencia_id)
+            .order_by(Instalacion.INS_Fecha_Instalacion.desc(), Instalacion.INS_Instalacion.desc())
+        )).all()
+        return [
+            {
+                "INS_Instalacion": ins.INS_Instalacion,
+                "destino": "ACTIVO" if ins.ACT_Activo else "PERSONA",
+                "ACT_Activo": ins.ACT_Activo, "activo_codigo": codigo,
+                "PER_Persona": ins.PER_Persona,
+                "persona_nombre": f"{nombre} {apellido}" if nombre else None,
+                "LCL_Licencia_Clave": ins.LCL_Licencia_Clave,
+                "INS_Fecha_Instalacion": ins.INS_Fecha_Instalacion,
+                "INS_Estado": ins.INS_Estado,
+                "INS_Fecha_Retiro": ins.INS_Fecha_Retiro,
+                "INS_Motivo_Retiro": ins.INS_Motivo_Retiro,
+            }
+            for ins, codigo, nombre, apellido in filas
+        ]
+
+
+def _ref_software(software) -> str:
+    if software is None:
+        return "—"
+    partes = [software.SOF_Nombre, software.SOF_Version]
+    return " ".join(p for p in partes if p)[:150]

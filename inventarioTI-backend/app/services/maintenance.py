@@ -146,6 +146,14 @@ class MaintenanceService(BaseService[MaintenanceRepository]):
             activo.EOP_Estado_Operativo = estado_reparacion.EOP_Estado_Operativo
 
             mantenimiento = await self.repo.create_mantenimiento(schema)
+            from app.services.kardex import KardexService
+            await KardexService(self.db).registrar(
+                "MANTENIMIENTO_ENTRADA", activo=activo, usuario_id=usuario_id,
+                origen={"sede": activo.SED_Sede}, destino={"sede": activo.SED_Sede},
+                documento=("TICKET", str(mantenimiento.MAN_Mantenimiento)),
+                motivo=schema.MAN_Descripcion_Falla[:500],
+                detalle={"solicitante": schema.PER_Persona_Solicita, "tipo": schema.TMA_Tipo_Mantenimiento},
+            )
             await self.gov_repo.create_audit_log(
                 "CREATE", "INV_MANTENIMIENTO",
                 {"activo": str(schema.ACT_Activo), "falla": schema.MAN_Descripcion_Falla[:200]},
@@ -301,6 +309,15 @@ class MaintenanceService(BaseService[MaintenanceRepository]):
             if activo and activo.EOP_Estado_Operativo != estado_baja:
                 activo.EOP_Estado_Operativo = estado_nuevo.EOP_Estado_Operativo
 
+            from app.services.kardex import KardexService
+            await KardexService(self.db).registrar(
+                "MANTENIMIENTO_SALIDA", activo=activo, activo_id=mant.ACT_Activo, usuario_id=usuario_id,
+                origen={"sede": activo.SED_Sede if activo else None},
+                destino={"sede": activo.SED_Sede if activo else None},
+                costo=schema.MAN_Costo_Total, moneda=moneda,
+                documento=("TICKET", str(mantenimiento_id)),
+                detalle={"estado_final": "Asignado" if mov_vigente else "En Bodega"},
+            )
             await self.gov_repo.create_audit_log(
                 "CLOSE", "INV_MANTENIMIENTO",
                 {"ticket_id": str(mantenimiento_id), "costo_total": str(schema.MAN_Costo_Total),

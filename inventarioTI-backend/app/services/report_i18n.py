@@ -198,12 +198,31 @@ def format_long_date(value: date, lang: str | None) -> str:
     return f"{value.day} de {month} de {value.year}"
 
 
+def a_hora_local(value: datetime | None) -> datetime | None:
+    """
+    La base guarda fechas-hora en UTC sin zona. Para mostrarlas (CSV, actas,
+    correos) se pasan a la zona de la organización (ORG_TIMEZONE): antes un
+    acta generada después de las 18:00 en Guatemala salía con el día siguiente.
+    """
+    if value is None or not isinstance(value, datetime):
+        return value
+    from zoneinfo import ZoneInfo
+    from app.core.config import settings
+    base = value if value.tzinfo else value.replace(tzinfo=ZoneInfo("UTC"))
+    return base.astimezone(ZoneInfo(settings.ORG_TIMEZONE)).replace(tzinfo=None)
+
+
+def hoy_local() -> date:
+    """Fecha de hoy en la zona de la organización."""
+    return a_hora_local(datetime.utcnow()).date()
+
+
 def format_iso_date(value) -> str:
     """Fecha en ISO 8601 (AAAA-MM-DD): inequívoca en cualquier configuración regional de Excel."""
     if value is None:
         return ""
     if isinstance(value, datetime):
-        value = value.date()
+        value = a_hora_local(value).date()
     try:
         return value.strftime("%Y-%m-%d")
     except (AttributeError, ValueError):
@@ -211,11 +230,11 @@ def format_iso_date(value) -> str:
 
 
 def format_iso_datetime(value) -> str:
-    """Fecha y hora 'AAAA-MM-DD HH:MM:SS' (sin la 'T' ISO ni microsegundos)."""
+    """Fecha y hora local 'AAAA-MM-DD HH:MM:SS' (sin la 'T' ISO ni microsegundos)."""
     if value is None:
         return ""
     try:
-        return value.strftime("%Y-%m-%d %H:%M:%S")
+        return a_hora_local(value).strftime("%Y-%m-%d %H:%M:%S")
     except (AttributeError, ValueError):
         return str(value)
 

@@ -13,6 +13,7 @@ from app.db.session import get_db
 from app.schemas.common import PaginatedResponse
 from app.schemas.core import (
     ActivoCreate, ActivoDetailResponse, ActivoFilter, ActivoResponse, ActivoUpdate,
+    BajaActivo, ComponenteInstalar, ComponenteRetirar,
     EspecificacionCreate, EspecificacionDetalle, EspecificacionValorUpdate,
     EtiquetasActivosRequest,
 )
@@ -49,7 +50,8 @@ async def add_especificacion(
     service: CoreService = Depends(get_service),
 ):
     await service.add_especificacion(
-        activo_id, schema.TES_Tipo_Especificacion, schema.ESP_Valor, **_ctx(request, current_user)
+        activo_id, schema.TES_Tipo_Especificacion, schema.ESP_Valor, motivo=schema.motivo,
+        **_ctx(request, current_user)
     )
     # Devolvemos la fila enriquecida recién creada.
     specs = await service.list_especificaciones(activo_id)
@@ -61,7 +63,8 @@ async def update_especificacion(
     esp_id: int, schema: EspecificacionValorUpdate, request: Request, current_user: CurrentUser,
     service: CoreService = Depends(get_service),
 ):
-    await service.update_especificacion(esp_id, schema.ESP_Valor, **_ctx(request, current_user))
+    await service.update_especificacion(esp_id, schema.ESP_Valor, motivo=schema.motivo,
+                                        **_ctx(request, current_user))
 
 
 @router.delete("/especificaciones/{esp_id}", status_code=204, dependencies=OPERATIVO)
@@ -162,6 +165,61 @@ async def search_activos(
         page=filters.page,
         per_page=filters.per_page,
     )
+
+
+# =====================================================================
+# BAJA FORMAL
+# =====================================================================
+@router.post("/activos/{activo_id}/baja", response_model=ActivoResponse, dependencies=ADMIN)
+async def dar_de_baja(
+    activo_id: uuid.UUID, schema: BajaActivo, request: Request, current_user: CurrentUser,
+    service: CoreService = Depends(get_service),
+):
+    """Salida del inventario con motivo, destino, fecha y documento de respaldo."""
+    return await service.dar_de_baja(activo_id, schema, usuario_id=current_user.USU_Usuario)
+
+
+# =====================================================================
+# COMPONENTES
+# =====================================================================
+@router.get("/activos/{activo_id}/componentes")
+async def listar_componentes(activo_id: uuid.UUID, service: CoreService = Depends(get_service)):
+    """Componentes instalados hoy y su historial de instalaciones y retiros."""
+    data = await service.listar_componentes(activo_id)
+    return _componentes_json(data)
+
+
+@router.post("/activos/{activo_id}/componentes", dependencies=OPERATIVO)
+async def instalar_componente(
+    activo_id: uuid.UUID, schema: ComponenteInstalar, request: Request, current_user: CurrentUser,
+    service: CoreService = Depends(get_service),
+):
+    data = await service.instalar_componente(activo_id, schema, usuario_id=current_user.USU_Usuario)
+    return _componentes_json(data)
+
+
+@router.post("/activos/{activo_id}/componentes/{componente_id}/retirar", dependencies=OPERATIVO)
+async def retirar_componente(
+    activo_id: uuid.UUID, componente_id: uuid.UUID, schema: ComponenteRetirar, request: Request,
+    current_user: CurrentUser, service: CoreService = Depends(get_service),
+):
+    data = await service.retirar_componente(activo_id, componente_id, schema, usuario_id=current_user.USU_Usuario)
+    return _componentes_json(data)
+
+
+def _componentes_json(data: dict) -> dict:
+    from app.schemas.kardex import KardexEvento
+    return {
+        "equipo": str(data["equipo"]),
+        "instalado_en": str(data["instalado_en"]) if data["instalado_en"] else None,
+        "actuales": [
+            {"ACT_Activo": str(c.ACT_Activo), "ACT_Codigo_Interno": c.ACT_Codigo_Interno,
+             "ACT_Serie_Fabricante": c.ACT_Serie_Fabricante, "TAC_Tipo_Activo": c.TAC_Tipo_Activo,
+             "MOD_Modelo": c.MOD_Modelo}
+            for c in data["actuales"]
+        ],
+        "historial": [KardexEvento.model_validate(e).model_dump(mode="json") for e in data["historial"]],
+    }
 
 
 @router.get("/activos/{id}/contexto")

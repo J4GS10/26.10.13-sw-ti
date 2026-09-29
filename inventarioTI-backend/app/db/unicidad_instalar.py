@@ -11,11 +11,12 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.schema import CreateIndex
 
 from app.db.base import Base
-from app.db.unicidad import INDICES_CI
+from app.db.unicidad import INDICES_CI, registrar_indices
 
 
 def instalar_indices(conn: Connection) -> list[tuple[str, int]]:
     """Crea los índices que falten. Devuelve [(índice, duplicados)] de los omitidos."""
+    registrar_indices()
     omitidos: list[tuple[str, int]] = []
     existentes = set(conn.execute(text("SELECT indexname FROM pg_indexes")).scalars().all())
     for nombre, tabla, texto, exactas, _codigo in INDICES_CI:

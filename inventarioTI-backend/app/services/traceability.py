@@ -25,6 +25,7 @@ from app.repositories.governance import GovernanceRepository
 from app.repositories.software import SoftwareRepository
 from app.repositories.traceability import TraceabilityRepository
 from app.services.base import BaseService
+from app.services.kardex import KardexService
 from app.schemas.traceability import (
     DevolucionCreate,
     MovimientoCreate,
@@ -215,6 +216,15 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
         if getattr(activo, "ACT_Activo_Padre", None) is not None:
             raise HTTPException(409, detail="ASSET_INSTALLED_AS_COMPONENT")
 
+    async def _fijar_ubicacion(self, activo_id: uuid.UUID, area_id: int | None) -> None:
+        """Ubicación física del equipo (área) tras un movimiento."""
+        from sqlalchemy import update as _upd
+        from app.models.core import Activo as _Act
+        await self.db.execute(
+            _upd(_Act).where(_Act.ACT_Activo == activo_id).values(ARE_Area_Ubicacion=area_id)
+            .execution_options(synchronize_session="fetch")
+        )
+
     async def _ubicar_en_sede(
         self, activo, persona, sede_id: int | None, *, usuario_id=None, ip: str | None = None,
     ) -> None:
@@ -234,6 +244,11 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
                 {"activo": str(activo.ACT_Activo), "codigo": activo.ACT_Codigo_Interno,
                  "sede_origen": activo.SED_Sede, "sede_destino": sede_id},
                 usuario_id=usuario_id, ip_origen=ip, sede_id=activo.SED_Sede,
+            )
+            await KardexService(self.db).registrar(
+                "TRASLADO_SEDE", activo=activo, usuario_id=usuario_id,
+                origen={"sede": activo.SED_Sede}, destino={"sede": sede_id},
+                motivo="Cambio de sede por asignación o transferencia",
             )
         if activo.SED_Sede != sede_id:
             await self.db.execute(
@@ -310,6 +325,14 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
 
             # Lock del movimiento vigente.
             vigente = await self.repo.get_movimiento_vigente(schema.ACT_Activo, lock=True)
+            if tipo_enum == TipoMovimientoEnum.PRESTAMO:
+                from datetime import date as _date
+                if not schema.MOV_Fecha_Prevista_Devolucion:
+                    raise HTTPException(400, detail="LOAN_RETURN_DATE_REQUIRED")
+                if schema.MOV_Fecha_Prevista_Devolucion < _date.today():
+                    raise HTTPException(400, detail="LOAN_RETURN_DATE_IN_THE_PAST")
+            elif schema.MOV_Fecha_Prevista_Devolucion is not None:
+                schema = schema.model_copy(update={"MOV_Fecha_Prevista_Devolucion": None})
             if tipo_enum in (TipoMovimientoEnum.ASIGNACION, TipoMovimientoEnum.PRESTAMO):
                 if vigente:
                     raise HTTPException(409, detail="ASSET_ALREADY_ASSIGNED_USE_TRANSFER")
@@ -318,6 +341,16 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
 
             await self._ubicar_en_sede(activo, persona, sede_destino, usuario_id=usuario_id, ip=ip)
             nuevo = await self.repo.create_movimiento(schema)
+            nuevo.MOV_Usuario_Registra = usuario_id
+            await self._fijar_ubicacion(schema.ACT_Activo, area.ARE_Area)
+            await KardexService(self.db).registrar(
+                "PRESTAMO" if tipo_enum == TipoMovimientoEnum.PRESTAMO else "ASIGNACION",
+                activo=activo, usuario_id=usuario_id,
+                destino={"persona": persona.PER_Persona, "area": area.ARE_Area, "sede": sede_destino},
+                documento=("MOVIMIENTO", str(nuevo.MOV_Movimiento)),
+                motivo=schema.MOV_Motivo or schema.MOV_Observacion,
+                detalle={"devolucion_prevista": schema.MOV_Fecha_Prevista_Devolucion},
+            )
 
             # Aplicar transición de estado
             if target_estado_enum:
@@ -474,11 +507,33 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
                     .values(EOP_Estado_Operativo=estado_bodega_id)
                 )
 
+            kardex = KardexService(self.db)
+            for mov in vigentes:
+                act = await self.core_repo.get_by_id_simple(mov.ACT_Activo)
+                await kardex.registrar(
+                    "DEVOLUCION", activo=act, activo_id=mov.ACT_Activo, usuario_id=usuario_id,
+                    origen={"persona": persona_id, "area": mov.ARE_Area, "sede": act.SED_Sede if act else None},
+                    destino={"sede": act.SED_Sede if act else None},
+                    documento=("OFFBOARDING", str(persona_id)),
+                    motivo="Salida de la persona (offboarding)",
+                    detalle={"en_reparacion": mov.ACT_Activo in en_reparacion},
+                )
+                await self._fijar_ubicacion(mov.ACT_Activo, None)
+
             # 4. Liberar licencias
-            licencias_liberadas = await SoftwareRepository(self.db).liberar_instalaciones_por_destino(
+            sw_repo = SoftwareRepository(self.db)
+            licencias_liberadas = await sw_repo.liberar_instalaciones_por_destino(
                 activos_ids=activos_uuid,
                 persona_id=persona_id,
+                motivo="Salida de la persona (offboarding)",
             )
+            for lic_id, act_id, per_id, clave_id in getattr(sw_repo, "ultimas_liberadas", []):
+                await kardex.registrar(
+                    "LICENCIA_RETIRADA", licencia_id=lic_id, clave_id=clave_id,
+                    referencia=f"Licencia #{lic_id}", cantidad=1, usuario_id=usuario_id,
+                    origen={"persona": per_id, "activo": act_id, "sede": persona.SED_Sede},
+                    motivo="Salida de la persona (offboarding)",
+                )
 
             # 5. Desactivar usuario
             usuario_desactivado = False
@@ -598,15 +653,35 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
             if not en_reparacion:
                 AssetStateMachine.validate_transition(estado_actual, EstadoOperativoEnum.BODEGA)
 
+            area_destino = None
+            if schema.ARE_Area_Destino is not None:
+                area_destino = (await self.db.execute(
+                    select(Area).where(Area.ARE_Area == schema.ARE_Area_Destino)
+                )).scalar_one_or_none()
+                if not area_destino:
+                    raise HTTPException(404, detail="AREA_NOT_FOUND")
+                await self._sede_de_destino(area_destino.ARE_Area)
+
             cerrado = await self.repo.cerrar_movimiento(vigente.MOV_Movimiento)
             if not cerrado:
                 raise HTTPException(409, detail="MOVEMENT_ALREADY_CLOSED")
+            if schema.MOV_Motivo:
+                vigente.MOV_Motivo = schema.MOV_Motivo
 
             estado_bodega_id = await self._get_estado_id(EstadoOperativoEnum.BODEGA)
             if estado_bodega_id is None:
                 raise HTTPException(500, detail="SYSTEM_CONFIG_ERROR_MISSING_OPERATIONAL_STATE")
             if not en_reparacion:
                 await self._set_activo_estado(schema.ACT_Activo, estado_bodega_id)
+            await self._fijar_ubicacion(schema.ACT_Activo, area_destino.ARE_Area if area_destino else None)
+            await KardexService(self.db).registrar(
+                "DEVOLUCION", activo=activo, usuario_id=usuario_id,
+                origen={"persona": vigente.PER_Persona, "area": vigente.ARE_Area, "sede": activo.SED_Sede},
+                destino={"area": area_destino.ARE_Area if area_destino else None, "sede": activo.SED_Sede},
+                documento=("MOVIMIENTO", str(vigente.MOV_Movimiento)),
+                motivo=schema.MOV_Motivo,
+                detalle={"condicion": schema.condicion, "en_reparacion": en_reparacion},
+            )
 
             await self.gov_repo.create_audit_log(
                 "RETURN", "INV_MOVIMIENTO",
@@ -637,7 +712,16 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
             except Exception:  # noqa: BLE001
                 pass
 
-            return {"status": "success", "message": "ASSET_RETURNED_SUCCESSFULLY"}
+            # Diálogo: el sistema propone el siguiente paso lógico.
+            siguiente = ["DESCARGAR_HOJA_DESCARGO"]
+            if schema.condicion == "CON_DANO" and not en_reparacion:
+                siguiente.insert(0, "ABRIR_TICKET_MANTENIMIENTO")
+            return {
+                "status": "success", "message": "ASSET_RETURNED_SUCCESSFULLY",
+                "MOV_Movimiento": str(vigente.MOV_Movimiento),
+                "estado": "En Reparación" if en_reparacion else "En Bodega",
+                "siguientes_pasos": siguiente,
+            }
         except HTTPException:
             raise
         except InvalidStateTransitionError as exc:
@@ -720,8 +804,19 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
                 ARE_Area=schema.ARE_Area_Destino,
                 TMO_Tipo_Movimiento=tipo_asignacion_id,
                 MOV_Observacion=schema.MOV_Observacion or "Transferencia de custodia",
+                MOV_Motivo=schema.MOV_Motivo,
             )
             created = await self.repo.create_movimiento(nuevo_mov)
+            created.MOV_Usuario_Registra = usuario_id
+            await self._fijar_ubicacion(schema.ACT_Activo, schema.ARE_Area_Destino)
+            await KardexService(self.db).registrar(
+                "TRANSFERENCIA", activo=activo, usuario_id=usuario_id,
+                origen={"persona": vigente.PER_Persona, "area": vigente.ARE_Area, "sede": sede_origen},
+                destino={"persona": schema.PER_Persona_Destino, "area": schema.ARE_Area_Destino,
+                         "sede": sede_destino},
+                documento=("MOVIMIENTO", str(created.MOV_Movimiento)),
+                motivo=schema.MOV_Motivo or schema.MOV_Observacion,
+            )
 
             estado_asignado_id = await self._get_estado_id(EstadoOperativoEnum.ASIGNADO)
             if estado_asignado_id is None:

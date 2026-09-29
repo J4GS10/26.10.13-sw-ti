@@ -34,6 +34,7 @@ async def _asignar(client, h, d, activo, persona="alice", tipo="tmo_asg"):
     return await client.post(f"{BASE}/trazabilidad/movimientos", headers=h, json={
         "ACT_Activo": d[activo], "PER_Persona": d[persona],
         "ARE_Area": d["area"], "TMO_Tipo_Movimiento": d[tipo],
+        "MOV_Fecha_Prevista_Devolucion": "2099-12-31" if tipo == "tmo_pres" else None,
     })
 
 

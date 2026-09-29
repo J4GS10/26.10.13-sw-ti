@@ -271,13 +271,17 @@ class DocumentService:
         txt = _ACTA_TEXTS_BY_LANG[lang][tipo]
         labels = _LABELS_BY_LANG[lang]
         movimientos = []
-        for mid in movimiento_ids:
+        # Un mismo movimiento repetido en el lote no duplica la fila del equipo.
+        for mid in dict.fromkeys(movimiento_ids):
             mov = await self.trace_repo.get_by_id_full(mid)
             if not mov:
                 raise HTTPException(status_code=404, detail=f"MOVEMENT_NOT_FOUND: {mid}")
             movimientos.append(mov)
         if not movimientos:
             raise HTTPException(status_code=400, detail="NO_MOVEMENTS_PROVIDED")
+        # La hoja de descargo certifica una devolución: el equipo debe estar devuelto.
+        if tipo == "descargo" and any(m.MOV_Fecha_Devolucion is None for m in movimientos):
+            raise HTTPException(status_code=409, detail="MOVEMENT_NOT_RETURNED")
 
         persona = movimientos[0].persona
         for mov in movimientos:
@@ -305,10 +309,15 @@ class DocumentService:
                 "serie": (a.ACT_Serie_Fabricante if a else "") or "—",
             })
 
+        # Fecha del hecho (entrega o devolución), en la hora de la organización.
+        # Regenerar un acta antigua ya no la fecha con el día de hoy.
+        from app.services.report_i18n import a_hora_local
         if tipo == "descargo" and movimientos[0].MOV_Fecha_Devolucion:
-            d = movimientos[0].MOV_Fecha_Devolucion
+            d = a_hora_local(movimientos[0].MOV_Fecha_Devolucion)
+        elif movimientos[0].MOV_Fecha_Asignacion:
+            d = a_hora_local(min(m.MOV_Fecha_Asignacion for m in movimientos))
         else:
-            d = datetime.now()
+            d = a_hora_local(datetime.utcnow())
         motivo_default = _DEFAULT_REASON_BY_LANG[lang][tipo]
 
         return {
