@@ -232,6 +232,17 @@ def install_rls(conn: Connection, *, strict: bool = False) -> bool:
         END $$;
     """))
 
+    # Una migración intermedia puede reinstalar la capa antes de que existan
+    # las tablas de migraciones posteriores: se omite lo que aún no existe.
+    existentes = set(conn.execute(text(
+        "SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema()"
+    )).scalars().all())
+
+    def _si_existe(sql: str) -> bool:
+        import re
+        tablas = re.findall(r'ON "([A-Z_]+)"', sql)
+        return all(t in existentes for t in tablas)
+
     for statement in (
         f'GRANT USAGE ON SCHEMA public TO "{role}"',
         f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "{role}"',
@@ -249,7 +260,8 @@ def install_rls(conn: Connection, *, strict: bool = False) -> bool:
         f'REVOKE INSERT, UPDATE, DELETE ON "INV_USUARIO_SEDE" FROM "{role}"',
         f'REVOKE INSERT, UPDATE, DELETE ON "INV_USUARIO" FROM "{role}"',
     ):
-        conn.execute(text(statement))
+        if _si_existe(statement):
+            conn.execute(text(statement))
     # Autoservicio (contraseña, MFA, intentos, último acceso…): se permite
     # actualizar las columnas de la cuenta que no deciden el acceso.
     columnas = [c for c in conn.execute(text(
@@ -263,6 +275,8 @@ def install_rls(conn: Connection, *, strict: bool = False) -> bool:
         conn.execute(text(ddl))
 
     for table, policies in _policies().items():
+        if table not in existentes:
+            continue
         conn.execute(text(f'ALTER TABLE "{table}" ENABLE ROW LEVEL SECURITY'))
         existing = conn.execute(
             text("SELECT policyname FROM pg_policies WHERE tablename = :t AND policyname LIKE :p"),

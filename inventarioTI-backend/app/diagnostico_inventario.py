@@ -120,6 +120,21 @@ async def diagnosticar(db) -> list[Hallazgo]:
         "STOCK_DISTINTO_AL_KARDEX", "Consumibles cuyo stock no coincide con su último movimiento (hacer un ajuste)",
         False, [{"consumible": c, "nombre": n, "stock": s, "kardex": k} for c, n, s, k in rows],
     ))
+    # Duplicados que impiden crear los índices únicos sin mayúsculas/espacios.
+    from sqlalchemy import text as _text
+    from app.db.unicidad import INDICES_CI
+    duplicados = []
+    for nombre, tabla, texto_cols, exactas, codigo in INDICES_CI:
+        claves = [f'"{c}"' for c in exactas] + [f'lower(trim("{c}"))' for c in texto_cols]
+        grupo = ", ".join(claves)
+        filas = (await db.execute(_text(
+            f'SELECT {grupo}, count(*) FROM "{tabla}" GROUP BY {grupo} HAVING count(*) > 1 LIMIT 20'
+        ))).all()
+        duplicados += [{"indice": nombre, "valor": " / ".join(str(v) for v in f[:-1]), "veces": f[-1]} for f in filas]
+    hallazgos.append(Hallazgo(
+        "DUPLICADOS", "Valores repetidos (sin distinguir mayúsculas/espacios): unifíquelos y ejecute "
+        "python -m app.db.unicidad_instalar", False, duplicados,
+    ))
     return hallazgos
 
 
