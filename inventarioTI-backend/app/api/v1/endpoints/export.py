@@ -269,6 +269,8 @@ async def export_auditoria_csv(
     limit: int = Query(10000, le=50000),
     from_date: Optional[datetime] = Query(None, description="ISO timestamp inicial"),
     to_date: Optional[datetime] = Query(None, description="ISO timestamp final"),
+    accion: Optional[str] = Query(None, max_length=50),
+    entidad: Optional[str] = Query(None, max_length=50),
     lang: str = Query("es", pattern="^(es|en|it)$"),
 ):
     """
@@ -277,10 +279,12 @@ async def export_auditoria_csv(
     """
     import json
     from app.repositories.governance import GovernanceRepository
-    events = await ExportService(db).list_audit_events(limit, from_date=from_date, to_date=to_date)
+    events = await ExportService(db).list_audit_events(
+        limit, from_date=from_date, to_date=to_date, accion=accion, entidad=entidad)
     await GovernanceRepository(write_db).create_audit_log(
         accion="AUDIT_EXPORT", entidad="INV_AUDITORIA_SISTEMA",
-        snapshot={"registros": len(events), "desde": from_date, "hasta": to_date, "idioma": lang},
+        snapshot={"registros": len(events), "desde": from_date, "hasta": to_date, "idioma": lang,
+                  "accion": accion, "entidad": entidad},
         usuario_id=current_user.USU_Usuario,
         ip_origen=get_client_ip(request), user_agent=get_user_agent(request),
     )

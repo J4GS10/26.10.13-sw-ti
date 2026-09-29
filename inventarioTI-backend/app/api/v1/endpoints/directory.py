@@ -110,9 +110,11 @@ async def probar_ad(request: Request, body: ProbarAdIn, db: AsyncSession = Depen
 
 
 @router.post("/integracion/desbloquear", status_code=204, dependencies=SUPER)
-async def desbloquear():
+async def desbloquear(db: AsyncSession = Depends(get_db)):
     """Reanuda envíos/consultas pausados por un fallo de autenticación."""
+    from app.services.email_outbox import reanudar_retenidos
     await integration_config.reset_breakers()
+    await reanudar_retenidos(db)
     return Response(status_code=204)
 
 

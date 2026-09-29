@@ -224,6 +224,21 @@ async def summary(db: AsyncSession) -> dict[str, Any]:
     }
 
 
+async def reanudar_retenidos(db: AsyncSession) -> int:
+    """
+    Correos PENDIENTES que esperaban por una clave rechazada (cortacircuitos):
+    se programan para ahora y se despierta al worker (QA7 DEF-04).
+    """
+    res = await db.execute(
+        update(EmailOutbox)
+        .where(EmailOutbox.EOB_Estado == PENDIENTE, EmailOutbox.EOB_Ultimo_Error.like("AUTH_%"))
+        .values(EOB_Proximo_Intento=_now())
+    )
+    await db.commit()
+    _wakeup.set()
+    return res.rowcount or 0
+
+
 async def retry_failed(db: AsyncSession, outbox_id: uuid.UUID | None = None) -> int:
     """Devuelve a PENDIENTE un correo FALLIDO (o todos) para reintentarlo ya."""
     q = update(EmailOutbox).where(EmailOutbox.EOB_Estado == FALLIDO)

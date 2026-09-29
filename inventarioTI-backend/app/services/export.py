@@ -31,9 +31,9 @@ class ExportService:
     async def list_orders(self):
         return await self.procurement_repo.list_ordenes()
 
-    async def list_audit_events(self, limit: int, from_date=None, to_date=None):
+    async def list_audit_events(self, limit: int, from_date=None, to_date=None, accion=None, entidad=None):
         result = await self.governance_service.list_audit_logs(
-            skip=0, limit=limit, from_date=from_date, to_date=to_date,
+            skip=0, limit=limit, from_date=from_date, to_date=to_date, accion=accion, entidad=entidad,
         )
         return result["items"]
 

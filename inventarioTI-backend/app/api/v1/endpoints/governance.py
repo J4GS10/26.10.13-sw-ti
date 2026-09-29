@@ -92,10 +92,28 @@ async def list_auditoria(
     service: GovernanceService = Depends(get_read_service),
 ):
     """Consulta paginada del log forense (filtrada por el alcance del lector)."""
-    return await service.list_audit_logs(
+    data = await service.list_audit_logs(
         skip=skip, limit=limit, accion=accion, entidad=entidad,
         usuario_id=usuario_id, from_date=from_date, to_date=to_date,
     )
+    items = data["items"] if isinstance(data, dict) else data.items
+    ids = {i.USU_Usuario for i in items if getattr(i, "USU_Usuario", None)}
+    nombres: dict = {}
+    if ids:
+        from sqlalchemy import select as _select
+        from app.models.organization import Usuario as _Usuario
+        nombres = dict((await service.db.execute(
+            _select(_Usuario.USU_Usuario, _Usuario.USU_Username).where(_Usuario.USU_Usuario.in_(ids))
+        )).all())
+    from app.schemas.governance import AuditoriaResponse
+    total = data["total"] if isinstance(data, dict) else data.total
+    return {
+        "total": total,
+        "items": [
+            {**AuditoriaResponse.model_validate(i, from_attributes=True).model_dump(exclude={"usuario_nombre"}), "usuario_nombre": nombres.get(i.USU_Usuario)}
+            for i in items
+        ],
+    }
 
 
 @router.get("/auditoria/resumen", dependencies=AUDIT_READ)

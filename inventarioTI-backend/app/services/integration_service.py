@@ -106,6 +106,8 @@ class IntegrationService:
         values = ic.row_to_values(row)
         ic.set_cached_values(values)
         await ic.reset_breakers()  # credenciales nuevas: se reanudan los intentos
+        from app.services.email_outbox import reanudar_retenidos
+        await reanudar_retenidos(self.db)  # y los correos retenidos salen ya
         return await self._out(values, "interfaz")
 
     async def _form_config(self, form: dict[str, Any]) -> ic.IntegrationConfig:

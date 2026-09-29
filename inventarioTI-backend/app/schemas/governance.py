@@ -31,6 +31,8 @@ class AuditoriaResponse(BaseModel):
     AUD_User_Agent: Optional[str] = None
     USU_Usuario: Optional[uuid.UUID] = None
     AUD_Sede: Optional[int] = None
+    # Nombre de usuario de quien actuó (en lugar del identificador interno).
+    usuario_nombre: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 

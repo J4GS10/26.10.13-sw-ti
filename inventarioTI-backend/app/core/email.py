@@ -402,6 +402,40 @@ class _SafeDict(dict):
         return ""
 
 
+_ISO_FECHA_HORA = __import__("re").compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$")
+
+
+def _fechas_legibles(ctx: dict[str, Any]) -> dict[str, Any]:
+    """
+    Las fechas ISO en UTC (p. ej. "2026-09-29T18:04:11.532") se muestran en la
+    zona de la organización y en formato "29/09/2026 12:04" (QA7 DEF-11).
+    """
+    from datetime import datetime as _dt
+    from app.services.report_i18n import a_hora_local
+    salida = dict(ctx)
+    for clave, valor in ctx.items():
+        if isinstance(valor, str) and _ISO_FECHA_HORA.match(valor):
+            try:
+                local = a_hora_local(_dt.fromisoformat(valor.replace("Z", "+00:00")))
+                salida[clave] = local.strftime("%d/%m/%Y %H:%M")
+            except ValueError:
+                pass
+    return salida
+
+
+def _texto_plano(html: str) -> str:
+    """Versión en texto del correo (clientes sin HTML y filtros antispam)."""
+    import html as _html
+    import re as _re
+    texto = _re.sub(r"(?is)<(style|script)[^>]*>.*?</\1>", "", html)
+    texto = _re.sub(r"(?i)<br\s*/?>|</(p|div|tr|h1|h2|li)>", "\n", texto)
+    texto = _re.sub(r"(?i)</td>\s*<td[^>]*>", ": ", texto)
+    texto = _re.sub(r"<[^>]+>", "", texto)
+    texto = _html.unescape(texto)
+    lineas = [ln.strip() for ln in texto.splitlines()]
+    return "\n".join(ln for ln in lineas if ln) + "\n"
+
+
 def _render(template_name: str, ctx: dict[str, Any]) -> tuple[str, str]:
     """Renderiza (subject, html_body) para el template y contexto dados.
 
@@ -411,6 +445,7 @@ def _render(template_name: str, ctx: dict[str, Any]) -> tuple[str, str]:
     """
     if template_name not in _TEMPLATES:
         raise ValueError(f"Template desconocido: {template_name}")
+    ctx = _fechas_legibles(ctx)
     # `operator_block` ya fue renderizado por Jinja con autoescape (los
     # nombres del operador / reply_to están escapados internamente).
     # Lo marcamos como Markup para que el outer render NO lo re-escape
@@ -454,7 +489,7 @@ def _build_message(cfg, to: list[str], subject: str, html: str, reply_to: str | 
     if reply_to:
         msg["Reply-To"] = reply_to
     msg["Subject"] = subject
-    msg.set_content("HTML email required.")
+    msg.set_content(_texto_plano(html))
     msg.add_alternative(html, subtype="html")
     return msg
 
