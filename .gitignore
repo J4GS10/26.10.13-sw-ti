@@ -16,3 +16,7 @@ __pycache__/
 .pytest_cache/
 node_modules/
 dist/
+
+# Respaldos locales del stack
+inventarioTI-backend/deploy/backups/
+inventarioTI-backend/deploy/backups-revision/

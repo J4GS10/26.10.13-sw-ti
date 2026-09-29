@@ -351,12 +351,43 @@ docker compose exec backend alembic current   # revisión de BD
 # Re-seed canónico manual (idempotente; normalmente innecesario)
 docker compose exec backend python -m app.seed_min
 
-# Backup de la BD
-docker compose exec db pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > backup_$(date +%F).sql
-
-# Restore
-cat backup_AAAA-MM-DD.sql | docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+# Respaldo inmediato (además de los automáticos, ver §8.1)
+docker compose exec backup_db /bin/sh /backup/respaldo_db.sh --una-vez
+docker compose exec backup_minio /bin/sh /backup/respaldo_minio.sh --una-vez
 ```
+
+### 8.1 Respaldos automáticos y restauración
+
+Dos servicios del compose respaldan solos cada `BACKUP_INTERVAL_HOURS` (24 h por defecto):
+
+| Servicio | Qué respalda | Dónde |
+|---|---|---|
+| `backup_db` | PostgreSQL completo (`pg_dump -Fc`), verificado con `pg_restore --list`. Conserva `BACKUP_RETENTION_DAYS` días (14) | `$BACKUP_DIR/db/inventario_AAAAMMDD_HHMMSS.dump` |
+| `backup_minio` | Espejo de los adjuntos (no borra del respaldo lo que se borre en el sistema) | `$BACKUP_DIR/minio/<bucket>/` |
+
+**Copie `BACKUP_DIR` fuera del servidor** (unidad de red, otro equipo o nube): un respaldo que vive en el mismo disco no protege de una falla del disco. Revise los logs con `docker compose logs backup_db backup_minio`.
+
+**Restaurar la base de datos** (reemplaza la base actual):
+```bash
+docker compose stop backend
+docker compose run --rm -e CONFIRMAR=SI backup_db /bin/sh /backup/restaurar_db.sh /backups/db/inventario_AAAAMMDD_HHMMSS.dump
+docker compose up -d backend
+```
+
+**Restaurar los adjuntos:** `docker compose run --rm backup_minio /bin/sh /backup/restaurar_minio.sh`
+
+**Recuperar un adjunto borrado por error:** el bucket está versionado; la versión anterior se conserva `MINIO_VERSIONS_RETENTION_DAYS` días (90). Desde el contenedor `backup_minio`: `mc ls --versions origen/<bucket>/<ruta>` y `mc cp --version-id <id> …`.
+
+> Prueba realizada (2026-09-29): respaldo automático de la base (392 KB) y de 16 adjuntos; la restauración en una base nueva devolvió los mismos 143 activos.
+
+### 8.2 Almacenamiento de adjuntos (MinIO)
+
+`minio_init` deja el bucket **privado, versionado, cifrado en reposo (SSE-S3)** y crea un **usuario de servicio** (`MINIO_APP_USER`) con permisos solo sobre ese bucket; el backend ya no usa la cuenta root.
+
+> **Importante — imágenes de MinIO:** MinIO dejó de publicar `minio/minio` y `minio/mc` en Docker Hub (el `docker pull` responde *pull access denied*). El compose las fija por *digest*, que funciona mientras la imagen exista en el equipo. Para un servidor nuevo, elija una opción:
+> 1. Exportar las imágenes desde un equipo que las tenga e importarlas en el servidor:
+>    `docker save minio/minio minio/mc -o minio-imagenes.tar` → copiar → `docker load -i minio-imagenes.tar`.
+> 2. Usar una distribución mantenida y compatible, p. ej. `cgr.dev/chainguard/minio` (cambiar la línea `image:` de `minio` y `minio_init`/`backup_minio` por la imagen de `mc` correspondiente) y validar en revisión antes de producción.
 
 ### Actualizar a una versión nueva (redeploy)
 
@@ -390,7 +421,8 @@ docker compose up -d --build  # migrator crea esquema + sa + seed mínimo; luego
 - [ ] `SUPER_ADMIN_PASSWORD` fuerte; cambiar tras el primer login y enrolar 2FA.
 - [ ] SMTP configurado si quieres notificaciones por correo.
 - [ ] El `.env` **no** se sube a git (ya está en `.gitignore`).
-- [ ] Backups programados (`pg_dump`) y probados con un restore.
+- [ ] `BACKUP_DIR` copiado fuera del servidor y una restauración probada (§8.1).
+- [ ] Imágenes de MinIO disponibles en el servidor (§8.2).
 - [ ] Log de arranque con `rls.db_layer_active` (capa RLS de PostgreSQL activa, §4.4).
 - [ ] Cada cuenta de inventario restringida a sus sedes; alcance global solo donde sea imprescindible.
 - [ ] Guardar `SECRET_KEY` y `FIELD_ENCRYPTION_KEY` en un gestor de secretos: si pierdes

@@ -6,6 +6,7 @@ Uso (desde cualquier carpeta):  python levantar_revision.py [--sin-build]
 Credenciales: sa / Ui-Passw0rd-Revision!  (sa deberá enrolar MFA en su primer ingreso)
 Apagar y borrar datos:  docker compose -p inv_ui --env-file herramientas-qa/revision.env down -v
 """
+import base64
 import os
 import secrets
 import subprocess
@@ -26,6 +27,9 @@ if not os.path.exists(ENV):
         "POSTGRES_REPLICA_PASSWORD": pg, "MINIO_ROOT_PASSWORD": secrets.token_hex(12),
         "SECRET_KEY": secrets.token_hex(32), "FIELD_ENCRYPTION_KEY": Fernet.generate_key().decode(),
         "REDIS_PASSWORD": rp, "REDIS_URL": f"redis://:{rp}@redis:6379/0", "SUPER_ADMIN_PASSWORD": PWD_SA,
+        "MINIO_APP_USER": "inventario-app", "MINIO_APP_PASSWORD": secrets.token_hex(12),
+        "MINIO_KMS_SECRET_KEY": "inventario-kms:" + base64.b64encode(os.urandom(32)).decode(),
+        "BACKUP_DIR": "./backups-revision",
         "HTTP_PORT": "8081", "HTTPS_PORT": "8443", "BACKEND_CORS_ORIGINS": '["https://localhost:8443"]',
         "SMTP_HOST": "", "RATE_LIMIT_LOGIN": "200/minute", "RATE_LIMIT_DEFAULT": "5000/minute",
         "RATE_LIMIT_REFRESH": "200/minute", "FRONTEND_CONTEXT": "../../inventarioTI-frontend",
@@ -40,6 +44,18 @@ if not os.path.exists(ENV):
     out += [f"{k}={v}" for k, v in over.items() if k not in seen]
     open(ENV, "w", encoding="utf-8").write("\n".join(out) + "\n")
     print("revision.env generado (secretos aleatorios, solo para esta máquina)")
+
+# Completar variables nuevas en un revision.env generado por una versión anterior.
+_actual = open(ENV, encoding="utf-8").read()
+_faltan = {
+    "MINIO_APP_USER": "inventario-app", "MINIO_APP_PASSWORD": secrets.token_hex(12),
+    "MINIO_KMS_SECRET_KEY": "inventario-kms:" + base64.b64encode(os.urandom(32)).decode(),
+    "BACKUP_DIR": "./backups-revision",
+}
+_claves = {ln.split("=", 1)[0].strip() for ln in _actual.splitlines() if "=" in ln}
+_nuevas = [f"{k}={v}" for k, v in _faltan.items() if k not in _claves]
+if _nuevas:
+    open(ENV, "a", encoding="utf-8").write("\n" + "\n".join(_nuevas) + "\n")
 
 cmd = ["docker", "compose", "-p", "inv_ui", "--env-file", ENV, "up", "-d"]
 if "--sin-build" not in sys.argv:
