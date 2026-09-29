@@ -1,7 +1,30 @@
 """Motor de estados para el ciclo de vida de los activos."""
+import unicodedata
 from typing import Dict, Set
 from app.models.enums import EstadoOperativoEnum
 from app.core.errors import InvalidStateTransitionError
+
+
+def _normalizar(valor: str) -> str:
+    base = unicodedata.normalize("NFKD", valor or "")
+    return "".join(ch for ch in base if not unicodedata.combining(ch)).strip().lower()
+
+
+def estado_enum_de_nombre(nombre: str | None) -> EstadoOperativoEnum | None:
+    """Nombre del catálogo (con o sin tildes) → estado canónico, o None si es propio."""
+    if not nombre:
+        return None
+    buscado = _normalizar(nombre)
+    for estado in EstadoOperativoEnum:
+        if _normalizar(estado.value) == buscado:
+            return estado
+    return None
+
+
+# Estados que se pueden elegir al dar de alta un activo o al editarlo a mano.
+# Los demás (Asignado, En Reparación, En Tránsito, Baja) solo se alcanzan con
+# su operación: asignar, abrir un ticket, trasladar o dar de baja.
+ESTADOS_DE_ALMACEN = frozenset({EstadoOperativoEnum.DISPONIBLE, EstadoOperativoEnum.BODEGA})
 
 class AssetStateMachine:
     """
@@ -26,10 +49,13 @@ class AssetStateMachine:
             EstadoOperativoEnum.TRANSITO,
         },
         EstadoOperativoEnum.ASIGNADO: {
-            EstadoOperativoEnum.BODEGA,       # Devolución (obligatorio pasar por bodega/disponible antes de re-asignar o reparar)
+            EstadoOperativoEnum.BODEGA,       # Devolución
             EstadoOperativoEnum.DISPONIBLE,
             EstadoOperativoEnum.ASIGNADO,     # Transferencia directa entre personas
             EstadoOperativoEnum.TRANSITO,
+            # Un equipo asignado puede ir a reparación sin cerrar su custodia:
+            # al cerrar el ticket vuelve a "Asignado" con la misma persona.
+            EstadoOperativoEnum.REPARACION,
         },
         EstadoOperativoEnum.REPARACION: {
             EstadoOperativoEnum.BODEGA,       # Retorno de taller

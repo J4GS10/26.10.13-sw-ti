@@ -218,6 +218,10 @@ class Settings(BaseSettings):
     AD_SYNC_INTERVAL_MINUTES: int = 0
     # Desactivar personas deshabilitadas/eliminadas en AD (si no tienen activos).
     AD_SYNC_DEACTIVATE: bool = True
+    # Protección: si una sincronización desactivaría más de este porcentaje de
+    # las personas vinculadas (o AD devuelve 0 usuarios), no desactiva a nadie
+    # y lo informa; un administrador puede confirmarlo con forzar_bajas.
+    AD_SYNC_MAX_BAJAS_PCT: int = 10
     AD_DEFAULT_DEPARTMENT: str = "Sin departamento"
     AD_DEFAULT_CARGO: str = "Sin cargo"
 

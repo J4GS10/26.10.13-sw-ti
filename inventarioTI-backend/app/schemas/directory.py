@@ -34,6 +34,10 @@ class SyncResult(BaseModel):
     jefes_asignados: int
     pendientes_con_activos: list[SyncPendiente]
     errores: list[SyncError]
+    # Personas que la sincronización habría desactivado y que se retuvieron
+    # por la protección de bajas masivas (advertencia AD_SYNC_MASS_DEACTIVATION_BLOCKED).
+    bajas_retenidas: int = 0
+    advertencia: str | None = None
 
 
 class DirectoryStatus(BaseModel):

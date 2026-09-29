@@ -239,11 +239,38 @@ async def test_sync_desactiva_usuario_del_sistema(session, domain_seed):
     fake = FakeDirectory(users=[_ad_user(2, "bob@test.local")])
     await DirectorySyncService(session, fake).sync()
     fake.users = []  # desaparece de AD
-    result = await DirectorySyncService(session, fake).sync()
+    # Un directorio vacío retiene las bajas (protección ante un filtro mal
+    # configurado): nadie se desactiva sin confirmación explícita.
+    retenido = await DirectorySyncService(session, fake).sync()
+    assert retenido["desactivados"] == 0
+    assert retenido["bajas_retenidas"] == 1
+    assert retenido["advertencia"] == "AD_SYNC_MASS_DEACTIVATION_BLOCKED"
+    session.expire_all()
+    usu = (await session.execute(select(Usuario).where(Usuario.PER_Persona == bob_id))).scalar_one()
+    assert usu.USU_Estado is True
+
+    result = await DirectorySyncService(session, fake).sync(forzar_bajas=True)
     assert result["desactivados"] == 1
     session.expire_all()
     usu = (await session.execute(select(Usuario).where(Usuario.PER_Persona == bob_id))).scalar_one()
     assert usu.USU_Estado is False
+
+
+def test_first_acepta_mapping_de_ldap3():
+    """ldap3 entrega CaseInsensitiveDict (Mapping, no dict): antes se descartaba todo."""
+    from ldap3.utils.ciDict import CaseInsensitiveDict
+    from app.integrations.active_directory import _first
+    entry = CaseInsensitiveDict({"mail": ["ana@empresa.local"], "sAMAccountName": "ana"})
+    assert _first(entry, "MAIL") == "ana@empresa.local"
+    assert _first(entry, "samaccountname") == "ana"
+
+
+def test_apellidos_con_particulas():
+    from app.services.directory_sync import _split_apellidos
+    assert _split_apellidos("De la Cruz Pérez") == ("De la Cruz", "Pérez")
+    assert _split_apellidos("García López") == ("García", "López")
+    assert _split_apellidos("Del Valle") == ("Del Valle", None)
+    assert _split_apellidos("Pérez") == ("Pérez", None)
 
 
 @pytest.mark.asyncio

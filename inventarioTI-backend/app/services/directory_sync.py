@@ -30,6 +30,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.integrations.active_directory import DirectoryAuthError, DirectoryClient, DirectoryError, DirectoryUser, get_directory_client
 from app.services.integration_config import AdConfig, get_config
 from app.models.governance import AuditoriaSistema
@@ -52,6 +53,27 @@ def _split(value: str | None, limit: int = 50) -> tuple[str | None, str | None]:
     first = parts[0][:limit] if parts else None
     second = parts[1][:limit] if len(parts) > 1 else None
     return first, second
+
+
+# Partículas que forman parte del apellido siguiente ("De la Cruz", "Del Valle").
+_PARTICULAS = {"de", "del", "la", "las", "los", "y", "san", "santa", "van", "von", "da", "di", "do", "dos"}
+
+
+def _split_apellidos(value: str | None, limit: int = 50) -> tuple[str | None, str | None]:
+    """'De la Cruz Pérez' → ('De la Cruz', 'Pérez'); 'García López' → ('García', 'López')."""
+    palabras = (value or "").split()
+    if not palabras:
+        return None, None
+    primero: list[str] = []
+    i = 0
+    # Las partículas se unen a la palabra siguiente.
+    while i < len(palabras):
+        primero.append(palabras[i])
+        if palabras[i].lower() not in _PARTICULAS:
+            break
+        i += 1
+    resto = palabras[len(primero):]
+    return " ".join(primero)[:limit], (" ".join(resto)[:limit] or None)
 
 
 def _full_name(p: Persona) -> str:
@@ -91,7 +113,7 @@ class DirectorySyncService:
     # ---- aplicar atributos de AD a una persona ----------------------------
     async def _apply(self, p: Persona, u: DirectoryUser, deps: dict, cargos: dict) -> bool:
         primer_nombre, segundo_nombre = _split(u.given_name or u.username)
-        primer_apellido, segundo_apellido = _split(u.surname or "-")
+        primer_apellido, segundo_apellido = _split_apellidos(u.surname or "-")
         dep = await self._get_or_create(
             deps, Departamento, "DEP_Nombre", u.department or self.ad_cfg.default_department,
         )
@@ -121,6 +143,7 @@ class DirectorySyncService:
     # ---- sincronización ---------------------------------------------------
     async def sync(
         self, dry_run: bool = False, usuario_id: uuid.UUID | None = None, ip: str | None = None,
+        forzar_bajas: bool = False,
     ) -> dict[str, Any]:
         self.ad_cfg = (await get_config(self.db)).ad
         if self.directory is None:
@@ -147,6 +170,7 @@ class DirectorySyncService:
             "creados": 0, "actualizados": 0, "vinculados": 0, "desactivados": 0,
             "reactivados": 0, "jefes_asignados": 0,
             "pendientes_con_activos": [], "errores": [],
+            "bajas_retenidas": 0, "advertencia": None,
         }
         seen_guids: set[str] = set()
         seen_emails: set[str] = set()
@@ -211,6 +235,17 @@ class DirectorySyncService:
             to_deactivate += [
                 p for g, p in by_guid.items() if g not in seen_guids and p.PER_Estado
             ]
+            # Protección ante un filtro/OU mal configurado o un directorio que
+            # responde vacío: no se desactiva en masa sin confirmación.
+            vinculadas = len(by_guid)
+            limite = max(1, vinculadas * settings.AD_SYNC_MAX_BAJAS_PCT // 100)
+            masivo = vinculadas > 0 and (len(users) == 0 or len(to_deactivate) > limite)
+            if masivo and not forzar_bajas:
+                result["bajas_retenidas"] = len(to_deactivate)
+                result["advertencia"] = "AD_SYNC_MASS_DEACTIVATION_BLOCKED"
+                log.warning("ad_sync.mass_deactivation_blocked", bajas=len(to_deactivate),
+                            vinculadas=vinculadas, total_ad=len(users))
+                to_deactivate = []
             for p in to_deactivate:
                 activos = await self._active_assets(p.PER_Persona)
                 if activos:

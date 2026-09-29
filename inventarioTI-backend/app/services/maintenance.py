@@ -5,7 +5,7 @@ from app.core.errors import utcnow_naive
 from app.core.transactional import schedule_post_commit, transactional
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -114,6 +114,8 @@ class MaintenanceService(BaseService[MaintenanceRepository]):
             )).scalar_one_or_none()
             if not persona:
                 raise HTTPException(404, "REQUESTING_PERSON_NOT_FOUND")
+            if not persona.PER_Estado:
+                raise HTTPException(400, "PERSON_INACTIVE")
 
             abierto = (await self.db.execute(
                 select(Mantenimiento).where(
@@ -129,6 +131,18 @@ class MaintenanceService(BaseService[MaintenanceRepository]):
             )).scalar_one_or_none()
             if estado_reparacion is None:
                 raise HTTPException(500, "SYSTEM_CONFIG_ERROR_MISSING_OPERATIONAL_STATE")
+            # Solo entra a reparación lo que la máquina de estados permite: un
+            # equipo de baja o en tránsito no abre ticket.
+            from app.services.state_machine import AssetStateMachine, estado_enum_de_nombre
+            from app.models.enums import EstadoOperativoEnum
+            nombre_actual = (await self.db.execute(
+                select(EstadoOperativo.EOP_Nombre)
+                .where(EstadoOperativo.EOP_Estado_Operativo == activo.EOP_Estado_Operativo)
+            )).scalar_one_or_none()
+            estado_actual = estado_enum_de_nombre(nombre_actual)
+            if estado_actual is not None and not AssetStateMachine.is_transition_allowed(
+                    estado_actual, EstadoOperativoEnum.REPARACION):
+                raise HTTPException(400, "ASSET_STATE_DOES_NOT_ALLOW_MAINTENANCE")
             activo.EOP_Estado_Operativo = estado_reparacion.EOP_Estado_Operativo
 
             mantenimiento = await self.repo.create_mantenimiento(schema)
@@ -247,12 +261,17 @@ class MaintenanceService(BaseService[MaintenanceRepository]):
             fecha = schema.MAN_Fecha_Cierre or utcnow_naive()
             if fecha < mant.MAN_Fecha_Ingreso:
                 raise HTTPException(400, "CLOSE_DATE_CANNOT_BE_BEFORE_ENTRY_DATE")
+            if fecha > utcnow_naive() + timedelta(minutes=5):
+                raise HTTPException(400, "CLOSE_DATE_CANNOT_BE_IN_THE_FUTURE")
 
             moneda = schema.MAN_Moneda or mant.MAN_Moneda
-            closed = await self.repo.close_mantenimiento(
+            # UPDATE condicional (WHERE sin cierre): dos cierres simultáneos
+            # no pueden ganar ambos.
+            if not await self.repo.close_mantenimiento(
                 mantenimiento_id, fecha_cierre=fecha, costo_total=schema.MAN_Costo_Total,
                 moneda=moneda,
-            )
+            ):
+                raise HTTPException(400, "TICKET_ALREADY_CLOSED")
 
             # Transición correcta al cerrar mantenimiento:
             #   - Si el activo tiene un movimiento vigente (alguien lo tiene
@@ -275,7 +294,11 @@ class MaintenanceService(BaseService[MaintenanceRepository]):
             if estado_nuevo is None:
                 raise HTTPException(500, "SYSTEM_CONFIG_ERROR_MISSING_OPERATIONAL_STATE")
             activo = await self.core_repo.get_by_id_simple(mant.ACT_Activo)
-            if activo:
+            # Un equipo dado de baja mientras estaba en taller no "resucita".
+            estado_baja = (await self.db.execute(
+                select(EstadoOperativo.EOP_Estado_Operativo).where(EstadoOperativo.EOP_Nombre.ilike("Baja"))
+            )).scalar_one_or_none()
+            if activo and activo.EOP_Estado_Operativo != estado_baja:
                 activo.EOP_Estado_Operativo = estado_nuevo.EOP_Estado_Operativo
 
             await self.gov_repo.create_audit_log(
@@ -324,7 +347,7 @@ class MaintenanceService(BaseService[MaintenanceRepository]):
             except Exception:  # noqa: BLE001
                 pass
 
-            return closed
+            return await self.repo.get_by_id(mantenimiento_id)
         except Exception:
             raise
 

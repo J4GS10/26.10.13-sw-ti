@@ -21,6 +21,8 @@ from app.models.traceability import Movimiento
 from app.models.catalogs import EstadoOperativo
 
 from app.schemas.core import ActivoCreate, ActivoUpdate, ActivoFilter
+from app.models.enums import EstadoOperativoEnum
+from app.services.state_machine import AssetStateMachine, ESTADOS_DE_ALMACEN, estado_enum_de_nombre
 
 
 class CoreService(BaseService[CoreRepository]):
@@ -49,6 +51,10 @@ class CoreService(BaseService[CoreRepository]):
         estado = await self.cat_repo.get_estado_operativo_by_id(schema.EOP_Estado_Operativo)
         if not estado:
             raise HTTPException(status_code=404, detail="OPERATIONAL_STATUS_NOT_FOUND")
+        # Un activo nuevo entra al almacén: "Asignado", "En Reparación" o "Baja"
+        # solo se alcanzan con su operación (asignar, abrir ticket, dar de baja).
+        if estado_enum_de_nombre(estado.EOP_Nombre) not in ESTADOS_DE_ALMACEN:
+            raise HTTPException(status_code=400, detail="INITIAL_STATE_MUST_BE_AVAILABLE_OR_STORAGE")
 
         # Sede dentro del alcance del usuario (su única sede si no la indica).
         schema.SED_Sede = require_sede(schema.SED_Sede, required=False)
@@ -118,15 +124,39 @@ class CoreService(BaseService[CoreRepository]):
             if not modelo:
                 raise HTTPException(status_code=404, detail="MODEL_NOT_FOUND")
 
-        # Validar FK de Estado Operativo si se envía
-        if schema.EOP_Estado_Operativo is not None:
+        if schema.TAC_Tipo_Activo is not None and not await self.cat_repo.get_tipo_activo_by_id(schema.TAC_Tipo_Activo):
+            raise HTTPException(status_code=404, detail="ASSET_TYPE_NOT_FOUND")
+
+        # El estado solo se edita a mano entre "Disponible" y "En Bodega", y sin
+        # custodia ni ticket abiertos. El resto de transiciones tiene su
+        # operación (asignar, devolver, mantenimiento, baja), que valida la
+        # máquina de estados y mantiene coherentes custodias y tablero.
+        if schema.EOP_Estado_Operativo is not None and schema.EOP_Estado_Operativo != activo_actual.EOP_Estado_Operativo:
             estado = await self.cat_repo.get_estado_operativo_by_id(schema.EOP_Estado_Operativo)
             if not estado:
                 raise HTTPException(status_code=404, detail="OPERATIONAL_STATUS_NOT_FOUND")
+            actual = await self.cat_repo.get_estado_operativo_by_id(activo_actual.EOP_Estado_Operativo)
+            if (estado_enum_de_nombre(estado.EOP_Nombre) not in ESTADOS_DE_ALMACEN
+                    or estado_enum_de_nombre(actual.EOP_Nombre if actual else None) not in ESTADOS_DE_ALMACEN):
+                raise HTTPException(status_code=400, detail="STATE_CHANGE_REQUIRES_OPERATION")
+            if await self.trace_repo.get_movimiento_vigente(activo_id):
+                raise HTTPException(status_code=400, detail="STATE_CHANGE_REQUIRES_OPERATION")
+
+        # Fechas: se validan con los valores finales (los nuevos o los actuales).
+        compra = schema.ACT_Fecha_Compra or activo_actual.ACT_Fecha_Compra
+        garantia = (schema.ACT_Fin_Garantia if "ACT_Fin_Garantia" in schema.model_fields_set
+                    else activo_actual.ACT_Fin_Garantia)
+        if "ACT_Fecha_Compra" in schema.model_fields_set and schema.ACT_Fecha_Compra is None:
+            raise HTTPException(status_code=400, detail="PURCHASE_DATE_REQUIRED")
+        if garantia and compra and garantia < compra:
+            raise HTTPException(status_code=400, detail="WARRANTY_DATE_CANNOT_BE_BEFORE_PURCHASE_DATE")
 
         # Cambio de sede: debe quedar en el alcance y el activo no puede estar
         # asignado (mientras lo está, su sede es la del área de la asignación).
         sede_final = activo_actual.SED_Sede
+        if "SED_Sede" in schema.model_fields_set and schema.SED_Sede is None and activo_actual.SED_Sede is not None:
+            # Un activo sin sede deja de verse para las cuentas con alcance por sede.
+            raise HTTPException(status_code=400, detail="SEDE_REQUIRED")
         if "SED_Sede" in schema.model_fields_set and schema.SED_Sede != activo_actual.SED_Sede:
             schema.SED_Sede = require_sede(schema.SED_Sede, required=False)
             if await self.trace_repo.get_movimiento_vigente(activo_id):
@@ -165,7 +195,12 @@ class CoreService(BaseService[CoreRepository]):
         return await self.repo.get_all(skip, limit)
 
     async def get_activo_detail(self, activo_id: uuid.UUID):
-        return await self.get_or_404(activo_id, "ASSET")
+        # get_by_id carga modelo, marca, tipo, estado y especificaciones: la
+        # respuesta anidada no dispara cargas diferidas fuera del contexto async.
+        activo = await self.repo.get_by_id(activo_id)
+        if not activo:
+            raise HTTPException(status_code=404, detail="ASSET_NOT_FOUND")
+        return activo
 
     async def get_activo_by_codigo(self, codigo: str):
         activo = await self.repo.get_by_codigo_interno(codigo.strip())
@@ -197,6 +232,17 @@ class CoreService(BaseService[CoreRepository]):
                 detail="CANNOT_DELETE_ASSIGNED_ASSET_RETURN_IT_FIRST"
             )
 
+        # Un equipo con ticket abierto se cierra primero (o se da de baja desde
+        # el cierre del ticket si no tiene reparación).
+        from app.models.traceability import Mantenimiento
+        ticket = (await self.db.execute(
+            select(Mantenimiento.MAN_Mantenimiento).where(
+                Mantenimiento.ACT_Activo == activo_id, Mantenimiento.MAN_Fecha_Cierre.is_(None),
+            )
+        )).first()
+        if ticket:
+            raise HTTPException(status_code=409, detail="ASSET_HAS_OPEN_MAINTENANCE")
+
         # Buscar Estado "BAJA"
         q_estado = select(EstadoOperativo).where(EstadoOperativo.EOP_Nombre.ilike("Baja"))
         res_estado = await self.db.execute(q_estado)
@@ -208,9 +254,30 @@ class CoreService(BaseService[CoreRepository]):
                 detail="SYSTEM_CONFIGURATION_ERROR_MISSING_STATUS_BAJA"
             )
 
-        # Soft Delete
-        update_schema = ActivoUpdate(EOP_Estado_Operativo=estado_baja.EOP_Estado_Operativo)
-        resultado = await self.repo.update_activo(activo_id, update_schema)
+        # Validar la transición con la máquina de estados (p. ej. un equipo en
+        # tránsito primero llega a destino). Dar de baja algo ya de baja es un no-op.
+        actual = await self.cat_repo.get_estado_operativo_by_id(activo.EOP_Estado_Operativo)
+        estado_actual = estado_enum_de_nombre(actual.EOP_Nombre if actual else None)
+        if estado_actual == EstadoOperativoEnum.BAJA:
+            raise HTTPException(status_code=409, detail="ASSET_ALREADY_DECOMMISSIONED")
+        if estado_actual is not None and not AssetStateMachine.is_transition_allowed(
+                estado_actual, EstadoOperativoEnum.BAJA):
+            raise HTTPException(status_code=400, detail="INVALID_STATE_TRANSITION")
+
+        # Soft Delete: el estado se fija directamente (ActivoUpdate ya no
+        # permite pasar a "Baja" por edición).
+        from sqlalchemy import update as _upd
+        from app.models.core import Activo as _Act
+        await self.db.execute(
+            _upd(_Act).where(_Act.ACT_Activo == activo_id)
+            .values(EOP_Estado_Operativo=estado_baja.EOP_Estado_Operativo)
+        )
+        # Las licencias instaladas en el equipo vuelven a quedar disponibles.
+        from app.repositories.software import SoftwareRepository
+        await SoftwareRepository(self.db).liberar_instalaciones_por_destino(
+            activos_ids=[activo_id], persona_id=None,
+        )
+        resultado = await self.repo.get_by_id(activo_id)
 
         # Auditoría
         await self.gov_repo.create_audit_log(

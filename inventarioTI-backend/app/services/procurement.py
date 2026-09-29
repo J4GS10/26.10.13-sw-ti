@@ -154,6 +154,14 @@ class ProcurementService(BaseService[ProcurementRepository]):
             raise HTTPException(404, "PURCHASE_ORDER_NOT_FOUND")
         if orden.OCO_Estado == "CANCELADA":
             raise HTTPException(409, "ORDER_ALREADY_CANCELLED")
+        # Máquina de estados de la orden: por aquí solo se cancela un borrador.
+        # "Recibida" se alcanza únicamente recibiendo (POST /recibir), y
+        # "Recibida"/"Cancelada" son finales: reabrir una orden recibida
+        # permitía recibirla dos veces y duplicar stock y activos.
+        if orden.OCO_Estado == estado:
+            return await self.repo.get_orden(id, with_lineas=True)
+        if not (orden.OCO_Estado == "BORRADOR" and estado == "CANCELADA"):
+            raise HTTPException(409, "ORDER_STATE_TRANSITION_NOT_ALLOWED")
         await self.repo.set_estado_orden(id, estado)
         await self.gov_repo.create_audit_log(
             "UPDATE", "INV_ORDEN_COMPRA",
@@ -172,6 +180,9 @@ class ProcurementService(BaseService[ProcurementRepository]):
             raise HTTPException(404, "PURCHASE_ORDER_NOT_FOUND")
         if orden.OCO_Estado != "BORRADOR":
             raise HTTPException(409, "ORDER_NOT_RECEIVABLE")  # ya recibida o cancelada
+
+        if not (schema.consumibles or schema.activos or schema.licencias):
+            raise HTTPException(400, "EMPTY_RECEIPT")
 
         lineas_validas = {ln.OCL_Linea: ln for ln in orden.lineas}
 

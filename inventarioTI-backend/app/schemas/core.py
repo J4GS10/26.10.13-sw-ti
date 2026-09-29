@@ -96,9 +96,11 @@ class ActivoUpdate(BaseModel):
     ACT_Codigo_Interno: Optional[str] = Field(None, min_length=3, max_length=50)
     ACT_Serie_Fabricante: Optional[str] = Field(None, min_length=3, max_length=100)
     ACT_Hostname: Optional[str] = Field(None, max_length=100)
-    ACT_Costo: Optional[Decimal] = Field(None, ge=0)
+    ACT_Costo: Optional[Decimal] = Field(None, ge=0, max_digits=12, decimal_places=2)
     ACT_Moneda: Optional[CurrencyCode] = None
-    
+    ACT_Fecha_Compra: Optional[date] = None
+    ACT_Fin_Garantia: Optional[date] = None
+
     MOD_Modelo: Optional[int] = None
     TAC_Tipo_Activo: Optional[int] = None
     EOP_Estado_Operativo: Optional[int] = None

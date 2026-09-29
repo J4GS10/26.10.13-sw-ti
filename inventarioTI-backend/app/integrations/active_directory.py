@@ -12,6 +12,7 @@ Diseño:
 - Membresía de grupos con LDAP_MATCHING_RULE_IN_CHAIN → incluye grupos anidados.
 """
 from __future__ import annotations
+from collections.abc import Mapping
 
 import asyncio
 import ssl
@@ -97,7 +98,9 @@ class DirectoryClient(ABC):
 # Implementación LDAP
 # =========================================================================
 def _first(entry: Any, attr: str) -> Any:
-    raw = entry.get(attr) if isinstance(entry, dict) else None
+    # ldap3 entrega CaseInsensitiveDict (un Mapping, no un dict): exigir dict
+    # descartaba todos los usuarios y grupos de un AD real.
+    raw = entry.get(attr) if isinstance(entry, Mapping) else None
     if isinstance(raw, list):
         return raw[0] if raw else None
     return raw

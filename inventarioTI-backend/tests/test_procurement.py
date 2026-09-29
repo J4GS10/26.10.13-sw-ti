@@ -89,10 +89,22 @@ async def test_cambiar_estado_orden(client, auth_headers, sa_user):
     oid = (await client.post("/api/v1/compras/ordenes", headers=auth_headers, json={
         "OCO_Numero": "OC-EST", "OCO_Fecha": "2026-06-01", "PRV_Proveedor": pid, "lineas": []})).json()["OCO_Orden"]
 
+    # "Recibida" solo se alcanza recibiendo: marcarla a mano cerraba compras
+    # sin mercadería (QA2 B2).
     r = await client.patch(f"/api/v1/compras/ordenes/{oid}/estado", headers=auth_headers,
                            json={"OCO_Estado": "RECIBIDA"})
+    assert r.status_code == 409
+    assert r.json()["detail"] == "ORDER_STATE_TRANSITION_NOT_ALLOWED"
+
+    r = await client.patch(f"/api/v1/compras/ordenes/{oid}/estado", headers=auth_headers,
+                           json={"OCO_Estado": "CANCELADA"})
     assert r.status_code == 200
-    assert r.json()["OCO_Estado"] == "RECIBIDA"
+    assert r.json()["OCO_Estado"] == "CANCELADA"
+
+    # Cancelada es final: no se reabre.
+    r = await client.patch(f"/api/v1/compras/ordenes/{oid}/estado", headers=auth_headers,
+                           json={"OCO_Estado": "BORRADOR"})
+    assert r.status_code == 409
 
 
 @pytest.mark.asyncio

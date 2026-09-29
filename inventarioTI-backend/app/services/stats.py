@@ -120,8 +120,11 @@ class StatsService:
         return {
             # Compatibilidad con el dashboard anterior
             "activos_totales": total_activos,
-            "activos_asignados": total_asignados,
-            "activos_stock": total_activos - total_asignados,
+            # "Asignados" y "en stock" por ESTADO (antes: custodias abiertas y
+            # total − custodias, que contaba Baja y Reparación como stock).
+            "activos_asignados": por_estado.get("Asignado", 0),
+            "activos_stock": por_estado.get("Disponible", 0) + por_estado.get("En Bodega", 0),
+            "custodias_abiertas": total_asignados,
             "licencias_total": int(lic_total or 0),
             "licencias_usadas": int(lic_usadas or 0),
             "licencias_disponibles": int((lic_total or 0) - (lic_usadas or 0)),

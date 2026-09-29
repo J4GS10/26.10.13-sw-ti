@@ -193,6 +193,28 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
             raise HTTPException(400, detail="AREA_WITHOUT_SEDE")
         return require_sede(sede)
 
+    @staticmethod
+    def _exigir_persona_activa(persona) -> None:
+        """No se entregan equipos a personas inactivas u offboardeadas."""
+        if persona is not None and not persona.PER_Estado:
+            raise HTTPException(400, detail="PERSON_INACTIVE")
+
+    async def _tiene_ticket_abierto(self, activo_id: uuid.UUID) -> bool:
+        from app.models.traceability import Mantenimiento
+        return (await self.db.execute(
+            select(Mantenimiento.MAN_Mantenimiento).where(
+                Mantenimiento.ACT_Activo == activo_id,
+                Mantenimiento.MAN_Fecha_Cierre.is_(None),
+            )
+        )).first() is not None
+
+    async def _exigir_activo_operable(self, activo) -> None:
+        """Un equipo en reparación o instalado dentro de otro no se entrega."""
+        if await self._tiene_ticket_abierto(activo.ACT_Activo):
+            raise HTTPException(409, detail="ASSET_IN_MAINTENANCE")
+        if getattr(activo, "ACT_Activo_Padre", None) is not None:
+            raise HTTPException(409, detail="ASSET_INSTALLED_AS_COMPONENT")
+
     async def _ubicar_en_sede(
         self, activo, persona, sede_id: int | None, *, usuario_id=None, ip: str | None = None,
     ) -> None:
@@ -243,6 +265,11 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
                 raise HTTPException(404, detail="ASSET_NOT_FOUND")
 
             tipo_enum = await self._get_tipo_movimiento_enum(schema.TMO_Tipo_Movimiento)
+            # Este endpoint solo ABRE custodias. Devolución, transferencia,
+            # ingreso y baja tienen su propia operación: aceptarlas aquí dejaba
+            # custodias abiertas con el equipo "en bodega" o "de baja".
+            if tipo_enum not in (TipoMovimientoEnum.ASIGNACION, TipoMovimientoEnum.PRESTAMO):
+                raise HTTPException(400, detail="MOVEMENT_TYPE_REQUIRES_SPECIFIC_OPERATION")
 
             # Validar estado operacional antes de abrir custodia.
             estado_actual = await self._get_estado_nombre_enum(activo.EOP_Estado_Operativo)
@@ -270,6 +297,8 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
             )).scalar_one_or_none()
             if not persona:
                 raise HTTPException(404, detail="PERSON_NOT_FOUND")
+            self._exigir_persona_activa(persona)
+            await self._exigir_activo_operable(activo)
 
             area = (await self.db.execute(
                 select(Area).where(Area.ARE_Area == schema.ARE_Area)
@@ -427,9 +456,12 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
             # 2. Cerrar todos los movimientos
             cerrados = await self.repo.cerrar_todos_movimientos_persona(persona_id)
 
-            # 3. Cambiar estado operativo a "En Bodega"
+            # 3. Cambiar estado operativo a "En Bodega". Los que están en
+            #    reparación conservan ese estado: solo se cierra su custodia.
             estado_bodega_id = await self._get_estado_id(EstadoOperativoEnum.BODEGA)
-            if activos_ids:
+            en_reparacion = [a for a in activos_uuid if await self._tiene_ticket_abierto(a)]
+            a_bodega = [a for a in activos_uuid if a not in en_reparacion]
+            if a_bodega:
                 if not estado_bodega_id:
                     raise HTTPException(
                         500, detail="SYSTEM_CONFIG_ERROR_MISSING_OPERATIONAL_STATE"
@@ -438,7 +470,7 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
                 from app.models.core import Activo
                 await self.db.execute(
                     sql_update(Activo)
-                    .where(Activo.ACT_Activo.in_([m.ACT_Activo for m in vigentes]))
+                    .where(Activo.ACT_Activo.in_(a_bodega))
                     .values(EOP_Estado_Operativo=estado_bodega_id)
                 )
 
@@ -557,9 +589,11 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
 
             activo = await self.core_repo.get_by_id_simple(schema.ACT_Activo)
             estado_actual = await self._get_estado_nombre_enum(activo.EOP_Estado_Operativo)
-            
-            # Validar transición: Asignado -> Bodega
-            AssetStateMachine.validate_transition(estado_actual, EstadoOperativoEnum.BODEGA)
+            # Si el equipo está en reparación, la devolución solo cierra la
+            # custodia: sigue "En Reparación" hasta que se cierre el ticket.
+            en_reparacion = await self._tiene_ticket_abierto(schema.ACT_Activo)
+            if not en_reparacion:
+                AssetStateMachine.validate_transition(estado_actual, EstadoOperativoEnum.BODEGA)
 
             cerrado = await self.repo.cerrar_movimiento(vigente.MOV_Movimiento)
             if not cerrado:
@@ -568,7 +602,8 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
             estado_bodega_id = await self._get_estado_id(EstadoOperativoEnum.BODEGA)
             if estado_bodega_id is None:
                 raise HTTPException(500, detail="SYSTEM_CONFIG_ERROR_MISSING_OPERATIONAL_STATE")
-            await self._set_activo_estado(schema.ACT_Activo, estado_bodega_id)
+            if not en_reparacion:
+                await self._set_activo_estado(schema.ACT_Activo, estado_bodega_id)
 
             await self.gov_repo.create_audit_log(
                 "RETURN", "INV_MOVIMIENTO",
@@ -641,6 +676,10 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
             )).scalar_one_or_none()
             if not persona:
                 raise HTTPException(404, detail="DESTINATION_PERSON_NOT_FOUND")
+            self._exigir_persona_activa(persona)
+            await self._exigir_activo_operable(activo)
+            if vigente.PER_Persona == persona.PER_Persona and vigente.ARE_Area == schema.ARE_Area_Destino:
+                raise HTTPException(400, detail="TRANSFER_TO_SAME_CUSTODIAN")
 
             area = (await self.db.execute(
                 select(Area).where(Area.ARE_Area == schema.ARE_Area_Destino)
@@ -649,7 +688,12 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
                 raise HTTPException(404, detail="DESTINATION_AREA_NOT_FOUND")
             sede_destino = await self._sede_de_destino(area.ARE_Area)
 
+            # La nueva custodia se registra como "Transferencia" (si el catálogo
+            # no tiene ese tipo, como "Asignación", igual que antes).
             tipo_asignacion_id = (await self.db.execute(
+                select(TipoMovimiento.TMO_Tipo_Movimiento)
+                .where(TipoMovimiento.TMO_Nombre.ilike(TipoMovimientoEnum.TRANSFERENCIA.value))
+            )).scalar_one_or_none() or (await self.db.execute(
                 select(TipoMovimiento.TMO_Tipo_Movimiento)
                 .where(TipoMovimiento.TMO_Nombre.ilike(TipoMovimientoEnum.ASIGNACION.value))
             )).scalar_one_or_none()

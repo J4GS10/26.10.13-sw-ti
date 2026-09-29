@@ -137,16 +137,31 @@ async def test_recibir_orden_registra_licencias_con_claves(client, auth_headers,
 async def test_recibir_dos_veces_409(client, auth_headers, domain_seed):
     h = auth_headers
     pid = await _proveedor(client, h)
-    oid = (await client.post("/api/v1/compras/ordenes", headers=h, json={
+    cid = (await client.post("/api/v1/consumibles", headers=h, json={
+        "CON_Nombre": "Toner dos veces", "CON_Unidad": "unidad",
+        "CON_Stock_Actual": 0, "CON_Stock_Minimo": 0})).json()["CON_Consumible"]
+    orden = (await client.post("/api/v1/compras/ordenes", headers=h, json={
         "OCO_Numero": "OC-REC-2", "OCO_Fecha": "2026-06-01", "PRV_Proveedor": pid,
-        "lineas": []})).json()["OCO_Orden"]
-    a = await client.post(f"/api/v1/compras/ordenes/{oid}/recibir", headers=h,
-                          json={"consumibles": [], "activos": []})
+        "lineas": [{"OCL_Descripcion": "Toner", "OCL_Cantidad": 2, "OCL_Precio_Unitario": "10"}]})).json()
+    oid, linea = orden["OCO_Orden"], orden["lineas"][0]["OCL_Linea"]
+
+    # Una recepción vacía no cierra la orden.
+    vacia = await client.post(f"/api/v1/compras/ordenes/{oid}/recibir", headers=h,
+                              json={"consumibles": [], "activos": []})
+    assert vacia.status_code == 400
+    assert vacia.json()["detail"] == "EMPTY_RECEIPT"
+
+    item = {"consumibles": [{"OCL_Linea": linea, "CON_Consumible": cid, "cantidad": 2}]}
+    a = await client.post(f"/api/v1/compras/ordenes/{oid}/recibir", headers=h, json=item)
     assert a.status_code == 200
-    b = await client.post(f"/api/v1/compras/ordenes/{oid}/recibir", headers=h,
-                          json={"consumibles": [], "activos": []})
+    b = await client.post(f"/api/v1/compras/ordenes/{oid}/recibir", headers=h, json=item)
     assert b.status_code == 409
     assert b.json()["detail"] == "ORDER_NOT_RECEIVABLE"
+
+    # Reabrir la orden recibida está prohibido (QA2 B1: permitía recibirla dos veces).
+    r = await client.patch(f"/api/v1/compras/ordenes/{oid}/estado", headers=h, json={"OCO_Estado": "BORRADOR"})
+    assert r.status_code == 409
+    assert (await client.get(f"/api/v1/consumibles/{cid}", headers=h)).json()["CON_Stock_Actual"] == 2
 
 
 @pytest.mark.asyncio

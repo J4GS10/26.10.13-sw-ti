@@ -160,13 +160,15 @@ class MaintenanceRepository(BaseRepository["Mantenimiento"]):
         values = {"MAN_Fecha_Cierre": fecha_cierre, "MAN_Costo_Total": costo_total}
         if moneda:
             values["MAN_Moneda"] = moneda
-        await self.db.execute(
+        result = await self.db.execute(
             update(Mantenimiento)
-            .where(Mantenimiento.MAN_Mantenimiento == mantenimiento_id)
+            .where(Mantenimiento.MAN_Mantenimiento == mantenimiento_id,
+                   Mantenimiento.MAN_Fecha_Cierre.is_(None))
             .values(**values)
+            .execution_options(synchronize_session="fetch")
         )
         await self.db.flush()
-        return await self.get_by_id(mantenimiento_id)
+        return result.rowcount == 1
 
     async def delete_mantenimiento(self, mantenimiento_id: uuid.UUID):
         await self.db.execute(

@@ -58,10 +58,12 @@ async def probar(request: Request, db: AsyncSession = Depends(get_db)):
 async def sincronizar(
     request: Request, current_user: CurrentUser,
     dry_run: bool = Query(False),
+    forzar_bajas: bool = Query(False, description="Confirma una desactivación masiva retenida"),
     db: AsyncSession = Depends(get_db),
 ):
     return await DirectorySyncService(db).sync(
         dry_run=dry_run, usuario_id=current_user.USU_Usuario, ip=get_client_ip(request),
+        forzar_bajas=forzar_bajas,
     )
 
 
