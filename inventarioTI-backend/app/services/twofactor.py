@@ -70,7 +70,7 @@ class TwoFactorService:
         if not user.USU_2FA_Secret:
             raise HTTPException(400, "2FA_SETUP_NOT_STARTED")
         secret = security.decrypt_field(user.USU_2FA_Secret)
-        if not self._accept_totp(user, secret, code):
+        if not await self._accept_totp(user, secret, code):
             raise HTTPException(400, "INVALID_2FA_CODE")
         return await self._enable(user, "TOTP", ip)
 
@@ -134,27 +134,49 @@ class TwoFactorService:
         ok = False
         if user.USU_2FA_Metodo == "TOTP":
             secret = security.decrypt_field(user.USU_2FA_Secret) if user.USU_2FA_Secret else None
-            ok = self._accept_totp(user, secret, code)
+            ok = await self._accept_totp(user, secret, code)
         elif user.USU_2FA_Metodo == "EMAIL":
             ok = await self._check_email_otp(user, code)
         if ok:
             return True
         # Fallback: código de recuperación (un solo uso).
         if "-" in code or len(code) >= 8:
-            if await self.gov_repo.consume_recovery_code(user.USU_Usuario, security.hash_code(code)):
-                return True
+            for hashed in (security.hash_code(code), security.hash_code_legacy(code)):
+                if await self.gov_repo.consume_recovery_code(user.USU_Usuario, hashed):
+                    return True
         return False
+
+    async def totp_ya_usado(self, user, code: str) -> bool:
+        """¿Es un código TOTP válido que ya se usó? (no cuenta como intento fallido)."""
+        if user.USU_2FA_Metodo != "TOTP" or not user.USU_2FA_Secret:
+            return False
+        secret = security.decrypt_field(user.USU_2FA_Secret)
+        step = security.totp_matched_step(secret, (code or "").strip())
+        return step is not None and user.USU_2FA_Ultimo_Paso is not None and step <= user.USU_2FA_Ultimo_Paso
 
     # ------------------------------------------------------------------
     # Internos
     # ------------------------------------------------------------------
-    @staticmethod
-    def _accept_totp(user, secret: str | None, code: str) -> bool:
-        """Valida el código y lo consume: el mismo código (o uno anterior) ya no sirve."""
+    async def _accept_totp(self, user, secret: str | None, code: str) -> bool:
+        """
+        Valida el código y lo consume de forma ATÓMICA: un UPDATE condicional
+        (último paso < paso del código) garantiza que, ante verificaciones
+        simultáneas con el mismo código, solo una gane. Leer-comparar-escribir
+        en Python permitía abrir varias sesiones con un solo código.
+        """
         step = security.totp_matched_step(secret, code) if secret else None
         if step is None:
             return False
-        if user.USU_2FA_Ultimo_Paso is not None and step <= user.USU_2FA_Ultimo_Paso:
+        from sqlalchemy import or_, update
+        from app.models.organization import Usuario
+        result = await self.db.execute(
+            update(Usuario)
+            .where(Usuario.USU_Usuario == user.USU_Usuario,
+                   or_(Usuario.USU_2FA_Ultimo_Paso.is_(None), Usuario.USU_2FA_Ultimo_Paso < step))
+            .values(USU_2FA_Ultimo_Paso=step)
+            .execution_options(synchronize_session=False)
+        )
+        if result.rowcount != 1:
             return False
         user.USU_2FA_Ultimo_Paso = step
         return True
@@ -217,7 +239,7 @@ class TwoFactorService:
         if otp.TFC_Intentos >= settings.TWO_FACTOR_MAX_ATTEMPTS:
             await self.gov_repo.mark_email_otp_used(otp.TFC_Id)  # invalidar tras demasiados intentos
             return False
-        if security.hash_code(code) == otp.TFC_Code_Hash:
+        if otp.TFC_Code_Hash in (security.hash_code(code), security.hash_code_legacy(code)):
             await self.gov_repo.mark_email_otp_used(otp.TFC_Id)
             return True
         await self.gov_repo.bump_email_otp_attempts(otp.TFC_Id)

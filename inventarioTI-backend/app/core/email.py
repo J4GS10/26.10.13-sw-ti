@@ -360,12 +360,12 @@ _SUBJECTS = {
     "mantenimiento_abierto": "[Inventario] Mantenimiento abierto: {codigo}",
     "mantenimiento_cerrado": "[Inventario] Mantenimiento cerrado: {codigo}",
     "stock_bajo": "[Inventario] Stock bajo: {codigo}",
-    "garantia_por_vencer": "[Inventario] Garantias por vencer: {total} activo(s)",
-    "ad_sync_pendientes": "[Inventario] Active Directory: {total} salida(s) pendiente(s) con activos",
-    "password_reset": "[Inventario] Restablecimiento de contrasena",
-    "password_changed": "[Inventario] Su contrasena fue cambiada",
-    "2fa_code": "[Inventario] Codigo de verificacion: {code}",
-    "nuevo_dispositivo": "[Inventario] Nuevo inicio de sesion en su cuenta",
+    "garantia_por_vencer": "[Inventario] Garantías por vencer: {total}",
+    "ad_sync_pendientes": "[Inventario] Active Directory: salidas pendientes con activos ({total})",
+    "password_reset": "[Inventario] Restablecimiento de contraseña",
+    "password_changed": "[Inventario] Su contraseña fue cambiada",
+    "2fa_code": "[Inventario] Su código de verificación",
+    "nuevo_dispositivo": "[Inventario] Nuevo inicio de sesión en su cuenta",
     "cuenta_desactivada_inactividad": "[Inventario] Su cuenta fue desactivada por inactividad",
 }
 

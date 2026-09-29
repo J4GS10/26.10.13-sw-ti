@@ -235,11 +235,17 @@ def create_refresh_token(
     return _create_token(subject, role, "refresh", delta, extra={**(extra or {}), "auth_time": auth_time})
 
 
-def create_2fa_challenge_token(username: str) -> str:
+def password_fingerprint(password_hash: str | None) -> str:
+    """Huella corta del hash vigente: liga un challenge 2FA a la contraseña actual."""
+    return hmac.new(settings.SECRET_KEY.encode(), (password_hash or "").encode(), hashlib.sha256).hexdigest()[:16]
+
+
+def create_2fa_challenge_token(username: str, password_hash: str | None = None) -> str:
     """
     Token efímero que prueba "este usuario pasó la contraseña" entre el paso 1
     (login) y el paso 2 (verificación del 2º factor). NO sirve para acceder a la
-    API; solo se acepta en /login/2fa/verify.
+    API; solo se acepta en /login/2fa/verify, UNA vez (su jti se revoca al
+    canjearlo) y solo mientras la contraseña no cambie (huella `pwf`).
     """
     from jose import jwt as _jwt
     now = datetime.now(timezone.utc)
@@ -249,20 +255,21 @@ def create_2fa_challenge_token(username: str) -> str:
         "sub": str(username),
         "type": "2fa",
         "jti": secrets.token_hex(16),
+        "pwf": password_fingerprint(password_hash),
     }
     return _jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
-def decode_2fa_challenge(token: str) -> Optional[str]:
-    """Devuelve el username si el challenge es válido y del tipo correcto; si no, None."""
+def decode_2fa_challenge(token: str) -> Optional[dict]:
+    """Devuelve el payload si el challenge es válido y del tipo correcto; si no, None."""
     from jose import jwt as _jwt, JWTError
     try:
         payload = _jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
     except JWTError:
         return None
-    if payload.get("type") != "2fa":
+    if payload.get("type") != "2fa" or not payload.get("sub") or not payload.get("jti"):
         return None
-    return payload.get("sub")
+    return payload
 
 
 # =========================================================================
@@ -351,7 +358,16 @@ def generate_recovery_codes(n: int = 8) -> list[str]:
 
 
 def hash_code(code: str) -> str:
-    """Hash SHA-256 para OTP de email y códigos de recuperación (normaliza may/espacios)."""
+    """
+    HMAC-SHA256 (clave del servidor) para OTP de email y códigos de recuperación.
+    Con solo leer la BD ya no se invierte un código de 6 dígitos probando
+    todas las combinaciones: hace falta además SECRET_KEY.
+    """
+    return hmac.new(settings.SECRET_KEY.encode(), code.strip().upper().encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def hash_code_legacy(code: str) -> str:
+    """SHA-256 sin clave (formato anterior): solo para validar códigos ya emitidos."""
     return hashlib.sha256(code.strip().upper().encode("utf-8")).hexdigest()
 
 

@@ -3,12 +3,13 @@ from datetime import datetime
 import uuid
 
 from pydantic import BaseModel, Field, ConfigDict
+from app.schemas.common import Esquema
 
 
 # =======================
 # CONSUMIBLE
 # =======================
-class ConsumibleBase(BaseModel):
+class ConsumibleBase(Esquema):
     CON_Nombre: str = Field(..., min_length=2, max_length=100)
     CON_Descripcion: Optional[str] = Field(None, max_length=255)
     CON_Categoria: Optional[str] = Field(None, max_length=50)
@@ -23,7 +24,7 @@ class ConsumibleCreate(ConsumibleBase):
     CON_Stock_Actual: int = Field(0, ge=0)
 
 
-class ConsumibleUpdate(BaseModel):
+class ConsumibleUpdate(Esquema):
     CON_Nombre: Optional[str] = Field(None, min_length=2, max_length=100)
     CON_Descripcion: Optional[str] = Field(None, max_length=255)
     CON_Categoria: Optional[str] = Field(None, max_length=50)
@@ -45,14 +46,14 @@ class ConsumibleResponse(ConsumibleBase):
 # =======================
 # MOVIMIENTO DE STOCK
 # =======================
-class StockMovimientoCreate(BaseModel):
+class StockMovimientoCreate(Esquema):
     """Entrada o salida de stock."""
     MOC_Cantidad: int = Field(..., gt=0)
     MOC_Motivo: Optional[str] = Field(None, max_length=255)
     PER_Persona: Optional[uuid.UUID] = None
 
 
-class MovimientoConsumibleResponse(BaseModel):
+class MovimientoConsumibleResponse(Esquema):
     MOC_Movimiento: int
     MOC_Tipo: str
     MOC_Cantidad: int

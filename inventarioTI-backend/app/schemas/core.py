@@ -1,5 +1,6 @@
 from typing import Optional, List
 from pydantic import BaseModel, Field, ConfigDict, model_validator
+from app.schemas.common import Esquema
 from datetime import date
 import uuid
 from decimal import Decimal
@@ -8,26 +9,26 @@ from app.core.currency import DEFAULT_CURRENCY, CurrencyCode
 
 # ── Schemas anidados para ActivoDetailResponse ────────────────────────────────
 
-class MarcaAnidada(BaseModel):
+class MarcaAnidada(Esquema):
     MAR_Marca: int
     MAR_Nombre: str
     model_config = ConfigDict(from_attributes=True)
 
 
-class ModeloAnidado(BaseModel):
+class ModeloAnidado(Esquema):
     MOD_Modelo: int
     MOD_Nombre: str
     marca: Optional[MarcaAnidada] = None
     model_config = ConfigDict(from_attributes=True)
 
 
-class TipoActivoAnidado(BaseModel):
+class TipoActivoAnidado(Esquema):
     TAC_Tipo_Activo: int
     TAC_Nombre: str
     model_config = ConfigDict(from_attributes=True)
 
 
-class EstadoAnidado(BaseModel):
+class EstadoAnidado(Esquema):
     EOP_Estado_Operativo: int
     EOP_Nombre: str
     model_config = ConfigDict(from_attributes=True)
@@ -35,7 +36,7 @@ class EstadoAnidado(BaseModel):
 # =======================
 # ESPECIFICACIONES (EAV)
 # =======================
-class EspecificacionBase(BaseModel):
+class EspecificacionBase(Esquema):
     TES_Tipo_Especificacion: int 
     ESP_Valor: str = Field(..., min_length=1, max_length=255)
 
@@ -48,7 +49,7 @@ class EspecificacionResponse(EspecificacionBase):
 
 
 # Respuesta enriquecida: incluye nombre y unidad del tipo (para la UI).
-class EspecificacionDetalle(BaseModel):
+class EspecificacionDetalle(Esquema):
     ESP_Especificacion: int
     TES_Tipo_Especificacion: int
     TES_Nombre: str
@@ -56,13 +57,13 @@ class EspecificacionDetalle(BaseModel):
     ESP_Valor: str
 
 
-class EspecificacionValorUpdate(BaseModel):
+class EspecificacionValorUpdate(Esquema):
     ESP_Valor: str = Field(..., min_length=1, max_length=255)
 
 # =======================
 # ACTIVO (CORE)
 # =======================
-class ActivoBase(BaseModel):
+class ActivoBase(Esquema):
     ACT_Codigo_Interno: Optional[str] = Field(None, min_length=3, max_length=50) # Opcional en entrada por secuencia
     ACT_Serie_Fabricante: str = Field(..., min_length=3, max_length=100)
     ACT_Hostname: Optional[str] = Field(None, max_length=100)
@@ -92,7 +93,7 @@ class ActivoCreate(ActivoBase):
     # Permitimos crear especificaciones junto con el activo (Nested Write)
     especificaciones: Optional[List[EspecificacionCreate]] = []
 
-class ActivoUpdate(BaseModel):
+class ActivoUpdate(Esquema):
     ACT_Codigo_Interno: Optional[str] = Field(None, min_length=3, max_length=50)
     ACT_Serie_Fabricante: Optional[str] = Field(None, min_length=3, max_length=100)
     ACT_Hostname: Optional[str] = Field(None, max_length=100)
@@ -120,7 +121,7 @@ class ActivoDetailResponse(ActivoResponse):
     tipo_activo: Optional[TipoActivoAnidado] = None
     estado_operativo: Optional[EstadoAnidado] = None
 
-class EtiquetasActivosRequest(BaseModel):
+class EtiquetasActivosRequest(Esquema):
     activos_ids: Optional[List[uuid.UUID]] = None
     codigos: Optional[List[str]] = None
 
@@ -134,7 +135,7 @@ class EtiquetasActivosRequest(BaseModel):
         return self
 
 
-class ActivoFilter(BaseModel):
+class ActivoFilter(Esquema):
     # max_length=64 acota el coste de la búsqueda LIKE; los metacaracteres
     # `%` y `_` se escapan en el repository antes de pasarse a ilike().
     q: Optional[str] = Field(

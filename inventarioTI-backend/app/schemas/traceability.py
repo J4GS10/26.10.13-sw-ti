@@ -1,18 +1,19 @@
 from typing import Optional, List
 from pydantic import BaseModel, Field, ConfigDict
+from app.schemas.common import Esquema
 from datetime import datetime
 import uuid
 
 # =======================
 # TIPOS DE MOVIMIENTO
 # =======================
-class TipoMovimientoBase(BaseModel):
+class TipoMovimientoBase(Esquema):
     TMO_Nombre: str = Field(..., min_length=3, max_length=50)
 
 class TipoMovimientoCreate(TipoMovimientoBase):
     pass
 
-class TipoMovimientoUpdate(BaseModel):
+class TipoMovimientoUpdate(Esquema):
     TMO_Nombre: Optional[str] = Field(None, min_length=3, max_length=50)
 
 class TipoMovimientoResponse(TipoMovimientoBase):
@@ -22,22 +23,22 @@ class TipoMovimientoResponse(TipoMovimientoBase):
 # =======================
 # SCHEMAS ANIDADOS (Para mostrar nombres, no solo IDs)
 # =======================
-class ActivoSummary(BaseModel):
+class ActivoSummary(Esquema):
     ACT_Codigo_Interno: str
     ACT_Hostname: Optional[str] = None
 
-class PersonaSummary(BaseModel):
+class PersonaSummary(Esquema):
     PER_Primer_Nombre: str
     PER_Primer_Apellido: str
     PER_Email_Corporativo: str
 
-class AreaSummary(BaseModel):
+class AreaSummary(Esquema):
     ARE_Nombre: str
 
 # =======================
 # MOVIMIENTOS (ASIGNACIONES)
 # =======================
-class MovimientoBase(BaseModel):
+class MovimientoBase(Esquema):
     ACT_Activo: uuid.UUID
     PER_Persona: uuid.UUID
     ARE_Area: int
@@ -69,18 +70,18 @@ class MovimientoResponse(MovimientoBase):
 # =======================
 # DEVOLUCIÓN
 # =======================
-class DevolucionCreate(BaseModel):
+class DevolucionCreate(Esquema):
     ACT_Activo: uuid.UUID
 
 # =======================
 # TRANSFERENCIA
 # =======================
-class TransferenciaCreate(BaseModel):
+class TransferenciaCreate(Esquema):
     ACT_Activo: uuid.UUID
     PER_Persona_Destino: uuid.UUID
     ARE_Area_Destino: int
     MOV_Observacion: Optional[str] = Field(None, max_length=1000)
 
 # Request para descarga por lote
-class ActaLoteRequest(BaseModel):
+class ActaLoteRequest(Esquema):
     movimientos_ids: List[uuid.UUID]

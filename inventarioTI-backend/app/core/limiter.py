@@ -49,9 +49,31 @@ def client_ip_key(request: Request) -> str:
     return get_remote_address(request)
 
 
+def rate_limit_key(request: Request) -> str:
+    """
+    Clave del límite de peticiones: el USUARIO si la petición trae un token de
+    acceso válido; si no (login, recursos públicos), la IP real.
+
+    Contar por IP hacía que toda una oficina detrás de un NAT (o de un proxy
+    corporativo) compartiera el mismo cupo: la pantalla de Activos quedaba
+    vacía para todos cuando unos pocos buscaban a la vez (QA1 UI-07). La firma
+    del token se verifica, así que no se puede agotar el cupo de otro usuario.
+    """
+    auth = request.headers.get("authorization") or ""
+    if auth.lower().startswith("bearer "):
+        from jose import JWTError, jwt as _jwt
+        try:
+            payload = _jwt.decode(auth[7:].strip(), settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+            if payload.get("type") == "access" and payload.get("sub"):
+                return f"user:{payload['sub']}"
+        except JWTError:
+            pass
+    return client_ip_key(request)
+
+
 def limiter_options(redis_url: str | None) -> dict:
     options = {
-        "key_func": client_ip_key,
+        "key_func": rate_limit_key,
         "default_limits": [settings.RATE_LIMIT_DEFAULT],
     }
     if redis_url:

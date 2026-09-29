@@ -456,15 +456,22 @@ class OrganizationService(BaseService[DepartamentoRepository]):
         if await self.per_repo.has_usuario(schema.PER_Persona):
             raise HTTPException(400, "PERSON_ALREADY_HAS_USER")
 
-        obj = await self.usu_repo.create(schema)
-        # La contraseña la eligió el administrador: es temporal y el titular
-        # debe cambiarla en su primer inicio de sesión.
-        if schema.USU_Password:
-            obj.USU_Debe_Cambiar_Password = True
-        await self._apply_scope(
-            obj, rol=schema.USU_Rol, global_=schema.USU_Alcance_Global, sede_ids=schema.sedes,
-            requester_role=requester_role,
-        )
+        # Las columnas de identidad (rol, alcance, estado) y las sedes de una
+        # cuenta no las puede escribir el rol restringido de la base de datos
+        # (una inyección SQL no podría darse alcance global): esta operación,
+        # ya validada arriba, se ejecuta en modo elevado.
+        from app.core.data_scope import elevated
+        async with elevated(self.db):
+            obj = await self.usu_repo.create(schema)
+            # La contraseña la eligió el administrador: es temporal y el titular
+            # debe cambiarla en su primer inicio de sesión.
+            if schema.USU_Password:
+                obj.USU_Debe_Cambiar_Password = True
+            await self._apply_scope(
+                obj, rol=schema.USU_Rol, global_=schema.USU_Alcance_Global, sede_ids=schema.sedes,
+                requester_role=requester_role,
+            )
+            await self.db.flush()
         await self._commit_audit(
             accion="CREATE", entidad="INV_USUARIO",
             snapshot={
@@ -508,6 +515,14 @@ class OrganizationService(BaseService[DepartamentoRepository]):
         # usuario de bajo privilegio y fabricarse un par o un superior.
         if schema.USU_Rol and not roles.can_grant(requester_role, schema.USU_Rol):
             raise HTTPException(403, "ONLY_SUPER_ADMIN_CAN_GRANT_ADMIN_ROLES")
+        # Una cuenta con alcance global solo cambia de rol por un SUPER_ADMIN
+        # (salvo que en el mismo cambio se le quite el global): si no, un
+        # administrador de seguridad convertía una cuenta de consulta global
+        # en un ADMIN_TI con escritura sobre todas las sedes.
+        if (schema.USU_Rol and schema.USU_Rol != target.USU_Rol and target.USU_Alcance_Global
+                and schema.USU_Alcance_Global is not False
+                and not roles.can_grant_global_scope(requester_role)):
+            raise HTTPException(403, "ONLY_SUPER_ADMIN_CAN_CHANGE_ROLE_OF_GLOBAL_ACCOUNT")
 
         # Protección del último super-admin
         will_disable = schema.USU_Estado is False
@@ -542,19 +557,22 @@ class OrganizationService(BaseService[DepartamentoRepository]):
             raise HTTPException(400, "PASSWORD_REQUIRED_WHEN_SSO_DISABLED")
 
         scope_fields = {"USU_Alcance_Global", "sedes"}
-        obj = await self.usu_repo.update(
-            usuario_id_target, schema, exclude=scope_fields,
-        )
-        if schema.USU_Password:
-            # Fijada por un administrador → temporal (cambio obligatorio).
-            obj.USU_Debe_Cambiar_Password = True
-        alcance_diff = await self._apply_scope(
-            obj,
-            rol=obj.USU_Rol,
-            global_=schema.USU_Alcance_Global,
-            sede_ids=schema.sedes,
-            requester_role=requester_role,
-        )
+        from app.core.data_scope import elevated
+        async with elevated(self.db):  # ver create_usuario
+            obj = await self.usu_repo.update(
+                usuario_id_target, schema, exclude=scope_fields,
+            )
+            if schema.USU_Password:
+                # Fijada por un administrador → temporal (cambio obligatorio).
+                obj.USU_Debe_Cambiar_Password = True
+            alcance_diff = await self._apply_scope(
+                obj,
+                rol=obj.USU_Rol,
+                global_=schema.USU_Alcance_Global,
+                sede_ids=schema.sedes,
+                requester_role=requester_role,
+            )
+            await self.db.flush()
 
         cambios = schema.model_dump(exclude_unset=True, exclude={"USU_Password"})
         # Diff explícito antes→después solo para los campos sensibles que cambian

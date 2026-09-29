@@ -1,17 +1,18 @@
 from typing import Optional, List
 from pydantic import BaseModel, Field, ConfigDict
+from app.schemas.common import Esquema
 
 # =======================
 # 1. PAIS
 # =======================
-class PaisBase(BaseModel):
+class PaisBase(Esquema):
     PAI_Nombre: str = Field(..., min_length=2, max_length=100)
     PAI_Codigo_ISO: str = Field(..., min_length=2, max_length=5)
 
 class PaisCreate(PaisBase):
     pass
 
-class PaisUpdate(BaseModel):
+class PaisUpdate(Esquema):
     PAI_Nombre: Optional[str] = Field(None, min_length=2, max_length=100)
     PAI_Codigo_ISO: Optional[str] = Field(None, min_length=2, max_length=5)
 
@@ -22,14 +23,14 @@ class PaisResponse(PaisBase):
 # =======================
 # 2. ESTADO
 # =======================
-class EstadoBase(BaseModel):
+class EstadoBase(Esquema):
     EST_Nombre: str = Field(..., min_length=2, max_length=100)
     PAI_Pais: int # FK
 
 class EstadoCreate(EstadoBase):
     pass
 
-class EstadoUpdate(BaseModel):
+class EstadoUpdate(Esquema):
     EST_Nombre: Optional[str] = Field(None, min_length=2, max_length=100)
 
 class EstadoResponse(EstadoBase):
@@ -39,14 +40,14 @@ class EstadoResponse(EstadoBase):
 # =======================
 # 3. MUNICIPIO
 # =======================
-class MunicipioBase(BaseModel):
+class MunicipioBase(Esquema):
     MUN_Nombre: str = Field(..., min_length=2, max_length=100)
     EST_Estado: int # FK
 
 class MunicipioCreate(MunicipioBase):
     pass
 
-class MunicipioUpdate(BaseModel):
+class MunicipioUpdate(Esquema):
     MUN_Nombre: Optional[str] = Field(None, min_length=2, max_length=100)
 
 class MunicipioResponse(MunicipioBase):
@@ -56,7 +57,7 @@ class MunicipioResponse(MunicipioBase):
 # =======================
 # 4. SEDE
 # =======================
-class SedeBase(BaseModel):
+class SedeBase(Esquema):
     SED_Nombre: str = Field(..., min_length=3, max_length=150)
     SED_Direccion_Calle: Optional[str] = Field(None, max_length=200)
     SED_Direccion_Numero: Optional[str] = Field(None, max_length=50)
@@ -65,7 +66,7 @@ class SedeBase(BaseModel):
 class SedeCreate(SedeBase):
     pass
 
-class SedeUpdate(BaseModel):
+class SedeUpdate(Esquema):
     SED_Nombre: Optional[str] = Field(None, min_length=3, max_length=150)
     SED_Direccion_Calle: Optional[str] = Field(None, max_length=200)
     SED_Direccion_Numero: Optional[str] = Field(None, max_length=50)
@@ -77,14 +78,14 @@ class SedeResponse(SedeBase):
 # =======================
 # 5. EDIFICIO
 # =======================
-class EdificioBase(BaseModel):
+class EdificioBase(Esquema):
     EDI_Nombre: str = Field(..., min_length=1, max_length=100)
     SED_Sede: int # FK
 
 class EdificioCreate(EdificioBase):
     pass
 
-class EdificioUpdate(BaseModel):
+class EdificioUpdate(Esquema):
     EDI_Nombre: Optional[str] = Field(None, min_length=1, max_length=100)
 
 class EdificioResponse(EdificioBase):
@@ -94,7 +95,7 @@ class EdificioResponse(EdificioBase):
 # =======================
 # 6. NIVEL (Piso)
 # =======================
-class NivelBase(BaseModel):
+class NivelBase(Esquema):
     NIV_Numero_Piso: str = Field(..., min_length=1, max_length=50)
     NIV_Alias: Optional[str] = Field(None, max_length=100)
     EDI_Edificio: int # FK
@@ -102,7 +103,7 @@ class NivelBase(BaseModel):
 class NivelCreate(NivelBase):
     pass
 
-class NivelUpdate(BaseModel):
+class NivelUpdate(Esquema):
     NIV_Numero_Piso: Optional[str] = Field(None, min_length=1, max_length=50)
     NIV_Alias: Optional[str] = Field(None, max_length=100)
 
@@ -113,7 +114,7 @@ class NivelResponse(NivelBase):
 # =======================
 # 7. AREA (Oficina Final)
 # =======================
-class AreaBase(BaseModel):
+class AreaBase(Esquema):
     ARE_Nombre: str = Field(..., min_length=2, max_length=150)
     ARE_Tipo_Acceso: str = "General"
     ARE_Descripcion: Optional[str] = Field(None, max_length=255)
@@ -122,7 +123,7 @@ class AreaBase(BaseModel):
 class AreaCreate(AreaBase):
     pass
 
-class AreaUpdate(BaseModel):
+class AreaUpdate(Esquema):
     ARE_Nombre: Optional[str] = Field(None, min_length=2, max_length=150)
     ARE_Tipo_Acceso: Optional[str] = None
     ARE_Descripcion: Optional[str] = Field(None, max_length=255)

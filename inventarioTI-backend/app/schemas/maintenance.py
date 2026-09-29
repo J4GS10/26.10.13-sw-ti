@@ -1,5 +1,6 @@
 from typing import Optional, List
 from pydantic import BaseModel, Field, ConfigDict
+from app.schemas.common import Esquema
 from datetime import datetime
 from decimal import Decimal
 import uuid
@@ -7,13 +8,13 @@ import uuid
 from app.core.currency import DEFAULT_CURRENCY, CurrencyCode
 
 # --- TIPO MANTENIMIENTO ---
-class TipoMantenimientoBase(BaseModel):
+class TipoMantenimientoBase(Esquema):
     TMA_Nombre: str = Field(..., min_length=3, max_length=50)
 
 class TipoMantenimientoCreate(TipoMantenimientoBase):
     pass
 
-class TipoMantenimientoUpdate(BaseModel):
+class TipoMantenimientoUpdate(Esquema):
     TMA_Nombre: Optional[str] = Field(None, min_length=3, max_length=50)
 
 class TipoMantenimientoResponse(TipoMantenimientoBase):
@@ -21,7 +22,7 @@ class TipoMantenimientoResponse(TipoMantenimientoBase):
     model_config = ConfigDict(from_attributes=True)
 
 # --- DETALLE (ITEMS) ---
-class DetalleMantenimientoBase(BaseModel):
+class DetalleMantenimientoBase(Esquema):
     DMA_Accion_Realizada: str = Field(..., min_length=5, max_length=255)
     DMA_Costo_Item: Decimal = Field(default=0, ge=0)
 
@@ -33,7 +34,7 @@ class DetalleResponse(DetalleMantenimientoBase):
     model_config = ConfigDict(from_attributes=True)
 
 # --- MANTENIMIENTO (CABECERA) ---
-class MantenimientoBase(BaseModel):
+class MantenimientoBase(Esquema):
     ACT_Activo: uuid.UUID
     PER_Persona_Solicita: uuid.UUID
     TMA_Tipo_Mantenimiento: int
@@ -49,21 +50,21 @@ class MantenimientoCreate(MantenimientoBase):
     # Lista opcional de acciones realizadas
     detalles: List[DetalleCreate] = []
 
-class MantenimientoCierre(BaseModel):
+class MantenimientoCierre(Esquema):
     MAN_Costo_Total: Decimal = Field(..., ge=0)
     # Si se omite, se conserva la moneda con que se abrió el ticket.
     MAN_Moneda: Optional[CurrencyCode] = None
     MAN_Fecha_Cierre: Optional[datetime] = None
 
 
-class ActivoMantSummary(BaseModel):
+class ActivoMantSummary(Esquema):
     ACT_Activo: uuid.UUID
     ACT_Codigo_Interno: str
     ACT_Hostname: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 
-class PersonaMantSummary(BaseModel):
+class PersonaMantSummary(Esquema):
     PER_Persona: uuid.UUID
     PER_Primer_Nombre: str
     PER_Primer_Apellido: str

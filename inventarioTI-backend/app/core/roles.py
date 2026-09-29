@@ -34,6 +34,8 @@ AUDIT_READER_ROLES: tuple[str, ...] = (SUPER_ADMIN, ADMIN_SEGURIDAD, AUDITOR)
 ALWAYS_GLOBAL_ROLES: tuple[str, ...] = (SUPER_ADMIN, ADMIN_SEGURIDAD)
 # Roles del inventario a los que se asigna alcance (global o por sedes).
 SCOPED_ROLES: tuple[str, ...] = (ADMIN_TI, TECNICO, AUDITOR, CONSULTA)
+# Quién accede al inventario (ADMIN_SEGURIDAD no: separación de funciones).
+BUSINESS_ROLES: tuple[str, ...] = (SUPER_ADMIN, ADMIN_TI, TECNICO, AUDITOR, CONSULTA)
 # Roles que solo un SUPER_ADMIN puede otorgar o administrar (evita que un
 # administrador de seguridad se perpetúe o eleve a otros a su mismo nivel).
 PROTECTED_ROLES: tuple[str, ...] = (SUPER_ADMIN, ADMIN_SEGURIDAD)

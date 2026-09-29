@@ -189,9 +189,12 @@ async def security_headers(request: Request, call_next):
 @app.exception_handler(IntegrityError)
 async def integrity_error_handler(request: Request, exc: IntegrityError):
     log.warning("db.integrity_error", path=str(request.url), error=str(exc.orig))
+    # Un duplicado conocido se informa con su código (p. ej. BRAND_ALREADY_EXISTS)
+    # en lugar del mensaje genérico de integridad.
+    from app.db.unicidad import codigo_de_violacion
     return JSONResponse(
         status_code=status.HTTP_409_CONFLICT,
-        content={"detail": "INTEGRITY_CONSTRAINT_VIOLATED"},
+        content={"detail": codigo_de_violacion(exc) or "INTEGRITY_CONSTRAINT_VIOLATED"},
     )
 
 

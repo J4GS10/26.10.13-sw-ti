@@ -35,6 +35,8 @@ import re as _re
 from typing import Annotated as _Annotated
 
 from pydantic import AfterValidator as _AfterValidator
+from pydantic import BaseModel as _BaseModel
+from pydantic import ConfigDict as _ConfigDict
 
 _LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
 _CORPORATE_EMAIL_RE = _re.compile(
@@ -50,5 +52,20 @@ def _validate_corporate_email(value: str) -> str:
     return f"{local}@{domain.lower()}"
 
 
+def _normalize_person_email(value: str) -> str:
+    # Todo el buzón en minúsculas: "Ana.Perez@" y "ana.perez@" son la misma
+    # persona (evita duplicados que rompen AD y los avisos).
+    return _validate_corporate_email(value).lower()
+
+
+class Esquema(_BaseModel):
+    """Base de los esquemas de entrada: recorta espacios en los textos
+    ("  Dell " → "Dell"; un nombre formado solo por espacios queda vacío y lo
+    rechaza min_length). No se usa en esquemas con contraseñas."""
+    model_config = _ConfigDict(str_strip_whitespace=True)
+
+
 CorporateEmail = _Annotated[str, _AfterValidator(_validate_corporate_email)]
+# Correo de una persona: normalizado completo a minúsculas.
+PersonEmail = _Annotated[str, _AfterValidator(_normalize_person_email)]
 

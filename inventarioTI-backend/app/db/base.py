@@ -21,3 +21,6 @@ import app.models.core
 import app.models.software      
 import app.models.traceability  
 import app.models.governance    
+
+# 4. Unicidad sin distinguir mayúsculas ni espacios (índices funcionales)
+import app.db.unicidad  # noqa: E402,F401

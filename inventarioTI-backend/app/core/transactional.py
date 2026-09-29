@@ -102,9 +102,7 @@ async def commit_or_409(db: AsyncSession, *, where: str = "") -> None:
             where=where,
             error=str(e.orig) if hasattr(e, "orig") else str(e),
         )
-        raise HTTPException(
-            status_code=409, detail="INTEGRITY_CONSTRAINT_VIOLATED"
-        ) from e
+        raise HTTPException(status_code=409, detail=_detalle_integridad(e)) from e
 
 
 def transactional(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
@@ -136,9 +134,7 @@ def transactional(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[
                 method=func.__name__,
                 error=str(e.orig) if hasattr(e, "orig") else str(e),
             )
-            raise HTTPException(
-                status_code=409, detail="INTEGRITY_CONSTRAINT_VIOLATED"
-            ) from e
+            raise HTTPException(status_code=409, detail=_detalle_integridad(e)) from e
         except Exception as e:
             await self.db.rollback()
             log.error(
@@ -162,9 +158,7 @@ def transactional(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[
                     method=func.__name__,
                     error=str(e.orig) if hasattr(e, "orig") else str(e),
                 )
-                raise HTTPException(
-                    status_code=409, detail="INTEGRITY_CONSTRAINT_VIOLATED"
-                ) from e
+                raise HTTPException(status_code=409, detail=_detalle_integridad(e)) from e
             except Exception as e:
                 await self.db.rollback()
                 log.error(
@@ -188,3 +182,9 @@ def transactional(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[
                 _post_commit_hooks.reset(hooks_token)
 
     return wrapper
+
+
+def _detalle_integridad(error: Exception) -> str:
+    """Código específico para un duplicado conocido (ver app/db/unicidad.py)."""
+    from app.db.unicidad import codigo_de_violacion
+    return codigo_de_violacion(error) or "INTEGRITY_CONSTRAINT_VIOLATED"

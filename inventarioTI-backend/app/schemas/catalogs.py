@@ -1,10 +1,11 @@
 from typing import Optional, List
 from pydantic import BaseModel, Field, ConfigDict
+from app.schemas.common import Esquema
 
 # =======================
 # 1. TIPO DE ACTIVO
 # =======================
-class TipoActivoBase(BaseModel):
+class TipoActivoBase(Esquema):
     TAC_Nombre: str = Field(..., min_length=2, max_length=100)
     TAC_Prefijo: Optional[str] = Field(None, max_length=10)
     TAC_Aplica_Depreciacion: bool = True
@@ -12,7 +13,7 @@ class TipoActivoBase(BaseModel):
 class TipoActivoCreate(TipoActivoBase):
     pass
 
-class TipoActivoUpdate(BaseModel):
+class TipoActivoUpdate(Esquema):
     TAC_Nombre: Optional[str] = Field(None, min_length=2, max_length=100)
     TAC_Prefijo: Optional[str] = Field(None, max_length=10)
     TAC_Aplica_Depreciacion: Optional[bool] = None
@@ -25,13 +26,13 @@ class TipoActivoResponse(TipoActivoBase):
 # =======================
 # 2. MARCA
 # =======================
-class MarcaBase(BaseModel):
+class MarcaBase(Esquema):
     MAR_Nombre: str = Field(..., min_length=2, max_length=100)
 
 class MarcaCreate(MarcaBase):
     pass
 
-class MarcaUpdate(BaseModel):
+class MarcaUpdate(Esquema):
     MAR_Nombre: Optional[str] = Field(None, min_length=2, max_length=100)
 
 
@@ -42,14 +43,14 @@ class MarcaResponse(MarcaBase):
 # =======================
 # 3. TIPO DE CONEXIÓN
 # =======================
-class TipoConexionBase(BaseModel):
+class TipoConexionBase(Esquema):
     TCN_Nombre: str = Field(..., min_length=2, max_length=50)
     TCN_Descripcion: Optional[str] = Field(None, max_length=200)
 
 class TipoConexionCreate(TipoConexionBase):
     pass
 
-class TipoConexionUpdate(BaseModel):
+class TipoConexionUpdate(Esquema):
     TCN_Nombre: Optional[str] = Field(None, min_length=2, max_length=50)
     TCN_Descripcion: Optional[str] = Field(None, max_length=200)
 
@@ -61,7 +62,7 @@ class TipoConexionResponse(TipoConexionBase):
 # =======================
 # 4. MODELO
 # =======================
-class ModeloBase(BaseModel):
+class ModeloBase(Esquema):
     MOD_Nombre: str = Field(..., min_length=2, max_length=150)
     MOD_Anio_Lanzamiento: Optional[int] = None
     
@@ -75,7 +76,7 @@ class ModeloCreate(ModeloBase):
     # romper la serialización de modelos legados con años fuera de rango).
     MOD_Anio_Lanzamiento: Optional[int] = Field(None, ge=1970, le=2100)
 
-class ModeloUpdate(BaseModel):
+class ModeloUpdate(Esquema):
     MOD_Nombre: Optional[str] = Field(None, min_length=2, max_length=150)
     MOD_Anio_Lanzamiento: Optional[int] = Field(None, ge=1970, le=2100)
     MAR_Marca: Optional[int] = None
@@ -88,7 +89,7 @@ class ModeloResponse(ModeloBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-class ModeloFlatResponse(BaseModel):
+class ModeloFlatResponse(Esquema):
     """Modelo con marca embebida (plano), pensado para selects del frontend."""
     MOD_Modelo: int
     MOD_Nombre: str
@@ -107,14 +108,14 @@ class ModeloFlatResponse(BaseModel):
 # =======================
 # 5. ESTADO OPERATIVO
 # =======================
-class EstadoOperativoBase(BaseModel):
+class EstadoOperativoBase(Esquema):
     EOP_Nombre: str = Field(..., min_length=2, max_length=50)
     EOP_Descripcion: Optional[str] = Field(None, max_length=200)
 
 class EstadoOperativoCreate(EstadoOperativoBase):
     pass
 
-class EstadoOperativoUpdate(BaseModel):
+class EstadoOperativoUpdate(Esquema):
     EOP_Nombre: Optional[str] = Field(None, min_length=2, max_length=50)
     EOP_Descripcion: Optional[str] = Field(None, max_length=200)
 
@@ -126,14 +127,14 @@ class EstadoOperativoResponse(EstadoOperativoBase):
 # =======================
 # 6. TIPO DE ESPECIFICACIÓN (EAV Keys)
 # =======================
-class TipoEspecificacionBase(BaseModel):
+class TipoEspecificacionBase(Esquema):
     TES_Nombre: str = Field(..., min_length=2, max_length=100, description="Ej: RAM, Disco Duro")
     TES_Unidad_Medida: Optional[str] = Field(None, max_length=20, description="Ej: GB, TB, GHz")
 
 class TipoEspecificacionCreate(TipoEspecificacionBase):
     pass
 
-class TipoEspecificacionUpdate(BaseModel):
+class TipoEspecificacionUpdate(Esquema):
     TES_Nombre: Optional[str] = Field(None, min_length=2, max_length=100)
     TES_Unidad_Medida: Optional[str] = Field(None, max_length=20)
 

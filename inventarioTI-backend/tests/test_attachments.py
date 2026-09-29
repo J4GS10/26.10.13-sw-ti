@@ -85,7 +85,7 @@ async def test_upload_queda_auditado(client, auth_headers, domain_seed, session)
     await client.post(
         f"/api/v1/adjuntos/activos/{act}",
         headers=auth_headers,
-        files={"file": ("acta.pdf", b"%PDF acta firmada", "application/pdf")},
+        files={"file": ("acta.pdf", b"%PDF-1.4 acta firmada", "application/pdf")},
         data={"categoria": "acta"},
     )
     ev = (await session.execute(

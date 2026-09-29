@@ -25,6 +25,12 @@ from app.core.config import settings
 
 POLICY_PREFIX = "inv_rls_"
 
+# Columnas de INV_USUARIO que deciden el acceso: solo se escriben en modo
+# elevado (ver install_rls).
+_COLUMNAS_IDENTIDAD = frozenset({
+    "USU_Usuario", "USU_Username", "USU_Rol", "USU_Alcance_Global", "USU_Estado", "PER_Persona",
+})
+
 
 def _sede(col: str) -> str:
     # Subconsultas escalares no correlacionadas: PostgreSQL las evalúa una sola
@@ -211,8 +217,23 @@ def install_rls(conn: Connection, *, strict: bool = False) -> bool:
         f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO "{role}"',
         # La bitácora es inmutable para las peticiones de usuario.
         f'REVOKE UPDATE, DELETE ON "INV_AUDITORIA_SISTEMA" FROM "{role}"',
+        # Identidades: las políticas leen el alcance de INV_USUARIO e
+        # INV_USUARIO_SEDE, así que el rol restringido no puede alterarlas (una
+        # inyección SQL no puede darse alcance global ni sedes). Las altas y
+        # cambios de rol/alcance/estado los hace la aplicación en modo elevado,
+        # tras validar la jerarquía de roles.
+        f'REVOKE INSERT, UPDATE, DELETE ON "INV_USUARIO_SEDE" FROM "{role}"',
+        f'REVOKE INSERT, UPDATE, DELETE ON "INV_USUARIO" FROM "{role}"',
     ):
         conn.execute(text(statement))
+    # Autoservicio (contraseña, MFA, intentos, último acceso…): se permite
+    # actualizar las columnas de la cuenta que no deciden el acceso.
+    columnas = [c for c in conn.execute(text(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'INV_USUARIO'"
+    )).scalars().all() if c not in _COLUMNAS_IDENTIDAD]
+    if columnas:
+        lista = ", ".join(f'"{c}"' for c in columnas)
+        conn.execute(text(f'GRANT UPDATE ({lista}) ON "INV_USUARIO" TO "{role}"'))
 
     for ddl in _FUNCTIONS:
         conn.execute(text(ddl))

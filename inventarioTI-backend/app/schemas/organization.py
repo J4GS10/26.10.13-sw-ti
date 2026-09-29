@@ -1,15 +1,16 @@
 from typing import Optional
 from pydantic import BaseModel, Field, ConfigDict, model_validator
+from app.schemas.common import Esquema
 
 from app.core.roles import ROLE_PATTERN
-from app.schemas.common import CorporateEmail
+from app.schemas.common import CorporateEmail, PersonEmail
 from datetime import datetime
 import uuid
 
 # =======================
 # 1. DEPARTAMENTO
 # =======================
-class DepartamentoBase(BaseModel):
+class DepartamentoBase(Esquema):
     DEP_Nombre: str = Field(..., min_length=3, max_length=100)
     DEP_Codigo_Costos: Optional[str] = Field(None, max_length=50)
     DEP_Descripcion: Optional[str] = Field(None, max_length=255)
@@ -17,7 +18,7 @@ class DepartamentoBase(BaseModel):
 class DepartamentoCreate(DepartamentoBase):
     pass
 
-class DepartamentoUpdate(BaseModel):
+class DepartamentoUpdate(Esquema):
     DEP_Nombre: Optional[str] = Field(None, min_length=3, max_length=100)
     DEP_Codigo_Costos: Optional[str] = Field(None, max_length=50)
     DEP_Descripcion: Optional[str] = Field(None, max_length=255)
@@ -31,7 +32,7 @@ class DepartamentoResponse(DepartamentoBase):
 # =======================
 # 2. CARGO
 # =======================
-class CargoBase(BaseModel):
+class CargoBase(Esquema):
     CAR_Nombre: str = Field(..., min_length=3, max_length=100)
     CAR_Es_Jefatura: bool = False
     CAR_Descripcion: Optional[str] = Field(None, max_length=255)
@@ -39,7 +40,7 @@ class CargoBase(BaseModel):
 class CargoCreate(CargoBase):
     pass
 
-class CargoUpdate(BaseModel):
+class CargoUpdate(Esquema):
     CAR_Nombre: Optional[str] = Field(None, min_length=3, max_length=100)
     CAR_Es_Jefatura: Optional[bool] = None
     CAR_Descripcion: Optional[str] = Field(None, max_length=255)
@@ -51,12 +52,12 @@ class CargoResponse(CargoBase):
 # =======================
 # 3. PERSONA
 # =======================
-class PersonaBase(BaseModel):
+class PersonaBase(Esquema):
     PER_Primer_Nombre: str = Field(..., min_length=2, max_length=50)
     PER_Segundo_Nombre: Optional[str] = Field(None, max_length=50)
     PER_Primer_Apellido: str = Field(..., min_length=2, max_length=50)
     PER_Segundo_Apellido: Optional[str] = Field(None, max_length=50)
-    PER_Email_Corporativo: CorporateEmail
+    PER_Email_Corporativo: PersonEmail
     PER_Telefono: Optional[str] = Field(None, max_length=20)
     
     # FKs
@@ -70,12 +71,12 @@ class PersonaBase(BaseModel):
 class PersonaCreate(PersonaBase):
     pass
 
-class PersonaUpdate(BaseModel):
+class PersonaUpdate(Esquema):
     PER_Primer_Nombre: Optional[str] = Field(None, min_length=2, max_length=50)
     PER_Segundo_Nombre: Optional[str] = Field(None, max_length=50)
     PER_Primer_Apellido: Optional[str] = Field(None, min_length=2, max_length=50)
     PER_Segundo_Apellido: Optional[str] = Field(None, max_length=50)
-    PER_Email_Corporativo: Optional[CorporateEmail] = None
+    PER_Email_Corporativo: Optional[PersonEmail] = None
     PER_Telefono: Optional[str] = Field(None, max_length=20)
     DEP_Departamento: Optional[int] = None
     CAR_Cargo: Optional[int] = None
@@ -124,7 +125,7 @@ class UsuarioUpdate(BaseModel):
     USU_Alcance_Global: Optional[bool] = None
     sedes: Optional[list[int]] = Field(None, max_length=200)
 
-class SedeRef(BaseModel):
+class SedeRef(Esquema):
     SED_Sede: int
     SED_Nombre: str
     model_config = ConfigDict(from_attributes=True)

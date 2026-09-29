@@ -1,17 +1,18 @@
 from typing import Optional, List
 from pydantic import BaseModel, Field, ConfigDict, model_validator
+from app.schemas.common import Esquema
 from datetime import date, datetime
 import uuid
 
 # --- TIPO LICENCIA ---
-class TipoLicenciaBase(BaseModel):
+class TipoLicenciaBase(Esquema):
     TLI_Nombre: str = Field(..., min_length=2, max_length=50)
     TLI_Descripcion: Optional[str] = Field(None, max_length=200)
 
 class TipoLicenciaCreate(TipoLicenciaBase):
     pass
 
-class TipoLicenciaUpdate(BaseModel):
+class TipoLicenciaUpdate(Esquema):
     TLI_Nombre: Optional[str] = Field(None, min_length=2, max_length=50)
     TLI_Descripcion: Optional[str] = Field(None, max_length=200)
 
@@ -20,7 +21,7 @@ class TipoLicenciaResponse(TipoLicenciaBase):
     model_config = ConfigDict(from_attributes=True)
 
 # --- SOFTWARE ---
-class SoftwareBase(BaseModel):
+class SoftwareBase(Esquema):
     SOF_Nombre: str = Field(..., min_length=2, max_length=100)
     SOF_Version: Optional[str] = Field(None, max_length=50)
     SOF_Fabricante: str = Field(..., min_length=2, max_length=100)
@@ -28,7 +29,7 @@ class SoftwareBase(BaseModel):
 class SoftwareCreate(SoftwareBase):
     pass
 
-class SoftwareUpdate(BaseModel):
+class SoftwareUpdate(Esquema):
     SOF_Nombre: Optional[str] = Field(None, min_length=2, max_length=100)
     SOF_Version: Optional[str] = Field(None, max_length=50)
     SOF_Fabricante: Optional[str] = Field(None, min_length=2, max_length=100)
@@ -38,12 +39,12 @@ class SoftwareResponse(SoftwareBase):
     model_config = ConfigDict(from_attributes=True)
 
 # --- LICENCIA (Inventario) ---
-class LicenciaClaveCreate(BaseModel):
+class LicenciaClaveCreate(Esquema):
     LCL_Clave_Activacion: str = Field(..., min_length=1, max_length=255)
     LCL_Referencia: Optional[str] = Field(None, max_length=120)
 
 
-class LicenciaClaveResponse(BaseModel):
+class LicenciaClaveResponse(Esquema):
     LCL_Licencia_Clave: int
     LIC_Licencia: int
     LCL_Clave_Activacion: str
@@ -58,7 +59,7 @@ class LicenciaClaveResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class LicenciaBase(BaseModel):
+class LicenciaBase(Esquema):
     LIC_Clave_Activacion: Optional[str] = Field(None, description="Serial Key")
     LIC_Fecha_Vencimiento: Optional[date] = None
     LIC_Cantidad_Total: int = Field(..., gt=0, description="Total de asientos comprados")
@@ -80,7 +81,7 @@ class LicenciaCreate(LicenciaBase):
             raise ValueError("LICENSE_KEY_COUNT_MISMATCH")
         return self
 
-class LicenciaUpdate(BaseModel):
+class LicenciaUpdate(Esquema):
     LIC_Clave_Activacion: Optional[str] = Field(None, max_length=255)
     LIC_Fecha_Vencimiento: Optional[date] = None
     LIC_Cantidad_Total: Optional[int] = Field(None, gt=0)
@@ -94,7 +95,7 @@ class LicenciaResponse(LicenciaBase):
     model_config = ConfigDict(from_attributes=True)
 
 # --- INSTALACIÓN (Asignación) ---
-class InstalacionBase(BaseModel):
+class InstalacionBase(Esquema):
     ACT_Activo: Optional[uuid.UUID] = None
     PER_Persona: Optional[uuid.UUID] = None
     LIC_Licencia: int
@@ -116,7 +117,7 @@ class InstalacionResponse(InstalacionBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-class _SoftwareSummary(BaseModel):
+class _SoftwareSummary(Esquema):
     SOF_Software: int
     SOF_Nombre: str
     SOF_Version: Optional[str] = None
@@ -124,13 +125,13 @@ class _SoftwareSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class _TipoLicenciaSummary(BaseModel):
+class _TipoLicenciaSummary(Esquema):
     TLI_Tipo_Licencia: int
     TLI_Nombre: str
     model_config = ConfigDict(from_attributes=True)
 
 
-class _LicenciaWithSoftware(BaseModel):
+class _LicenciaWithSoftware(Esquema):
     LIC_Licencia: int
     LIC_Fecha_Vencimiento: Optional[date] = None
     LIC_Cantidad_Total: int

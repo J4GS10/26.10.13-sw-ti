@@ -40,7 +40,7 @@ def internal_error(exc: Exception, code: str = "INTERNAL_ERROR") -> HTTPExceptio
             code=code,
             error=str(exc.orig) if hasattr(exc, "orig") else str(exc),
         )
-        return HTTPException(status_code=409, detail="INTEGRITY_CONSTRAINT_VIOLATED")
+        return HTTPException(status_code=409, detail=_detalle_integridad(exc))
     log.error("service.internal_error", code=code, error=str(exc), exc_type=type(exc).__name__)
     return HTTPException(status_code=500, detail=code)
 
@@ -68,3 +68,9 @@ class InvalidStateTransitionError(DomainError):
             code="INVALID_STATE_TRANSITION",
             message=f"No se puede pasar de '{current}' a '{target}' directamente.",
         )
+
+
+def _detalle_integridad(error: Exception) -> str:
+    """Código específico para un duplicado conocido (ver app/db/unicidad.py)."""
+    from app.db.unicidad import codigo_de_violacion
+    return codigo_de_violacion(error) or "INTEGRITY_CONSTRAINT_VIOLATED"

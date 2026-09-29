@@ -4,6 +4,7 @@ from decimal import Decimal
 import uuid
 
 from pydantic import BaseModel, Field, ConfigDict, EmailStr, model_validator
+from app.schemas.common import Esquema
 
 from app.core.currency import DEFAULT_CURRENCY, CurrencyCode
 from app.schemas.software import LicenciaClaveCreate
@@ -12,7 +13,7 @@ from app.schemas.software import LicenciaClaveCreate
 # =======================
 # PROVEEDOR
 # =======================
-class ProveedorBase(BaseModel):
+class ProveedorBase(Esquema):
     PRV_Nombre: str = Field(..., min_length=2, max_length=150)
     PRV_Identificacion_Fiscal: Optional[str] = Field(None, max_length=50)
     PRV_Contacto: Optional[str] = Field(None, max_length=100)
@@ -25,7 +26,7 @@ class ProveedorCreate(ProveedorBase):
     pass
 
 
-class ProveedorUpdate(BaseModel):
+class ProveedorUpdate(Esquema):
     PRV_Nombre: Optional[str] = Field(None, min_length=2, max_length=150)
     PRV_Identificacion_Fiscal: Optional[str] = Field(None, max_length=50)
     PRV_Contacto: Optional[str] = Field(None, max_length=100)
@@ -44,7 +45,7 @@ class ProveedorResponse(ProveedorBase):
 # =======================
 # LÍNEA DE ORDEN
 # =======================
-class LineaCreate(BaseModel):
+class LineaCreate(Esquema):
     OCL_Descripcion: str = Field(..., min_length=1, max_length=255)
     OCL_Cantidad: int = Field(1, gt=0)
     OCL_Precio_Unitario: Decimal = Field(0, ge=0)
@@ -53,7 +54,7 @@ class LineaCreate(BaseModel):
     LIC_Licencia: Optional[int] = None
 
 
-class LineaResponse(BaseModel):
+class LineaResponse(Esquema):
     OCL_Linea: int
     OCL_Descripcion: str
     OCL_Cantidad: int
@@ -68,7 +69,7 @@ class LineaResponse(BaseModel):
 # =======================
 # ORDEN DE COMPRA
 # =======================
-class OrdenCreate(BaseModel):
+class OrdenCreate(Esquema):
     OCO_Numero: str = Field(..., min_length=1, max_length=50)
     OCO_Fecha: date
     OCO_Moneda: CurrencyCode = DEFAULT_CURRENCY
@@ -80,21 +81,21 @@ class OrdenCreate(BaseModel):
     lineas: List[LineaCreate] = Field(default_factory=list)
 
 
-class OrdenEstadoUpdate(BaseModel):
+class OrdenEstadoUpdate(Esquema):
     OCO_Estado: str = Field(..., pattern="^(BORRADOR|RECIBIDA|CANCELADA)$")
 
 
 # =======================
 # RECEPCIÓN DE ORDEN (lazo cerrado: stock de consumibles + alta de activos)
 # =======================
-class RecepcionConsumible(BaseModel):
+class RecepcionConsumible(Esquema):
     """Una línea que reabastece un consumible: suma `cantidad` a su stock."""
     OCL_Linea: int
     CON_Consumible: int
     cantidad: int = Field(..., gt=0)
 
 
-class RecepcionActivo(BaseModel):
+class RecepcionActivo(Esquema):
     """Una línea que se convierte en un activo nuevo (alta + enlace a la orden)."""
     OCL_Linea: int
     ACT_Codigo_Interno: Optional[str] = Field(None, min_length=3, max_length=50)
@@ -107,7 +108,7 @@ class RecepcionActivo(BaseModel):
     ACT_Costo: Optional[Decimal] = Field(None, ge=0)
 
 
-class RecepcionLicencia(BaseModel):
+class RecepcionLicencia(Esquema):
     """Una linea que registra software/licencias, con claves individuales opcionales."""
     OCL_Linea: int
     SOF_Software: int
@@ -128,13 +129,13 @@ class RecepcionLicencia(BaseModel):
         return self
 
 
-class RecepcionOrden(BaseModel):
+class RecepcionOrden(Esquema):
     consumibles: List[RecepcionConsumible] = Field(default_factory=list)
     activos: List[RecepcionActivo] = Field(default_factory=list)
     licencias: List[RecepcionLicencia] = Field(default_factory=list)
 
 
-class RecepcionResultado(BaseModel):
+class RecepcionResultado(Esquema):
     OCO_Orden: int
     OCO_Estado: str
     consumibles_reabastecidos: int
@@ -144,13 +145,13 @@ class RecepcionResultado(BaseModel):
     activos_codigos: List[str] = Field(default_factory=list)
 
 
-class _ProveedorSummary(BaseModel):
+class _ProveedorSummary(Esquema):
     PRV_Proveedor: int
     PRV_Nombre: str
     model_config = ConfigDict(from_attributes=True)
 
 
-class OrdenResponse(BaseModel):
+class OrdenResponse(Esquema):
     OCO_Orden: int
     OCO_Numero: str
     OCO_Fecha: date
@@ -173,7 +174,7 @@ class OrdenDetalleResponse(OrdenResponse):
 # =======================
 # GARANTÍAS
 # =======================
-class GarantiaItem(BaseModel):
+class GarantiaItem(Esquema):
     ACT_Activo: uuid.UUID
     ACT_Codigo_Interno: str
     ACT_Serie_Fabricante: str

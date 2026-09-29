@@ -155,6 +155,12 @@ async def sso_callback(
     return response
 
 
+def _no_store(response: Response) -> None:
+    """Las respuestas con tokens o challenges no se guardan en cachés intermedias."""
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+
+
 @router.post("/login/access-token")
 @limiter.limit(settings.RATE_LIMIT_LOGIN)
 async def login_access_token(
@@ -191,14 +197,28 @@ async def login_access_token(
         raise HTTPException(status_code=400, detail="INCORRECT_USERNAME_OR_PASSWORD")
 
     now = _now()
+    _no_store(response)
 
-    # ¿Cuenta bloqueada por intentos previos?
-    if user.USU_Bloqueado_Hasta and user.USU_Bloqueado_Hasta > now:
+    # Un bloqueo ya vencido deja el contador en cero: sin esto, tras los 15
+    # minutos un solo fallo volvía a bloquear la cuenta.
+    if user.USU_Bloqueado_Hasta and user.USU_Bloqueado_Hasta <= now:
+        user.USU_Bloqueado_Hasta = None
+        user.USU_Intentos_Fallidos = 0
+    bloqueada = bool(user.USU_Bloqueado_Hasta and user.USU_Bloqueado_Hasta > now)
+
+    # Verificar contraseña ANTES de revelar el bloqueo: con una contraseña
+    # errónea la respuesta es la misma que para un usuario inexistente (no se
+    # puede averiguar qué cuentas existen provocando su bloqueo).
+    password_ok = bool(user.USU_Password_Hash) and security.verify_password(
+        form_data.password, user.USU_Password_Hash)
+    if bloqueada:
         await _audit_failed("account_locked", usuario_id=user.USU_Usuario)
-        raise HTTPException(status_code=429, detail="ACCOUNT_LOCKED")
+        if password_ok:
+            raise HTTPException(status_code=429, detail="ACCOUNT_LOCKED")
+        raise HTTPException(status_code=400, detail="INCORRECT_USERNAME_OR_PASSWORD")
 
     # Verificar contraseña
-    if not user.USU_Password_Hash or not security.verify_password(form_data.password, user.USU_Password_Hash):
+    if not password_ok:
         user.USU_Intentos_Fallidos = (user.USU_Intentos_Fallidos or 0) + 1
         locked = user.USU_Intentos_Fallidos >= settings.ACCOUNT_LOCKOUT_THRESHOLD
         if locked:
@@ -252,7 +272,7 @@ async def login_access_token(
         return {
             "requires_2fa": True,
             "method": user.USU_2FA_Metodo,
-            "challenge_token": security.create_2fa_challenge_token(user.USU_Username),
+            "challenge_token": security.create_2fa_challenge_token(user.USU_Username, user.USU_Password_Hash),
         }
 
     # Login exitoso (sin 2FA).
@@ -290,20 +310,31 @@ async def verify_2fa(
     ua = get_user_agent(request)
     gov_repo = GovernanceRepository(db)
 
-    username = security.decode_2fa_challenge(challenge_token)
-    if not username:
+    _no_store(response)
+    challenge = security.decode_2fa_challenge(challenge_token)
+    if not challenge:
         raise HTTPException(status_code=401, detail="INVALID_OR_EXPIRED_2FA_CHALLENGE")
+    username = challenge["sub"]
 
     repo = UsuarioRepository(db)
     user = await repo.get_by_username(username)
     if not user or not user.USU_Estado or not user.USU_2FA_Habilitado:
+        raise HTTPException(status_code=401, detail="INVALID_OR_EXPIRED_2FA_CHALLENGE")
+    # El challenge sirve una sola vez y solo con la contraseña con que se emitió.
+    if challenge.get("pwf") != security.password_fingerprint(user.USU_Password_Hash)             or await gov_repo.get_revocation(challenge["jti"]):
         raise HTTPException(status_code=401, detail="INVALID_OR_EXPIRED_2FA_CHALLENGE")
 
     now = _now()
     if user.USU_Bloqueado_Hasta and user.USU_Bloqueado_Hasta > now:
         raise HTTPException(status_code=429, detail="ACCOUNT_LOCKED")
 
-    if not await TwoFactorService(db).verify_login(user, code):
+    two_factor = TwoFactorService(db)
+    if await two_factor.totp_ya_usado(user, code):
+        # Un código válido que ya se usó (p. ej. otra pestaña o doble clic) no
+        # es un ataque: se pide el siguiente sin sumar al bloqueo.
+        raise HTTPException(status_code=400, detail="TOTP_ALREADY_USED")
+
+    if not await two_factor.verify_login(user, code):
         # Los códigos fallidos cuentan para el bloqueo de la cuenta igual que
         # las contraseñas: sin esto, 6 dígitos se podían probar sin límite
         # (repartiendo intentos entre IPs y reutilizando el challenge).
@@ -321,6 +352,11 @@ async def verify_2fa(
         await db.commit()
         raise HTTPException(status_code=429 if locked else 400, detail="ACCOUNT_LOCKED" if locked else "INVALID_2FA_CODE")
 
+    if not await gov_repo.revoke_jti_once(
+        challenge["jti"], "2fa", _exp(challenge), usuario_id=user.USU_Usuario,
+    ):
+        # Dos verificaciones simultáneas con el mismo challenge: solo una abre sesión.
+        raise HTTPException(status_code=401, detail="INVALID_OR_EXPIRED_2FA_CHALLENGE")
     user.USU_Intentos_Fallidos = 0
     user.USU_Bloqueado_Hasta = None
     user.USU_Ultimo_Login = now
@@ -379,6 +415,7 @@ async def refresh_access_token(
     Fuente del refresh token: primero el body (clientes API), luego la cookie
     HttpOnly `rtk` (navegador). El nuevo refresh solo se entrega en cookie.
     """
+    _no_store(response)
     token = refresh_token or request.cookies.get(_REFRESH_COOKIE)
     if not token:
         raise HTTPException(status_code=401, detail="MISSING_REFRESH_TOKEN")

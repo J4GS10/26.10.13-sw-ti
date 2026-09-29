@@ -255,11 +255,13 @@ class DirectorySyncService:
                     })
                     continue
                 p.PER_Estado = False
-                await self.db.execute(
-                    Usuario.__table__.update()
-                    .where(Usuario.PER_Persona == p.PER_Persona)
-                    .values(USU_Estado=False)
-                )
+                from app.core.data_scope import elevated
+                async with elevated(self.db):  # columna de identidad protegida
+                    await self.db.execute(
+                        Usuario.__table__.update()
+                        .where(Usuario.PER_Persona == p.PER_Persona)
+                        .values(USU_Estado=False)
+                    )
                 result["desactivados"] += 1
 
         await self.db.flush()

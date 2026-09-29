@@ -75,15 +75,24 @@ async def upload_adjunto_orden(
 
 @router.get("/{id}/download")
 async def download_adjunto(id: uuid.UUID, service: AttachmentService = Depends(get_service)):
+    import os
+    from app.core.file_types import mime_de, sanear_nombre
     adjunto, content = await service.get_for_download(id)
+    nombre = sanear_nombre(adjunto.ADJ_Nombre_Original)
+    # MIME derivado de la extensión (los adjuntos antiguos podían traer el MIME
+    # que envió el navegador) y descarga forzada en un contexto aislado.
+    ascii_nombre = nombre.encode("ascii", "ignore").decode() or "archivo"
+    ascii_nombre = ascii_nombre.replace('"', "").replace("\\", "")
     return Response(
         content=content,
-        media_type=adjunto.ADJ_Tipo_MIME or "application/octet-stream",
+        media_type=mime_de(os.path.splitext(nombre)[1]),
         headers={
             "Content-Disposition": (
-                "attachment; filename*=UTF-8''"
-                f"{quote(adjunto.ADJ_Nombre_Original)}"
-            )
+                f'attachment; filename="{ascii_nombre}"; '
+                f"filename*=UTF-8''{quote(nombre, safe='')}"
+            ),
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "sandbox; default-src 'none'",
         },
     )
 

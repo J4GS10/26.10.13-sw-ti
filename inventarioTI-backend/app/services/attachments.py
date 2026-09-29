@@ -100,7 +100,8 @@ class AttachmentService:
         if categoria not in _VALID_CATEGORIES:
             raise HTTPException(400, "INVALID_ATTACHMENT_CATEGORY")
 
-        original = file.filename or "archivo"
+        from app.core.file_types import contenido_coincide, mime_de, sanear_nombre
+        original = sanear_nombre(file.filename)
         ext = os.path.splitext(original)[1].lower()
         if ext not in settings.ALLOWED_UPLOAD_EXTENSIONS:
             raise HTTPException(400, "FILE_TYPE_NOT_ALLOWED")
@@ -111,26 +112,32 @@ class AttachmentService:
             raise HTTPException(413, f"FILE_TOO_LARGE_MAX_MB:{settings.MAX_UPLOAD_SIZE_MB}")
         if len(content) == 0:
             raise HTTPException(400, "EMPTY_FILE")
+        # El contenido debe ser realmente lo que dice la extensión (un .exe
+        # renombrado a .pdf o un HTML guardado como .jpg se rechazan) y el MIME
+        # lo decide el servidor, nunca el navegador.
+        if not contenido_coincide(ext, content):
+            raise HTTPException(400, "FILE_CONTENT_MISMATCH")
+        mime = mime_de(ext)
 
         stored_name = f"{uuid.uuid4().hex}{ext}"
         object_key = f"{kind}/{owner_id}/{stored_name}"
 
         try:
             stored = await storage_service.put_bytes(
-                object_key, content, file.content_type or None
+                object_key, content, mime
             )
         except StorageUnavailableError as exc:
             raise HTTPException(503, str(exc)) from exc
 
         try:
             adjunto = Adjunto(
-                ADJ_Nombre_Original=original[:255],
+                ADJ_Nombre_Original=original,
                 ADJ_Nombre_Almacenado=stored_name,
                 ADJ_Storage_Backend=stored.backend,
                 ADJ_Bucket=stored.bucket,
                 ADJ_Object_Key=stored.object_key,
                 ADJ_Checksum_SHA256=stored.checksum_sha256,
-                ADJ_Tipo_MIME=(file.content_type or None),
+                ADJ_Tipo_MIME=mime,
                 ADJ_Tamano_Bytes=len(content),
                 ADJ_Categoria=categoria,
                 ADJ_Descripcion=descripcion,

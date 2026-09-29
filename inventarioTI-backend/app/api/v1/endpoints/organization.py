@@ -4,7 +4,7 @@ import uuid
 from fastapi import APIRouter, Depends, Response, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUser, get_client_ip, require_admin, require_iam, require_super_admin
+from app.api.deps import CurrentUser, get_client_ip, require_admin, require_business, require_iam, require_super_admin
 from app.core.limiter import limiter
 from app.db.session import get_db
 from app.schemas.organization import (
@@ -43,7 +43,7 @@ async def sedes_en_alcance(db: AsyncSession = Depends(get_db)):
 
 
 # ================= DEPARTAMENTOS =================
-@router.get("/departamentos/resumen")
+@router.get("/departamentos/resumen", dependencies=[Depends(require_business)])
 @limiter.limit("10/minute")
 async def departamentos_resumen(request: Request, service: OrganizationService = Depends(get_service)):
     """
@@ -54,7 +54,7 @@ async def departamentos_resumen(request: Request, service: OrganizationService =
     return await service.departamentos_resumen()
 
 
-@router.get("/departamentos/{id}/detalle")
+@router.get("/departamentos/{id}/detalle", dependencies=[Depends(require_business)])
 @limiter.limit("10/minute")
 async def get_departamento_detalle(id: int, request: Request, service: OrganizationService = Depends(get_service)):
     """
@@ -312,7 +312,7 @@ async def persona_contexto(id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     return await SuggestionService(db).persona(id)
 
 
-@router.get("/departamentos/{id}/contexto")
+@router.get("/departamentos/{id}/contexto", dependencies=[Depends(require_business)])
 async def departamento_contexto(id: int, db: AsyncSession = Depends(get_db)):
     """Cargo, jefe y área más probables para una persona nueva del departamento."""
     return await SuggestionService(db).departamento(id)

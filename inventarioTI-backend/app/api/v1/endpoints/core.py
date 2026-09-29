@@ -145,7 +145,7 @@ async def delete_activo(
 
 
 @router.post("/activos/search", response_model=PaginatedResponse[ActivoResponse])
-@limiter.limit("30/minute")
+@limiter.limit("120/minute")  # por usuario autenticado (ver rate_limit_key)
 async def search_activos(
     request: Request,
     filters: ActivoFilter,

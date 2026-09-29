@@ -26,7 +26,7 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.data_scope import area_sede_id, current_scope, default_sede_id
-from app.core.roles import IAM_ROLES, PROTECTED_ROLES
+from app.core.roles import BUSINESS_ROLES, IAM_ROLES, PROTECTED_ROLES
 from app.models.location import Sede
 from app.models.catalogs import Marca, Modelo, TipoActivo
 from app.models.core import Activo
@@ -188,6 +188,11 @@ class SuggestionService:
         scope = current_scope()
         if scope is not None and scope.rol not in IAM_ROLES:
             return base
+        # ADMIN_SEGURIDAD gestiona cuentas, no inventario: no ve los equipos
+        # en custodia ni el área de trabajo (separación de funciones).
+        if scope is not None and scope.rol not in BUSINESS_ROLES:
+            base["activos_vigentes"] = []
+            base["area_sugerida"] = None
 
         usuario = (await self.db.execute(select(Usuario).where(Usuario.PER_Persona == persona_id))).scalar_one_or_none()
         rol, origen_rol = await self._rol_frecuente(Persona.CAR_Cargo, p.CAR_Cargo), "cargo"

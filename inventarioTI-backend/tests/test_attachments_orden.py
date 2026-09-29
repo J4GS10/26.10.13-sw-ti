@@ -16,7 +16,7 @@ async def test_factura_en_orden(client, auth_headers, sa_user):
     up = await client.post(
         f"/api/v1/adjuntos/ordenes/{oid}",
         headers=auth_headers,
-        files={"file": ("factura.pdf", b"%PDF factura orden", "application/pdf")},
+        files={"file": ("factura.pdf", b"%PDF-1.4 factura orden", "application/pdf")},
         data={"categoria": "factura"},
     )
     assert up.status_code == 201, up.text
@@ -29,7 +29,7 @@ async def test_factura_en_orden(client, auth_headers, sa_user):
 
     dl = await client.get(f"/api/v1/adjuntos/{body['ADJ_Adjunto']}/download", headers=auth_headers)
     assert dl.status_code == 200
-    assert dl.content == b"%PDF factura orden"
+    assert dl.content == b"%PDF-1.4 factura orden"
 
 
 @pytest.mark.asyncio

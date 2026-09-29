@@ -497,7 +497,10 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
                             raise HTTPException(
                                 400, "CANNOT_OFFBOARD_LAST_SUPER_ADMIN"
                             )
-                    usuario_target.USU_Estado = False
+                    from app.core.data_scope import elevated
+                    async with elevated(self.db):  # columna de identidad protegida
+                        usuario_target.USU_Estado = False
+                        await self.db.flush()
                     from datetime import datetime as _dt, timezone as _tz
                     far = _dt.now(_tz.utc).replace(tzinfo=None).replace(year=_dt.now().year + 1)
                     await self.gov_repo.revoke_all_user_tokens(usuario_target.USU_Usuario, expira=far)
