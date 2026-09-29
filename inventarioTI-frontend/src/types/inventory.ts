@@ -49,6 +49,11 @@ export interface Activo {
   TAC_Tipo_Activo: number;
   EOP_Estado_Operativo: number;
   ACT_Activo_Padre: string | null;
+  ARE_Area_Ubicacion?: number | null;
+  ACT_Baja_Motivo?: string | null;
+  ACT_Baja_Destino?: string | null;
+  ACT_Baja_Fecha?: string | null;
+  ACT_Baja_Documento?: string | null;
   /** Sede a la que pertenece (alcance de datos). */
   SED_Sede?: number | null;
 

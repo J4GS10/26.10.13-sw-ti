@@ -19,6 +19,8 @@ export interface AuditEvent {
   AUD_IP_Origen: string | null;
   AUD_User_Agent: string | null;
   USU_Usuario: string | null;
+  /** Nombre legible de quien hizo el cambio (el servidor lo resuelve). */
+  usuario_nombre?: string | null;
 }
 
 export interface AuditList {

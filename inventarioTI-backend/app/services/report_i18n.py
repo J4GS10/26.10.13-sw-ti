@@ -85,7 +85,9 @@ _TIPOS_ACTIVO = [
 
 _ESTADOS_ORDEN = [
     _entry("Borrador", "Draft", "Bozza", "BORRADOR"),
+    _entry("Recibida parcialmente", "Partially received", "Ricevuto parzialmente", "PARCIAL"),
     _entry("Recibida", "Received", "Ricevuto", "RECIBIDA"),
+    _entry("Cerrada con faltante", "Closed with shortage", "Chiuso con mancanze", "CERRADA_CON_FALTANTE"),
     _entry("Cancelada", "Cancelled", "Annullato", "CANCELADA"),
 ]
 

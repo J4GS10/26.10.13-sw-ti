@@ -7,9 +7,14 @@ import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../../components/ui';
 import { useConfirm } from '../../components/confirm-context';
 import { useSnackbar } from 'notistack';
-import { getApiErrorDetail } from '../../api/errors';
+import { getApiErrorMessage } from '../../api/errors';
+import { usePermissions } from '../../hooks/usePermissions';
+import { formatDate } from '../../utils/dates';
 import { attachmentService, Adjunto } from './attachmentService';
 const CATEGORIES = ['factura', 'foto', 'acta', 'otro'];
+// Mismos límites que el servidor: se avisa antes de subir.
+const MAX_MB = 10;
+const ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,.docx,.xlsx,.csv,.txt';
 const fmtSize = (bytes: number): string => {
     if (bytes < 1024)
         return `${bytes} B`;
@@ -22,11 +27,14 @@ interface Props {
     ordenId?: number;
 }
 export const AttachmentsSection = ({ activoId, ordenId }: Props) => {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const confirm = useConfirm();
+    const { canOperate, canAdminInventory } = usePermissions();
     const { enqueueSnackbar } = useSnackbar();
     const fileRef = useRef<HTMLInputElement>(null);
     const isOrden = ordenId != null;
+    // Subir: operativos en activos, administradores en órdenes. Eliminar: administradores.
+    const puedeSubir = isOrden ? canAdminInventory : canOperate;
     const [items, setItems] = useState<Adjunto[]>([]);
     const [loading, setLoading] = useState(false);
     const [categoria, setCategoria] = useState(isOrden ? 'factura' : 'otro');
@@ -52,6 +60,19 @@ export const AttachmentsSection = ({ activoId, ordenId }: Props) => {
         const file = e.target.files?.[0];
         if (!file)
             return;
+        const ext = `.${file.name.split('.').pop()?.toLowerCase() ?? ''}`;
+        if (!ACCEPT.split(',').includes(ext)) {
+            enqueueSnackbar(t('attachments.err_type'), { variant: 'warning' });
+            if (fileRef.current)
+                fileRef.current.value = '';
+            return;
+        }
+        if (file.size > MAX_MB * 1024 * 1024) {
+            enqueueSnackbar(t('attachments.err_size_max', { max: MAX_MB }), { variant: 'warning' });
+            if (fileRef.current)
+                fileRef.current.value = '';
+            return;
+        }
         setUploading(true);
         try {
             if (isOrden)
@@ -62,14 +83,7 @@ export const AttachmentsSection = ({ activoId, ordenId }: Props) => {
             await load();
         }
         catch (err: unknown) {
-            const code = getApiErrorDetail(err);
-            let msg = t('common.error_generic');
-            if (code === 'FILE_TYPE_NOT_ALLOWED')
-                msg = t('attachments.err_type');
-            else if (typeof code === 'string' && code.startsWith('FILE_TOO_LARGE')) {
-                msg = t('attachments.err_size');
-            }
-            enqueueSnackbar(msg, { variant: 'error' });
+            enqueueSnackbar(getApiErrorMessage(err, t('common.error_generic')), { variant: 'error' });
         }
         finally {
             setUploading(false);
@@ -82,25 +96,26 @@ export const AttachmentsSection = ({ activoId, ordenId }: Props) => {
             return;
         try {
             await attachmentService.remove(id);
+            enqueueSnackbar(t('attachments.deleted'), { variant: 'success' });
             await load();
         }
-        catch {
-            enqueueSnackbar(t('common.error_generic'), { variant: 'error' });
+        catch (err: unknown) {
+            enqueueSnackbar(getApiErrorMessage(err, t('common.error_generic')), { variant: 'error' });
         }
     };
     return (<Box>
-      <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2, flexWrap: 'wrap' }}>
+      {puedeSubir && (<Stack direction="row" spacing={2} alignItems="center" useFlexGap sx={{ mb: 2, flexWrap: 'wrap' }}>
         <TextField select size="small" label={t('attachments.category')} value={categoria} onChange={(e) => setCategoria(e.target.value)} sx={{ minWidth: 160 }}>
           {CATEGORIES.map((c) => (<MenuItem key={c} value={c}>{t(`attachments.cat_${c}`, c)}</MenuItem>))}
         </TextField>
-        <input ref={fileRef} type="file" hidden onChange={handleFile}/>
+        <input ref={fileRef} type="file" hidden accept={ACCEPT} onChange={handleFile}/>
         <Button variant="contained" startIcon={uploading ? <CircularProgress size={18}/> : <UploadFileIcon />} onClick={() => fileRef.current?.click()} disabled={uploading}>
           {t('attachments.upload')}
         </Button>
         <Typography variant="caption" color="text.secondary">
           {t('attachments.hint')}
         </Typography>
-      </Stack>
+      </Stack>)}
 
       {loading ? (<Box display="flex" justifyContent="center" py={3}><CircularProgress /></Box>) : items.length === 0 ? (<EmptyState compact title={t('attachments.empty')}/>) : (<TableContainer>
           <Table size="small">
@@ -118,18 +133,18 @@ export const AttachmentsSection = ({ activoId, ordenId }: Props) => {
                   <TableCell>{a.ADJ_Nombre_Original}</TableCell>
                   <TableCell><Chip size="small" label={t(`attachments.cat_${a.ADJ_Categoria}`, a.ADJ_Categoria)}/></TableCell>
                   <TableCell>{fmtSize(a.ADJ_Tamano_Bytes)}</TableCell>
-                  <TableCell>{a.ADJ_Fecha_Subida.slice(0, 10)}</TableCell>
+                  <TableCell>{formatDate(a.ADJ_Fecha_Subida, i18n.language)}</TableCell>
                   <TableCell align="right">
                     <Tooltip title={t('attachments.download') as string}>
                       <IconButton size="small" color="primary" onClick={() => attachmentService.download(a)}>
                         <DownloadIcon fontSize="small"/>
                       </IconButton>
                     </Tooltip>
-                    <Tooltip title={t('common.delete') as string}>
-                      <IconButton size="small" color="error" onClick={() => handleDelete(a.ADJ_Adjunto)}>
+                    {canAdminInventory && (<Tooltip title={t('common.delete') as string}>
+                      <IconButton size="small" color="error" onClick={() => handleDelete(a.ADJ_Adjunto)} aria-label={t('common.delete')}>
                         <DeleteIcon fontSize="small"/>
                       </IconButton>
-                    </Tooltip>
+                    </Tooltip>)}
                   </TableCell>
                 </TableRow>))}
             </TableBody>

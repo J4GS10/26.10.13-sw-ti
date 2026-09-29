@@ -8,3 +8,4 @@ export { KpiCard } from './KpiCard';
 export { SuggestionHint, ContextCaption } from './SuggestionHint';
 export { SedeField } from './SedeField';
 export { MoneyField } from './MoneyField';
+export { KardexTimeline } from './KardexTimeline';

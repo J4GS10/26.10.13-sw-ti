@@ -1,3 +1,4 @@
+import { hoyLocal } from '../../utils/dates';
 import client from '../../api/axios';
 import { Activo, ActivoCreate, Marca, Modelo, ModeloFlat, TipoActivo, EstadoOperativo } from '../../types/inventory';
 import type { Movimiento } from '../../types/traceability';
@@ -144,11 +145,12 @@ export const assetService = {
     });
     return r.data;
   },
-  desinstalarLicencia: async (activoId: string, licenciaId: number) => {
+  desinstalarLicencia: async (activoId: string, licenciaId: number, motivo?: string) => {
     const r = await client.post('/soft/instalaciones/desinstalar', {
       ACT_Activo: activoId,
       LIC_Licencia: licenciaId,
-      INS_Fecha_Instalacion: new Date().toISOString().slice(0, 10),
+      INS_Fecha_Instalacion: hoyLocal(),
+      motivo: motivo || undefined,
     });
     return r.data;
   },

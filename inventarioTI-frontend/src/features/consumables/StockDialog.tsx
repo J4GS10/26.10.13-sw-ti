@@ -1,20 +1,24 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Dialog, DialogTitle, DialogContent, DialogActions, Autocomplete, Box, Button, TextField, CircularProgress, Typography, Stack, } from '@mui/material';
+import { Alert, Dialog, DialogTitle, DialogContent, DialogActions, Autocomplete, Box, Button, TextField, CircularProgress, Typography, Stack, } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { SectionCard } from '../../components/ui';
+import { MoneyField, SectionCard } from '../../components/ui';
 import { useSnackbar } from 'notistack';
-import { getApiErrorDetail } from '../../api/errors';
+import { getApiErrorMessage } from '../../api/errors';
 import { consumableService } from './consumableService';
-import { Consumible, StockMovimientoCreate } from '../../types/consumables';
+import { Consumible, MovimientoConsumible, StockMovimientoCreate } from '../../types/consumables';
 import { personService } from '../persons/personService';
 import { PersonaResumen } from '../../types/users';
 import { createSearchFilter } from '../../utils/autocomplete';
+import { DEFAULT_CURRENCY } from '../../utils/currency';
+import { usePermissions } from '../../hooks/usePermissions';
+export type StockModo = 'entrada' | 'salida' | 'ajuste';
 interface Props {
     open: boolean;
-    modo: 'entrada' | 'salida';
+    modo: StockModo;
     consumible: Consumible | null;
-    onClose: (refresh?: boolean) => void;
+    /** `reponer`: el usuario pidió generar una orden de compra para reponer. */
+    onClose: (refresh?: boolean, reponer?: { consumible: Consumible; sugerido: number }) => void;
 }
 interface StockFormValues {
     MOC_Cantidad: string | number;
@@ -33,46 +37,71 @@ const personLabel = (person: PersonaResumen) => [
     person.PER_Primer_Apellido,
     person.PER_Segundo_Apellido,
 ].filter(Boolean).join(' ');
+
+/**
+ * Entrada (con costo y moneda), salida (a una persona) o ajuste por conteo
+ * físico. Si una salida deja el stock en el mínimo o por debajo, el diálogo lo
+ * dice y ofrece generar la orden de compra de reposición.
+ */
 export const StockDialog = ({ open, modo, consumible, onClose }: Props) => {
     const { t } = useTranslation();
     const { enqueueSnackbar } = useSnackbar();
+    const { canAdminInventory } = usePermissions();
     const { register, handleSubmit, reset, formState: { errors } } = useForm<StockFormValues>();
     const [loading, setLoading] = useState(false);
     const [personas, setPersonas] = useState<PersonaResumen[]>([]);
     const [persona, setPersona] = useState('');
+    const [precio, setPrecio] = useState('');
+    const [moneda, setMoneda] = useState<string>(DEFAULT_CURRENCY);
+    const [bajoMinimo, setBajoMinimo] = useState<MovimientoConsumible | null>(null);
     useEffect(() => {
         if (!open)
             return;
-        reset({ MOC_Cantidad: 1, MOC_Motivo: '' });
+        reset({ MOC_Cantidad: modo === 'ajuste' ? consumible?.CON_Stock_Actual ?? 0 : 1, MOC_Motivo: '' });
         setPersona('');
+        setPrecio(consumible?.CON_Costo_Unitario != null ? String(consumible.CON_Costo_Unitario) : '');
+        setMoneda(consumible?.CON_Moneda ?? DEFAULT_CURRENCY);
+        setBajoMinimo(null);
         if (modo === 'salida') {
-            personService.list().then(setPersonas).catch(() => setPersonas([]));
+            personService.list().then((p) => setPersonas(p.filter((x) => x.PER_Estado !== false))).catch(() => setPersonas([]));
         }
-    }, [open, reset, modo]);
+    }, [open, reset, modo, consumible]);
     const onSubmit = async (data: StockFormValues) => {
         if (!consumible)
             return;
         setLoading(true);
         try {
+            if (modo === 'ajuste') {
+                await consumableService.ajuste(consumible.CON_Consumible, {
+                    CON_Stock_Real: Number(data.MOC_Cantidad), MOC_Motivo: data.MOC_Motivo.trim(),
+                });
+                enqueueSnackbar(t('consumables.adjust_done'), { variant: 'success' });
+                onClose(true);
+                return;
+            }
             const payload: StockMovimientoCreate = {
                 MOC_Cantidad: Number(data.MOC_Cantidad),
                 MOC_Motivo: data.MOC_Motivo || undefined,
             };
             if (modo === 'salida' && persona)
                 payload.PER_Persona = persona;
-            if (modo === 'entrada')
-                await consumableService.entrada(consumible.CON_Consumible, payload);
-            else
-                await consumableService.salida(consumible.CON_Consumible, payload);
+            if (modo === 'entrada' && precio !== '') {
+                payload.precio_unitario = precio;
+                payload.moneda = moneda;
+            }
+            const mov = modo === 'entrada'
+                ? await consumableService.entrada(consumible.CON_Consumible, payload)
+                : await consumableService.salida(consumible.CON_Consumible, payload);
             enqueueSnackbar(t('consumables.stock_updated'), { variant: 'success' });
+            if (mov.bajo_minimo) {
+                // Diálogo: se queda abierto para ofrecer la reposición.
+                setBajoMinimo(mov);
+                return;
+            }
             onClose(true);
         }
         catch (err: unknown) {
-            const code = getApiErrorDetail(err);
-            const msg = code === 'INSUFFICIENT_STOCK'
-                ? t('consumables.error_insufficient')
-                : t('common.error_generic');
-            enqueueSnackbar(msg, { variant: 'error' });
+            enqueueSnackbar(getApiErrorMessage(err, t('common.error_generic')), { variant: 'error' });
         }
         finally {
             setLoading(false);
@@ -80,13 +109,41 @@ export const StockDialog = ({ open, modo, consumible, onClose }: Props) => {
     };
     const title = modo === 'entrada'
         ? t('consumables.entry_title')
-        : t('consumables.exit_title');
+        : modo === 'salida' ? t('consumables.exit_title') : t('consumables.adjust_title');
+
+    if (bajoMinimo && consumible) {
+        const minimo = bajoMinimo.CON_Stock_Minimo ?? consumible.CON_Stock_Minimo;
+        // Sugerencia: volver al doble del mínimo.
+        const sugerido = Math.max(minimo * 2 - bajoMinimo.MOC_Stock_Resultante, 1);
+        return (<Dialog open={open} onClose={() => onClose(true)} maxWidth="xs" fullWidth>
+          <DialogTitle>{t('consumables.low_title')}</DialogTitle>
+          <DialogContent>
+            <Alert severity="warning">
+              {t('consumables.low_message', { name: consumible.CON_Nombre, stock: bajoMinimo.MOC_Stock_Resultante, min: minimo, unit: consumible.CON_Unidad })}
+            </Alert>
+            {!canAdminInventory && (<Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>{t('consumables.low_notify_admin')}</Typography>)}
+          </DialogContent>
+          <DialogActions>
+            <Button color="inherit" onClick={() => onClose(true)}>{t('consumables.low_later')}</Button>
+            {canAdminInventory && (<Button variant="contained" onClick={() => onClose(true, { consumible, sugerido })}>
+                {t('consumables.low_create_order', { count: sugerido })}
+              </Button>)}
+          </DialogActions>
+        </Dialog>);
+    }
+
     return (<Dialog open={open} onClose={() => onClose()} maxWidth="xs" fullWidth>
       <DialogTitle>{title}</DialogTitle>
-      <form onSubmit={handleSubmit(onSubmit)}>
+      <form onSubmit={handleSubmit(onSubmit)} noValidate>
         <DialogContent>
           <SectionCard title={t('consumables.sections.movement')} subtitle={consumible ? `${consumible.CON_Nombre} — ${t('consumables.current_stock')}: ${consumible.CON_Stock_Actual} ${consumible.CON_Unidad}` : undefined}>
-          <TextField autoFocus fullWidth margin="dense" type="number" label={t('consumables.quantity')} {...register('MOC_Cantidad', { required: true, min: 1 })} error={!!errors.MOC_Cantidad}/>
+          {modo === 'ajuste' && (<Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>{t('consumables.adjust_help')}</Typography>)}
+          <TextField autoFocus fullWidth margin="dense" type="number"
+            label={modo === 'ajuste' ? t('consumables.counted_stock') : t('consumables.quantity')}
+            {...register('MOC_Cantidad', { required: true, min: modo === 'ajuste' ? 0 : 1 })}
+            error={!!errors.MOC_Cantidad} helperText={errors.MOC_Cantidad ? t('consumables.quantity_invalid') : undefined}/>
+          {modo === 'entrada' && (<MoneyField fullWidth margin="dense" label={t('consumables.unit_cost')} value={precio} onChange={setPrecio}
+              currency={moneda} onCurrencyChange={setMoneda} helperText={t('consumables.unit_cost_help')}/>)}
           {modo === 'salida' && (<Autocomplete fullWidth options={personas} value={personas.find((person) => person.PER_Persona === persona) ?? null} onChange={(_, person) => setPersona(person?.PER_Persona ?? '')} getOptionLabel={personLabel} filterOptions={personFilter} autoHighlight openOnFocus={false} isOptionEqualToValue={(option, selected) => option.PER_Persona === selected.PER_Persona} noOptionsText={t('common.type_to_search')} renderOption={(props, person) => (<Box component="li" {...props} key={person.PER_Persona}>
                   <Stack spacing={0.25} sx={{ minWidth: 0 }}>
                     <Typography variant="body2" sx={{ fontWeight: 700 }}>
@@ -97,7 +154,9 @@ export const StockDialog = ({ open, modo, consumible, onClose }: Props) => {
                     </Typography>
                   </Stack>
                 </Box>)} renderInput={(params) => (<TextField {...params} margin="dense" label={t('consumables.recipient')}/>)}/>)}
-          <TextField fullWidth margin="dense" label={t('consumables.reason')} {...register('MOC_Motivo')}/>
+          <TextField fullWidth margin="dense" label={t('consumables.reason')} required={modo === 'ajuste'}
+            {...register('MOC_Motivo', modo === 'ajuste' ? { validate: (v) => v.trim().length >= 5 } : {})}
+            error={!!errors.MOC_Motivo} helperText={modo === 'ajuste' ? t('consumables.adjust_reason_help') : undefined}/>
           </SectionCard>
         </DialogContent>
         <DialogActions>

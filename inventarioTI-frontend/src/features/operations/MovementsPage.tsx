@@ -13,6 +13,9 @@ import { getApiErrorDetail } from '../../api/errors';
 import { movementService } from './movementService';
 import type { Movimiento } from '../../types/traceability';
 import { AssignmentDialog } from './AssignmentDialog';
+import { DevolucionDialog } from './DevolucionDialog';
+import UndoIcon from '@mui/icons-material/Undo';
+import { formatDate } from '../../utils/dates';
 import { ExportMenuButton } from '../../components/ExportMenuButton';
 import { usePermissions } from '../../hooks/usePermissions';
 import { SearchInput } from '../../components/SearchInput';
@@ -27,6 +30,7 @@ export const MovementsPage = () => {
     const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
     const [loading, setLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [devolucion, setDevolucion] = useState<Movimiento | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [tipoFiltro, setTipoFiltro] = useState<string>('all');
     const [estadoFiltro, setEstadoFiltro] = useState<'all' | 'vigente' | 'cerrado'>('all');
@@ -225,7 +229,7 @@ export const MovementsPage = () => {
                   </TableCell>
 
                   <TableCell sx={{ color: 'text.primary' }}>
-                    {new Date(row.MOV_Fecha_Asignacion).toLocaleDateString()}
+                    {formatDate(row.MOV_Fecha_Asignacion, i18n.language)}
                   </TableCell>
                   <TableCell sx={{ color: 'text.primary' }}>
                     {tipoNombre}
@@ -241,6 +245,11 @@ export const MovementsPage = () => {
                   </TableCell>
                   <TableCell align="right">
                     {canOperate && (<>
+                    {isVigente && (<Tooltip title={t('assets.actions.return')}>
+                        <IconButton size="small" onClick={() => setDevolucion(row)} aria-label={t('assets.actions.return')} sx={{ color: 'secondary.main' }}>
+                          <UndoIcon fontSize="small"/>
+                        </IconButton>
+                      </Tooltip>)}
                     <Tooltip title={t('operations.download_word')}>
                       <IconButton size="small" onClick={() => handleDownloadIndividual(row.MOV_Movimiento, row.activo?.ACT_Codigo_Interno || 'DOC', 'docx')} sx={{ color: 'primary.main' }}>
                         <DescriptionIcon fontSize="small"/>
@@ -265,6 +274,12 @@ export const MovementsPage = () => {
       <AssignmentDialog open={isDialogOpen} onClose={(refresh) => {
             setIsDialogOpen(false);
             if (refresh)
+                loadData();
+        }}/>
+
+      <DevolucionDialog open={!!devolucion} activo={devolucion ? { ACT_Activo: devolucion.ACT_Activo, ACT_Codigo_Interno: devolucion.activo?.ACT_Codigo_Interno ?? '' } : null} custodio={devolucion?.persona ? `${devolucion.persona.PER_Primer_Nombre} ${devolucion.persona.PER_Primer_Apellido}` : null} onClose={(changed) => {
+            setDevolucion(null);
+            if (changed)
                 loadData();
         }}/>
 

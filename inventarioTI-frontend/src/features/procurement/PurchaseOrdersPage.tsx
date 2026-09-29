@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Box, TableCell, TableRow, Button, Chip, MenuItem, TextField } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -12,8 +13,11 @@ import { downloadCsv } from '../../api/downloadCsv';
 import { ExportMenuButton } from '../../components/ExportMenuButton';
 import { usePermissions } from '../../hooks/usePermissions';
 import { CollapsibleToolbar } from '../../components/CollapsibleToolbar';
-import { PageHeader, DataTableShell, StatusChip } from '../../components/ui';
+import { PageHeader, DataTableShell } from '../../components/ui';
 import { formatMoney } from '../../utils/currency';
+import { formatDate } from '../../utils/dates';
+import { ESTADOS_ORDEN } from '../../types/procurement';
+import { estadoOrdenColor, estadoOrdenLabel, ordenRecibible } from './orderStates';
 export const PurchaseOrdersPage = () => {
     const { t, i18n } = useTranslation();
     const { canAdminInventory, canExport } = usePermissions();
@@ -36,11 +40,16 @@ export const PurchaseOrdersPage = () => {
         }
     }, [enqueueSnackbar, estado, t]);
     useEffect(() => { load(); }, [load]);
-    const estadoLabels: Record<string, string> = {
-        BORRADOR: t('procurement.draft'),
-        RECIBIDA: t('procurement.received'),
-        CANCELADA: t('procurement.cancelled'),
-    };
+    const estadoLabels: Record<string, string> = Object.fromEntries(ESTADOS_ORDEN.map((e) => [e, estadoOrdenLabel(t, e)]));
+    // ?orden=<id>: abre el detalle (enlaces desde «Requiere su atención»).
+    const [searchParams, setSearchParams] = useSearchParams();
+    useEffect(() => {
+        const id = Number(searchParams.get('orden'));
+        if (id) {
+            setDetalleId(id);
+            setSearchParams({}, { replace: true });
+        }
+    }, [searchParams, setSearchParams]);
     return (<Box>
       <PageHeader
         title={t('procurement.orders_title')}
@@ -85,12 +94,12 @@ export const PurchaseOrdersPage = () => {
         renderRow={(o) => (<TableRow key={o.OCO_Orden} hover sx={{ cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }} onClick={() => setDetalleId(o.OCO_Orden)}>
                   <TableCell sx={{ color: 'text.primary', fontWeight: 'bold' }}>{o.OCO_Numero}</TableCell>
                   <TableCell sx={{ color: 'text.primary' }}>{o.proveedor?.PRV_Nombre ?? '—'}</TableCell>
-                  <TableCell sx={{ color: 'text.secondary' }}>{o.OCO_Fecha}</TableCell>
+                  <TableCell sx={{ color: 'text.secondary' }}>{formatDate(o.OCO_Fecha, i18n.language)}</TableCell>
                   <TableCell sx={{ color: 'text.primary' }}>{formatMoney(o.OCO_Total, o.OCO_Moneda, i18n.language)}</TableCell>
-                  <TableCell><StatusChip label={o.OCO_Estado} /></TableCell>
+                  <TableCell><Chip size="small" label={estadoOrdenLabel(t, o.OCO_Estado)} color={estadoOrdenColor(o.OCO_Estado)} variant="outlined"/></TableCell>
                   <TableCell align="right">
                     <Button size="small" startIcon={<VisibilityIcon fontSize="small"/>} onClick={(e) => { e.stopPropagation(); setDetalleId(o.OCO_Orden); }}>
-                      {o.OCO_Estado === 'BORRADOR'
+                      {ordenRecibible(o.OCO_Estado)
                     ? t('procurement.view_receive')
                     : t('common.view')}
                     </Button>

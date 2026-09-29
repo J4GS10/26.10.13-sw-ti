@@ -8,6 +8,9 @@ export interface Consumible {
   CON_Stock_Minimo: number;
   CON_Activo: boolean;
   bajo_stock: boolean;
+  /** Último costo unitario de compra y su moneda (valoriza el stock). */
+  CON_Costo_Unitario?: string | number | null;
+  CON_Moneda?: string | null;
   /** Bodega (sede) donde se almacena. */
   SED_Sede?: number | null;
 }
@@ -27,6 +30,9 @@ export interface MovimientoConsumible {
   MOC_Tipo: 'ENTRADA' | 'SALIDA' | 'AJUSTE';
   MOC_Cantidad: number;
   MOC_Stock_Resultante: number;
+  /** La salida dejó el stock en el mínimo o por debajo. */
+  bajo_minimo?: boolean;
+  CON_Stock_Minimo?: number | null;
   MOC_Motivo?: string | null;
   MOC_Fecha: string;
   CON_Consumible: number;
@@ -38,4 +44,12 @@ export interface StockMovimientoCreate {
   MOC_Cantidad: number;
   MOC_Motivo?: string;
   PER_Persona?: string;
+  /** Solo en entradas: costo unitario y su moneda. */
+  precio_unitario?: string;
+  moneda?: string;
+}
+
+export interface StockAjusteCreate {
+  CON_Stock_Real: number;
+  MOC_Motivo: string;
 }

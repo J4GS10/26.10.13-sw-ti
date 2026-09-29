@@ -19,6 +19,8 @@ import { createSearchFilter } from '../../utils/autocomplete';
 interface Props {
     open: boolean;
     onClose: (refresh?: boolean) => void;
+    /** Equipo ya elegido (desde su ficha o tras una devolución con daño). */
+    activoInicialId?: string | null;
 }
 interface MaintenanceFormValues {
     activo: Activo | null;
@@ -28,18 +30,13 @@ interface MaintenanceFormValues {
     costo: string;
     moneda: string;
 }
-const assetFilter = createSearchFilter<Activo>((asset) => [
-    asset.ACT_Codigo_Interno,
-    asset.ACT_Serie_Fabricante,
-    asset.ACT_Hostname ?? '',
-].join(' '));
 const personFilter = createSearchFilter<PersonaCombo>((person) => [
     person.PER_Primer_Nombre,
     person.PER_Primer_Apellido,
     person.PER_Email_Corporativo,
 ].join(' '));
 const personLabel = (person: PersonaCombo) => `${person.PER_Primer_Nombre} ${person.PER_Primer_Apellido}`;
-export const MaintenanceDialog = ({ open, onClose }: Props) => {
+export const MaintenanceDialog = ({ open, onClose, activoInicialId }: Props) => {
     const { t } = useTranslation();
     const { control, handleSubmit, reset, watch, setValue } = useForm<MaintenanceFormValues>();
     const { enqueueSnackbar } = useSnackbar();
@@ -48,6 +45,7 @@ export const MaintenanceDialog = ({ open, onClose }: Props) => {
     const [activos, setActivos] = useState<Activo[]>([]);
     const [personas, setPersonas] = useState<PersonaCombo[]>([]);
     const [loadingData, setLoadingData] = useState(false);
+    const [busquedaActivo, setBusquedaActivo] = useState('');
     const [submitting, setSubmitting] = useState(false);
     // El solicitante habitual es el custodio actual del activo (editable).
     const selectedAsset = watch('activo');
@@ -67,12 +65,13 @@ export const MaintenanceDialog = ({ open, onClose }: Props) => {
             setLoadingData(true);
             Promise.all([
                 maintenanceService.getTipos(),
-                assetService.getActivos(), // Idealmente filtrar activos activos
-                userService.getAllPersonas() // Todos los empleados pueden reportar
-            ]).then(([t, a, p]) => {
+                userService.getAllPersonas(), // Todos los empleados activos pueden reportar
+                activoInicialId ? assetService.getActivo(activoInicialId) : Promise.resolve(null),
+            ]).then(([t, p, inicial]) => {
                 setTipos(t);
-                setActivos(a);
-                setPersonas(p);
+                setPersonas(p.filter((persona) => persona.PER_Estado !== false));
+                setActivos(inicial ? [inicial] : []);
+                if (inicial) setValue('activo', inicial);
             }).catch(console.error)
                 .finally(() => setLoadingData(false));
             reset({
@@ -84,7 +83,22 @@ export const MaintenanceDialog = ({ open, onClose }: Props) => {
                 moneda: DEFAULT_CURRENCY,
             });
         }
-    }, [open, reset]);
+    }, [open, reset, activoInicialId, setValue]);
+    // Búsqueda de activos en el servidor (antes solo los primeros 200).
+    useEffect(() => {
+        const q = busquedaActivo.trim();
+        if (!open || q.length < 2) return;
+        let vivo = true;
+        const tm = window.setTimeout(async () => {
+            try {
+                const r = await assetService.searchActivos({ q, per_page: 30 });
+                if (vivo) setActivos(r.items);
+            } catch {
+                if (vivo) setActivos([]);
+            }
+        }, 250);
+        return () => { vivo = false; window.clearTimeout(tm); };
+    }, [busquedaActivo, open]);
     const onSubmit = async (data: MaintenanceFormValues) => {
         if (!data.activo || !data.persona || !data.tipo_mantenimiento) {
             enqueueSnackbar(t('common.required'), { variant: 'warning' });
@@ -121,7 +135,7 @@ export const MaintenanceDialog = ({ open, onClose }: Props) => {
               <SectionCard title={t('maintenance.sections.asset_requester')}>
               <Box display="flex" flexDirection="column" gap={2}>
               {/* 1. ACTIVO DAÑADO */}
-              <Controller name="activo" control={control} rules={{ required: true }} render={({ field: { onChange, value }, fieldState: { error } }) => (<Autocomplete options={activos} getOptionLabel={(opt) => `${opt.ACT_Codigo_Interno} - ${opt.ACT_Serie_Fabricante}`} filterOptions={assetFilter} autoHighlight openOnFocus={false} isOptionEqualToValue={(option, selected) => option.ACT_Activo === selected.ACT_Activo} noOptionsText={t('common.type_to_search')} value={value || null} onChange={(_, data) => onChange(data)} renderOption={(props, option) => (<Box component="li" {...props} key={option.ACT_Activo}>
+              <Controller name="activo" control={control} rules={{ required: true }} render={({ field: { onChange, value }, fieldState: { error } }) => (<Autocomplete options={activos} getOptionLabel={(opt) => `${opt.ACT_Codigo_Interno} - ${opt.ACT_Serie_Fabricante}`} filterOptions={(x) => x} autoHighlight onInputChange={(_, texto, motivo) => { if (motivo === 'input') setBusquedaActivo(texto); }} isOptionEqualToValue={(option, selected) => option.ACT_Activo === selected.ACT_Activo} noOptionsText={busquedaActivo.trim().length < 2 ? t('operations.dialog.type_to_search_asset') : t('operations.dialog.no_asset_found', { q: busquedaActivo.trim() })} value={value || null} onChange={(_, data) => onChange(data)} renderOption={(props, option) => (<Box component="li" {...props} key={option.ACT_Activo}>
                         <Stack spacing={0.25} sx={{ minWidth: 0 }}>
                           <Typography variant="body2" sx={{ fontWeight: 700 }}>
                             {option.ACT_Codigo_Interno}

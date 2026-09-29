@@ -29,6 +29,8 @@ def _con_to_response(con) -> dict:
         "CON_Stock_Minimo": con.CON_Stock_Minimo,
         "CON_Activo": con.CON_Activo,
         "SED_Sede": con.SED_Sede,
+        "CON_Costo_Unitario": con.CON_Costo_Unitario,
+        "CON_Moneda": con.CON_Moneda,
         "bajo_stock": con.CON_Stock_Minimo > 0 and con.CON_Stock_Actual <= con.CON_Stock_Minimo,
     }
 
@@ -152,9 +154,10 @@ class ConsumableService(BaseService[ConsumibleRepository]):
         await self.repo.add_movimiento(mov)
         costo = moneda = None
         if tipo == "ENTRADA" and getattr(schema, "precio_unitario", None) is not None:
-            refreshed.CON_Costo_Unitario = schema.precio_unitario
-            refreshed.CON_Moneda = schema.moneda or refreshed.CON_Moneda or "GTQ"
-            costo, moneda = schema.precio_unitario, refreshed.CON_Moneda
+            costo = schema.precio_unitario
+            moneda = schema.moneda or refreshed.CON_Moneda or "GTQ"
+            refreshed.CON_Costo_Unitario = costo
+            refreshed.CON_Moneda = moneda
         await KardexService(self.db).registrar(
             "CONSUMIBLE_ENTRADA" if tipo == "ENTRADA" else "CONSUMIBLE_SALIDA",
             consumible_id=id, referencia=nombre, cantidad=schema.MOC_Cantidad, saldo=stock_despues,

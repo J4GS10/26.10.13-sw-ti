@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, MenuItem, CircularProgress, Box, Stack, Autocomplete, Typography, } from '@mui/material';
+import { Alert, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, MenuItem, CircularProgress, Box, Stack, Autocomplete, Typography, } from '@mui/material';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import AssignmentIndIcon from '@mui/icons-material/AssignmentInd';
+import QrCode2Icon from '@mui/icons-material/QrCode2';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import { AssignmentDialog } from '../operations/AssignmentDialog';
+import { normalizeLanguage } from '../../types/language';
+import { catalogSlug } from '../../utils/catalogLabels';
 import { createFilterOptions } from '@mui/material/Autocomplete';
 import { MoneyField, SectionCard, SedeField, SuggestionHint } from '../../components/ui';
 import { DEFAULT_CURRENCY } from '../../utils/currency';
@@ -52,9 +59,12 @@ const CODE_PADDING = '#####';
 const modelLabel = (m: ModeloFlat) => (m.MAR_Nombre ? `${m.MAR_Nombre} · ${m.MOD_Nombre}` : m.MOD_Nombre);
 const modelFilter = createFilterOptions<ModeloFlat>({ ignoreAccents: true, ignoreCase: true, trim: true, limit: 50, stringify: modelLabel });
 export const AssetDialog = ({ open, assetToEdit, onClose }: Props) => {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const { enqueueSnackbar } = useSnackbar();
     const isEdit = !!assetToEdit;
+    // Tras crear: el diálogo propone el siguiente paso (asignar, etiqueta, otro igual).
+    const [creado, setCreado] = useState<Activo | null>(null);
+    const [asignando, setAsignando] = useState(false);
     const { control, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<FormValues>({
         defaultValues: emptyForm,
     });
@@ -96,10 +106,14 @@ export const AssetDialog = ({ open, assetToEdit, onClose }: Props) => {
             setTipos(ti);
             setEstados(e);
             setModelos(mo);
+            // Alta: por defecto «Disponible» (el único otro estado posible es «En Bodega»).
+            const disponible = e.find((x) => catalogSlug(x.EOP_Nombre) === 'disponible');
+            if (!assetToEdit && disponible)
+                setValue('EOP_Estado_Operativo', disponible.EOP_Estado_Operativo);
         })
             .catch(() => enqueueSnackbar(t('common.error_loading'), { variant: 'error' }))
             .finally(() => setLoadingModelos(false));
-    }, [open, enqueueSnackbar, t]);
+    }, [open, enqueueSnackbar, t, assetToEdit, setValue]);
     // Pre-llenar form al editar (la marca se deduce del modelo, ver efecto siguiente)
     useEffect(() => {
         if (!open)
@@ -166,6 +180,36 @@ export const AssetDialog = ({ open, assetToEdit, onClose }: Props) => {
         : tipoActual.TAC_Prefijo
             ? t('assets.dialog.code_preview', { code: `${tipoActual.TAC_Prefijo}${CODE_PADDING}` })
             : t('assets.dialog.code_no_prefix');
+    // Solo se da de alta en almacén; los demás estados los fija la operación
+    // (asignar, préstamo, mantenimiento, baja) desde la ficha del activo.
+    const ALMACEN = ['disponible', 'en_bodega'];
+    const estadoActual = estados.find((e) => e.EOP_Estado_Operativo === assetToEdit?.EOP_Estado_Operativo);
+    const estadoBloqueado = isEdit && !!estadoActual && !ALMACEN.includes(catalogSlug(estadoActual.EOP_Nombre));
+    const estadosPermitidos = estadoBloqueado && estadoActual
+        ? [estadoActual]
+        : estados.filter((e) => ALMACEN.includes(catalogSlug(e.EOP_Nombre)));
+    const registrarOtroIgual = () => {
+        // Conserva modelo, tipo, sede, fechas y costo; limpia lo que identifica a la unidad.
+        setValue('ACT_Serie_Fabricante', '');
+        setValue('ACT_Codigo_Interno', '');
+        setValue('ACT_Hostname', '');
+        setCreado(null);
+    };
+    const imprimirEtiqueta = async () => {
+        if (!creado) return;
+        try {
+            const blob = await assetService.downloadLabels({ activos_ids: [creado.ACT_Activo] }, normalizeLanguage(i18n.language));
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `etiqueta-${creado.ACT_Codigo_Interno}.pdf`;
+            a.click();
+            window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+        }
+        catch (err) {
+            enqueueSnackbar(getApiErrorMessage(err, t('common.error_generic')), { variant: 'error' });
+        }
+    };
     const onSubmit = async (data: FormValues) => {
         setLoading(true);
         try {
@@ -188,8 +232,9 @@ export const AssetDialog = ({ open, assetToEdit, onClose }: Props) => {
                 enqueueSnackbar(t('common.success_update'), { variant: 'success' });
             }
             else {
-                await assetService.createActivo(payload as ActivoCreate);
+                setCreado(await assetService.createActivo(payload as ActivoCreate));
                 enqueueSnackbar(t('assets.messages.success_create'), { variant: 'success' });
+                return;
             }
             onClose(true);
         }
@@ -200,11 +245,37 @@ export const AssetDialog = ({ open, assetToEdit, onClose }: Props) => {
             setLoading(false);
         }
     };
+    if (creado) {
+        return (<Dialog open={open} onClose={() => { setCreado(null); onClose(true); }} maxWidth="sm" fullWidth>
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <CheckCircleIcon color="success"/> {t('assets.created.title', { code: creado.ACT_Codigo_Interno })}
+          </DialogTitle>
+          <DialogContent>
+            <Alert severity="success" sx={{ mb: 2 }}>{t('assets.created.message', { code: creado.ACT_Codigo_Interno, serial: creado.ACT_Serie_Fabricante })}</Alert>
+            <Typography variant="subtitle2" gutterBottom>{t('operations.done.next')}</Typography>
+            <Stack spacing={1}>
+              <Button variant="contained" startIcon={<AssignmentIndIcon />} onClick={() => setAsignando(true)}>{t('assets.created.assign')}</Button>
+              <Button variant="outlined" startIcon={<QrCode2Icon />} onClick={imprimirEtiqueta}>{t('assets.created.print_label')}</Button>
+              <Button variant="outlined" startIcon={<ContentCopyIcon />} onClick={registrarOtroIgual}>{t('assets.created.another')}</Button>
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => { setCreado(null); onClose(true); }}>{t('common.close')}</Button>
+          </DialogActions>
+          <AssignmentDialog open={asignando} activoInicial={creado} onClose={(refresh) => {
+                setAsignando(false);
+                if (refresh) {
+                    setCreado(null);
+                    onClose(true);
+                }
+            }}/>
+        </Dialog>);
+    }
     return (<Dialog open={open} onClose={() => onClose()} maxWidth="md" fullWidth>
       <DialogTitle sx={{ fontWeight: 'bold' }}>
         {isEdit ? t('assets.dialog.edit_title') : t('assets.dialog.title')}
       </DialogTitle>
-      <form onSubmit={handleSubmit(onSubmit)}>
+      <form onSubmit={handleSubmit(onSubmit)} noValidate>
         <DialogContent>
           <Stack spacing={2}>
           <SectionCard title={t('assets.dialog.classification')}>
@@ -244,7 +315,7 @@ export const AssetDialog = ({ open, assetToEdit, onClose }: Props) => {
 
           <SectionCard title={t('assets.dialog.identification')}>
           <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
-            <Controller name="ACT_Serie_Fabricante" control={control} rules={{ required: true }} render={({ field }) => (<TextField {...field} fullWidth label={t('assets.dialog.serial')} error={!!errors.ACT_Serie_Fabricante}/>)}/>
+            <Controller name="ACT_Serie_Fabricante" control={control} rules={{ required: true }} render={({ field }) => (<TextField {...field} fullWidth label={t('assets.dialog.serial')} error={!!errors.ACT_Serie_Fabricante} helperText={errors.ACT_Serie_Fabricante ? t('common.required') : undefined} required/>)}/>
             <Controller name="ACT_Codigo_Interno" control={control} render={({ field }) => (<TextField {...field} fullWidth label={t('assets.dialog.code')} placeholder={t('assets.dialog.code_placeholder')} helperText={codeHelp} disabled={isEdit}/>)} />
             <Controller name="ACT_Hostname" control={control} render={({ field }) => <TextField {...field} fullWidth label={t('assets.dialog.hostname')}/>}/>
           </Box>
@@ -256,11 +327,11 @@ export const AssetDialog = ({ open, assetToEdit, onClose }: Props) => {
 
           <SectionCard title={t('assets.dialog.financial_state')}>
           <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
-            <Controller name="ACT_Fecha_Compra" control={control} rules={{ required: true }} render={({ field }) => (<TextField {...field} type="date" fullWidth label={t('assets.dialog.purchase_date')} InputLabelProps={{ shrink: true }} error={!!errors.ACT_Fecha_Compra}/>)}/>
+            <Controller name="ACT_Fecha_Compra" control={control} rules={{ required: true }} render={({ field }) => (<TextField {...field} type="date" fullWidth label={t('assets.dialog.purchase_date')} InputLabelProps={{ shrink: true }} error={!!errors.ACT_Fecha_Compra} helperText={errors.ACT_Fecha_Compra ? t('common.required') : undefined} required/>)}/>
             <Controller name="ACT_Fin_Garantia" control={control} render={({ field }) => (<TextField {...field} type="date" fullWidth label={t('assets.dialog.warranty_end')} InputLabelProps={{ shrink: true }}/>)}/>
             <Controller name="ACT_Moneda" control={control} render={({ field: moneda }) => (<Controller name="ACT_Costo" control={control} render={({ field }) => (<MoneyField name={field.name} value={field.value} onChange={field.onChange} onBlur={field.onBlur} currency={moneda.value} onCurrencyChange={moneda.onChange} fullWidth label={t('assets.dialog.cost')}/>)}/>)}/>
-            <Controller name="EOP_Estado_Operativo" control={control} rules={{ required: true }} render={({ field }) => (<TextField {...field} select fullWidth label={t('assets.dialog.operational_status')} error={!!errors.EOP_Estado_Operativo}>
-                  {estados.map((e) => (<MenuItem key={e.EOP_Estado_Operativo} value={e.EOP_Estado_Operativo}>
+            <Controller name="EOP_Estado_Operativo" control={control} rules={{ required: true }} render={({ field }) => (<TextField {...field} select fullWidth label={t('assets.dialog.operational_status')} error={!!errors.EOP_Estado_Operativo} disabled={estadoBloqueado} helperText={estadoBloqueado ? t('assets.dialog.state_locked_help') : errors.EOP_Estado_Operativo ? t('common.required') : t('assets.dialog.state_storage_help')}>
+                  {estadosPermitidos.map((e) => (<MenuItem key={e.EOP_Estado_Operativo} value={e.EOP_Estado_Operativo}>
                       {stateLabel(t, e.EOP_Nombre)}
                     </MenuItem>))}
                 </TextField>)}/>

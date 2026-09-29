@@ -8,13 +8,17 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import HistoryIcon from '@mui/icons-material/History';
+import TuneIcon from '@mui/icons-material/Tune';
+import { PurchaseOrderDialog } from '../procurement/PurchaseOrderDialog';
+import type { LineaOrden } from '../../types/procurement';
+import { formatMoney } from '../../utils/currency';
 import { useTranslation } from 'react-i18next';
 import { useSnackbar } from 'notistack';
 import { SearchInput } from '../../components/SearchInput';
 import { consumableService } from './consumableService';
 import { Consumible } from '../../types/consumables';
 import { ConsumableDialog } from './ConsumableDialog';
-import { StockDialog } from './StockDialog';
+import { StockDialog, type StockModo } from './StockDialog';
 import { ConsumableHistoryDialog } from './ConsumableHistoryDialog';
 import { downloadCsv } from '../../api/downloadCsv';
 import { getApiErrorDetail } from '../../api/errors';
@@ -23,7 +27,7 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { CollapsibleToolbar } from '../../components/CollapsibleToolbar';
 import { useConfirm } from '../../components/confirm-context';
 export const ConsumablesPage = () => {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const { canOperate, canAdminInventory, canExport } = usePermissions();
     const confirm = useConfirm();
     const { enqueueSnackbar } = useSnackbar();
@@ -33,7 +37,9 @@ export const ConsumablesPage = () => {
     const [soloBajo, setSoloBajo] = useState(false);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [toEdit, setToEdit] = useState<Consumible | null>(null);
-    const [stockModo, setStockModo] = useState<'entrada' | 'salida' | null>(null);
+    const [stockModo, setStockModo] = useState<StockModo | null>(null);
+    // Orden de reposición propuesta tras una salida que dejó el stock bajo el mínimo.
+    const [reposicion, setReposicion] = useState<LineaOrden[] | null>(null);
     const [stockTarget, setStockTarget] = useState<Consumible | null>(null);
     const [histTarget, setHistTarget] = useState<Consumible | null>(null);
     const load = useCallback(async () => {
@@ -89,8 +95,23 @@ export const ConsumablesPage = () => {
 
       <ConsumableDialog open={dialogOpen} toEdit={toEdit} onClose={(r) => { setDialogOpen(false); setToEdit(null); if (r)
         load(); }}/>
-      <StockDialog open={!!stockModo} modo={stockModo ?? 'entrada'} consumible={stockTarget} onClose={(r) => { setStockModo(null); setStockTarget(null); if (r)
-        load(); }}/>
+      <StockDialog open={!!stockModo} modo={stockModo ?? 'entrada'} consumible={stockTarget} onClose={(r, reponer) => {
+            setStockModo(null);
+            setStockTarget(null);
+            if (r)
+                load();
+            if (reponer)
+                setReposicion([{
+                    OCL_Tipo: 'CONSUMIBLE', CON_Consumible: reponer.consumible.CON_Consumible,
+                    OCL_Descripcion: reponer.consumible.CON_Nombre, OCL_Cantidad: reponer.sugerido,
+                    OCL_Precio_Unitario: String(reponer.consumible.CON_Costo_Unitario ?? '0'),
+                }]);
+        }}/>
+      <PurchaseOrderDialog open={!!reposicion} lineasIniciales={reposicion ?? undefined} onClose={(r) => {
+            setReposicion(null);
+            if (r)
+                enqueueSnackbar(t('consumables.order_created_hint'), { variant: 'info' });
+        }}/>
       <ConsumableHistoryDialog open={!!histTarget} consumible={histTarget} onClose={() => setHistTarget(null)}/>
 
       <DataTableShell
@@ -99,6 +120,7 @@ export const ConsumablesPage = () => {
           { key: 'category', label: t('consumables.field_category') },
           { key: 'stock', label: t('consumables.stock') },
           { key: 'min', label: t('consumables.field_min') },
+          { key: 'cost', label: t('consumables.unit_cost'), align: 'right' },
           { key: 'actions', label: t('common.actions'), align: 'right' },
         ]}
         rows={filtered}
@@ -111,6 +133,7 @@ export const ConsumablesPage = () => {
               <Chip icon={c.bajo_stock ? <WarningAmberIcon /> : undefined} label={`${c.CON_Stock_Actual} ${c.CON_Unidad}`} size="small" color={c.bajo_stock ? 'warning' : 'primary'} variant={c.bajo_stock ? 'filled' : 'outlined'}/>
             </TableCell>
             <TableCell sx={{ color: 'text.secondary' }}>{c.CON_Stock_Minimo}</TableCell>
+            <TableCell align="right" sx={{ color: 'text.secondary' }}>{c.CON_Costo_Unitario != null ? formatMoney(c.CON_Costo_Unitario, c.CON_Moneda ?? 'GTQ', i18n.language) : '—'}</TableCell>
             <TableCell align="right">
               {canOperate && (<>
               <Tooltip title={t('consumables.entry_title') as string}>
@@ -130,6 +153,11 @@ export const ConsumablesPage = () => {
                 </IconButton>
               </Tooltip>
               {canAdminInventory && (<>
+              <Tooltip title={t('consumables.adjust_title')}>
+                <IconButton size="small" sx={{ color: 'info.main' }} onClick={() => { setStockTarget(c); setStockModo('ajuste'); }}>
+                  <TuneIcon fontSize="small"/>
+                </IconButton>
+              </Tooltip>
               <Tooltip title={t('common.edit')}>
                 <IconButton size="small" sx={{ color: 'primary.main' }} onClick={() => { setToEdit(c); setDialogOpen(true); }}>
                   <EditIcon fontSize="small"/>

@@ -1,6 +1,8 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, CircularProgress, Box, Autocomplete, Typography, MenuItem, Stack } from '@mui/material';
+import { Alert, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, CircularProgress, Box, Autocomplete, Typography, MenuItem, Stack } from '@mui/material';
+import { downloadFile } from '../../api/downloadCsv';
+import { hoyLocal } from '../../utils/dates';
 import { ContextCaption, SectionCard, SuggestionHint } from '../../components/ui';
 import { useTranslation } from 'react-i18next';
 import { catalogSlug, movementTypeLabel } from '../../utils/catalogLabels';
@@ -19,12 +21,14 @@ import { assetService } from '../assets/assetService';
 // --- TIPOS ---
 import { Activo, TipoActivo } from '../../types/inventory';
 import { PersonaResumen } from '../../types/users';
-import { MovimientoCreate, TipoMovimiento } from '../../types/traceability';
+import { Movimiento, MovimientoCreate, TipoMovimiento } from '../../types/traceability';
 import { Area } from '../../types/geo';
 import { createSearchFilter } from '../../utils/autocomplete';
 interface Props {
     open: boolean;
     onClose: (refresh?: boolean) => void;
+    /** Activo ya elegido (desde su ficha o tras darlo de alta). */
+    activoInicial?: Activo | null;
 }
 interface AssignmentFormData {
     categoria: number | '';
@@ -34,12 +38,9 @@ interface AssignmentFormData {
     tipo_movimiento: TipoMovimiento | null;
     observacion: string;
     hostname: string;
+    motivo: string;
+    fecha_prevista: string;
 }
-const assetFilter = createSearchFilter<Activo>((asset) => [
-    asset.ACT_Codigo_Interno,
-    asset.ACT_Serie_Fabricante,
-    asset.ACT_Hostname ?? '',
-].join(' '));
 const personFilter = createSearchFilter<PersonaResumen>((person) => [
     person.PER_Primer_Nombre,
     person.PER_Segundo_Nombre ?? '',
@@ -53,13 +54,20 @@ const personLabel = (person: PersonaResumen) => [
     person.PER_Primer_Apellido,
     person.PER_Segundo_Apellido,
 ].filter(Boolean).join(' ');
-export const AssignmentDialog = ({ open, onClose }: Props) => {
-    const { t } = useTranslation();
+// Tipos que abre este diálogo: asignar y prestar a quien no tiene el equipo;
+// transferir cuando ya tiene custodio. La devolución tiene su propio diálogo.
+const TIPOS_LIBRE = ['asignacion', 'prestamo'];
+const TIPOS_EN_CUSTODIA = ['transferencia'];
+export const AssignmentDialog = ({ open, onClose, activoInicial }: Props) => {
+    const { t, i18n } = useTranslation();
     // Fusionamos hooks: Production (control) + Implementation (watch/setValue)
     const { control, handleSubmit, reset, watch, setValue } = useForm<AssignmentFormData>();
     const { enqueueSnackbar } = useSnackbar();
     // --- ESTADOS (Catalogos) ---
     const [activos, setActivos] = useState<Activo[]>([]);
+    const [busquedaActivo, setBusquedaActivo] = useState('');
+    const [buscandoActivo, setBuscandoActivo] = useState(false);
+    const [resultado, setResultado] = useState<{ mov: Movimiento; persona: PersonaResumen | null } | null>(null);
     const [personas, setPersonas] = useState<PersonaResumen[]>([]);
     const [tiposMov, setTiposMov] = useState<TipoMovimiento[]>([]);
     const [areas, setAreas] = useState<Area[]>([]);
@@ -122,16 +130,15 @@ export const AssignmentDialog = ({ open, onClose }: Props) => {
     useEffect(() => {
         if (open) {
             setLoadingData(true);
+            setResultado(null);
             Promise.all([
-                // Usamos los métodos Lookup de movementService de producción (son los fiables)
-                movementService.getActivosLookup(),
                 movementService.getPersonasLookup(),
                 movementService.getTiposMovimiento(),
                 movementService.getAreas(),
                 assetService.getTipos() // Necesario para el filtro y labels
-            ]).then(([a, p, tm, ar, ta]) => {
-                setActivos(a);
-                setPersonas(p);
+            ]).then(([p, tm, ar, ta]) => {
+                // Solo personas activas: no se entregan equipos a quien ya salió.
+                setPersonas(p.filter((persona) => persona.PER_Estado !== false));
                 setTiposMov(tm);
                 setAreas(ar);
                 setTiposActivo(ta);
@@ -144,22 +151,47 @@ export const AssignmentDialog = ({ open, onClose }: Props) => {
             // Reset completo incluyendo el nuevo campo categoria
             reset({
                 categoria: '',
-                activo: null,
+                activo: activoInicial ?? null,
                 persona: null,
                 area: null,
                 tipo_movimiento: null,
                 observacion: '',
-                hostname: ''
+                hostname: '',
+                motivo: '',
+                fecha_prevista: hoyLocal(7),
             });
+            setActivos(activoInicial ? [activoInicial] : []);
         }
-    }, [open, reset, t, enqueueSnackbar]);
-    // --- LÓGICA DE FILTRADO (Nueva Funcionalidad) ---
-    // Filtramos la lista maestra 'activos' basada en la categoría seleccionada
-    const activosFiltrados = useMemo(() => {
-        if (!selectedCategory)
-            return []; // O return activos; si quieres mostrar todos al inicio
-        return activos.filter(a => a.TAC_Tipo_Activo === selectedCategory);
-    }, [activos, selectedCategory]);
+    }, [open, reset, t, enqueueSnackbar, activoInicial]);
+    // --- BÚSQUEDA DE ACTIVOS EN EL SERVIDOR ---
+    // Antes se precargaban los primeros 50 activos y los demás no se podían
+    // asignar. Ahora se busca en todo el inventario mientras se escribe.
+    useEffect(() => {
+        if (!open) return;
+        const q = busquedaActivo.trim();
+        if (q.length < 2 && !selectedCategory) return;
+        let vivo = true;
+        const temporizador = window.setTimeout(async () => {
+            setBuscandoActivo(true);
+            try {
+                const r = await assetService.searchActivos({
+                    q: q.length >= 2 ? q : undefined,
+                    tipo_activo_id: selectedCategory || undefined,
+                    per_page: 30,
+                });
+                if (vivo) setActivos(r.items);
+            } catch {
+                if (vivo) setActivos([]);
+            } finally {
+                if (vivo) setBuscandoActivo(false);
+            }
+        }, 250);
+        return () => { vivo = false; window.clearTimeout(temporizador); };
+    }, [busquedaActivo, open, selectedCategory]);
+    const enCustodia = !!assetCtx.data?.custodio;
+    const tiposPermitidos = tiposMov.filter((tm) => (enCustodia ? TIPOS_EN_CUSTODIA : TIPOS_LIBRE).includes(catalogSlug(tm.TMO_Nombre)));
+    const esPrestamo = catalogSlug(currentType?.TMO_Nombre ?? '') === 'prestamo';
+    const esTransferencia = catalogSlug(currentType?.TMO_Nombre ?? '') === 'transferencia';
     // --- LÓGICA VISUAL (Producción - Más rica) ---
     const getActivoLabel = (activo: Activo) => {
         // Usamos la lógica de producción que busca el nombre del tipo para mostrarlo bonito
@@ -172,19 +204,36 @@ export const AssignmentDialog = ({ open, onClose }: Props) => {
             enqueueSnackbar(t('common.required'), { variant: 'warning' });
             return;
         }
+        if (esPrestamo && !data.fecha_prevista) {
+            enqueueSnackbar(t('operations.dialog.loan_date_required'), { variant: 'warning' });
+            return;
+        }
         setSubmitting(true);
         try {
-            const payload: MovimientoCreate = {
-                ACT_Activo: data.activo.ACT_Activo,
-                PER_Persona: data.persona.PER_Persona,
-                ARE_Area: data.area.ARE_Area,
-                TMO_Tipo_Movimiento: data.tipo_movimiento.TMO_Tipo_Movimiento,
-                MOV_Observacion: data.observacion,
-                ACT_Hostname: data.hostname ?? '',
-            };
-            await movementService.createMovement(payload);
-            enqueueSnackbar(t('operations.messages.success_assign'), { variant: 'success' });
-            onClose(true);
+            let mov: Movimiento;
+            if (esTransferencia) {
+                mov = await movementService.transfer({
+                    ACT_Activo: data.activo.ACT_Activo,
+                    PER_Persona_Destino: data.persona.PER_Persona,
+                    ARE_Area_Destino: data.area.ARE_Area,
+                    MOV_Observacion: data.observacion || undefined,
+                    MOV_Motivo: data.motivo || undefined,
+                });
+            } else {
+                const payload: MovimientoCreate = {
+                    ACT_Activo: data.activo.ACT_Activo,
+                    PER_Persona: data.persona.PER_Persona,
+                    ARE_Area: data.area.ARE_Area,
+                    TMO_Tipo_Movimiento: data.tipo_movimiento.TMO_Tipo_Movimiento,
+                    MOV_Observacion: data.observacion,
+                    ACT_Hostname: data.hostname ?? '',
+                    MOV_Motivo: data.motivo || undefined,
+                    MOV_Fecha_Prevista_Devolucion: esPrestamo ? data.fecha_prevista : null,
+                };
+                mov = await movementService.createMovement(payload);
+            }
+            // Diálogo: se confirma lo hecho y se propone el siguiente paso.
+            setResultado({ mov, persona: data.persona });
         }
         catch (error: unknown) {
             enqueueSnackbar(getApiErrorMessage(error, t('common.error_create')), { variant: 'error' });
@@ -193,6 +242,40 @@ export const AssignmentDialog = ({ open, onClose }: Props) => {
             setSubmitting(false);
         }
     };
+    const descargarActa = async () => {
+        if (!resultado) return;
+        try {
+            await downloadFile(`/trazabilidad/acta/${resultado.mov.MOV_Movimiento}`, 'acta.pdf', {
+                formato: 'pdf', tipo: 'entrega', lang: i18n.language.split('-')[0],
+            });
+        } catch (err) {
+            enqueueSnackbar(getApiErrorMessage(err, t('common.error_generic')), { variant: 'error' });
+        }
+    };
+    if (resultado) {
+        const nombre = resultado.persona ? personLabel(resultado.persona) : '';
+        return (<Dialog open={open} onClose={() => onClose(true)} maxWidth="sm" fullWidth>
+          <DialogTitle>{t('operations.done.title')}</DialogTitle>
+          <DialogContent>
+            <Alert severity="success" sx={{ mb: 2 }}>
+              {t(esTransferencia ? 'operations.done.transferred' : 'operations.done.assigned', {
+                code: resultado.mov.activo?.ACT_Codigo_Interno ?? '', person: nombre, area: resultado.mov.area?.ARE_Nombre ?? '',
+              })}
+            </Alert>
+            <Typography variant="body2" color="text.secondary">{t('operations.done.next')}</Typography>
+          </DialogContent>
+          <DialogActions sx={{ p: 3, flexWrap: 'wrap', gap: 1 }}>
+            <Button onClick={() => onClose(true)} color="inherit">{t('common.close')}</Button>
+            <Button onClick={() => {
+                const persona = resultado.persona;
+                setResultado(null);
+                reset({ categoria: '', activo: null, persona, area: null, tipo_movimiento: null, observacion: '',
+                    hostname: '', motivo: '', fecha_prevista: hoyLocal(7) });
+            }}>{t('operations.done.assign_another')}</Button>
+            <Button variant="contained" onClick={descargarActa}>{t('operations.done.download_acta')}</Button>
+          </DialogActions>
+        </Dialog>);
+    }
     return (<Dialog open={open} onClose={() => onClose()} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ fontWeight: 'bold' }}>
         {t('operations.dialog.title')}
@@ -215,9 +298,9 @@ export const AssignmentDialog = ({ open, onClose }: Props) => {
                   </TextField>)}/>
 
               {/* 2. SELECCIÓN DE ACTIVO (Modificado con Filtro) */}
-              <Controller name="activo" control={control} rules={{ required: t('common.required') }} render={({ field: { onChange, value }, fieldState: { error } }) => (<Autocomplete options={activosFiltrados} getOptionLabel={getActivoLabel} filterOptions={assetFilter} autoHighlight openOnFocus={false} value={value || null} disabled={!selectedCategory} isOptionEqualToValue={(option, selected) => option.ACT_Activo === selected.ACT_Activo} noOptionsText={!selectedCategory
-                    ? t('operations.dialog.select_category_first')
-                    : t('common.type_to_search')} onChange={(_, data) => onChange(data)} renderOption={(props, option) => (<Box component="li" {...props} key={option.ACT_Activo}>
+              <Controller name="activo" control={control} rules={{ required: t('common.required') }} render={({ field: { onChange, value }, fieldState: { error } }) => (<Autocomplete options={activos} getOptionLabel={getActivoLabel} filterOptions={(opciones) => opciones} loading={buscandoActivo} autoHighlight value={value || null} isOptionEqualToValue={(option, selected) => option.ACT_Activo === selected.ACT_Activo} onInputChange={(_, texto, motivo) => { if (motivo === 'input') setBusquedaActivo(texto); }} noOptionsText={busquedaActivo.trim().length < 2 && !selectedCategory
+                    ? t('operations.dialog.type_to_search_asset')
+                    : t('operations.dialog.no_asset_found', { q: busquedaActivo.trim() })} onChange={(_, data) => onChange(data)} renderOption={(props, option) => (<Box component="li" {...props} key={option.ACT_Activo}>
                         <Box sx={{ minWidth: 0 }}>
                           <Typography variant="body2" sx={{ fontWeight: 700 }}>
                             {option.ACT_Codigo_Interno}
@@ -226,9 +309,7 @@ export const AssignmentDialog = ({ open, onClose }: Props) => {
                             {option.ACT_Hostname || t('assets.table.no_host')} / {option.ACT_Serie_Fabricante}
                           </Typography>
                         </Box>
-                      </Box>)} renderInput={(params) => (<TextField {...params} label={t('operations.dialog.select_asset')} placeholder={selectedCategory
-                        ? t('operations.dialog.asset_search_placeholder')
-                        : t('operations.dialog.waiting_filter')} error={!!error} helperText={error?.message}/>)}/>)}/>
+                      </Box>)} renderInput={(params) => (<TextField {...params} label={t('operations.dialog.select_asset')} placeholder={t('operations.dialog.asset_search_placeholder')} error={!!error} helperText={error?.message}/>)}/>)}/>
               {custodyLine && (<Box sx={{ mt: -2.5 }}>
                   <ContextCaption>{custodyLine}</ContextCaption>
                 </Box>)}
@@ -267,7 +348,7 @@ export const AssignmentDialog = ({ open, onClose }: Props) => {
                 </Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
 
-                <Controller name="tipo_movimiento" control={control} rules={{ required: true }} render={({ field: { onChange, value }, fieldState: { error } }) => (<Autocomplete options={tiposMov} getOptionLabel={(option) => movementTypeLabel(t, option.TMO_Nombre)} value={value || null} onChange={(_, data) => onChange(data)} renderInput={(params) => (<TextField {...params} label={t('operations.dialog.select_type')} error={!!error}/>)}/>)}/>
+                <Controller name="tipo_movimiento" control={control} rules={{ required: true }} render={({ field: { onChange, value }, fieldState: { error } }) => (<Autocomplete options={tiposPermitidos} getOptionLabel={(option) => movementTypeLabel(t, option.TMO_Nombre)} value={value || null} onChange={(_, data) => onChange(data)} renderInput={(params) => (<TextField {...params} label={t('operations.dialog.select_type')} error={!!error}/>)}/>)}/>
                 <SuggestionHint hint={typeHint}/>
                 </Box>
               </Box>
@@ -277,6 +358,8 @@ export const AssignmentDialog = ({ open, onClose }: Props) => {
               <SectionCard title={t('operations.sections.notes')}>
               <Box display="flex" flexDirection="column" gap={2}>
               {/* 5. OBSERVACIONES (Producción - Controller seguro) */}
+              {esPrestamo && (<Controller name="fecha_prevista" control={control} render={({ field }) => (<TextField {...field} type="date" required fullWidth label={t('operations.dialog.loan_return_date')} helperText={t('operations.dialog.loan_return_help')} InputLabelProps={{ shrink: true }} inputProps={{ min: hoyLocal() }}/>)}/>)}
+              <Controller name="motivo" control={control} defaultValue="" render={({ field }) => (<TextField {...field} label={t(esTransferencia ? 'operations.dialog.transfer_reason' : 'operations.dialog.reason')} fullWidth inputProps={{ maxLength: 255 }}/>)}/>
               <Controller name="observacion" control={control} defaultValue="" render={({ field }) => (<TextField {...field} label={t('operations.dialog.notes')} multiline rows={3} fullWidth/>)}/>
 
               <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>

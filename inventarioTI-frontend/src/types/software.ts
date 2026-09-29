@@ -34,6 +34,9 @@ export interface Licencia {
   LIC_Claves_Total?: number;
   LIC_Claves_Disponibles?: number;
   LIC_Claves_Asignadas?: number;
+  /** Costo de la licencia y su moneda (GTQ/USD/CHF). */
+  LIC_Costo?: string | number | null;
+  LIC_Moneda?: string | null;
   
   // FKs y Relaciones
   SOF_Software: number;
@@ -70,6 +73,23 @@ export interface LicenciaCreate {
   SOF_Software: number;
   TLI_Tipo_Licencia: number;
   LIC_Claves?: LicenciaClaveCreate[];
+  LIC_Costo?: string | null;
+  LIC_Moneda?: string | null;
+}
+
+/** Una asignación de la licencia (vigente o retirada). */
+export interface HistorialLicencia {
+  INS_Instalacion: number;
+  destino: 'ACTIVO' | 'PERSONA';
+  ACT_Activo?: string | null;
+  activo_codigo?: string | null;
+  PER_Persona?: string | null;
+  persona_nombre?: string | null;
+  LCL_Licencia_Clave?: number | null;
+  INS_Fecha_Instalacion: string;
+  INS_Estado: boolean;
+  INS_Fecha_Retiro?: string | null;
+  INS_Motivo_Retiro?: string | null;
 }
 
 // --- 4. INSTALACIÓN (NUEVO) ---

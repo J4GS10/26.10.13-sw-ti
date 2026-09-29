@@ -152,6 +152,13 @@ class RecepcionLicencia(Esquema):
         return self
 
 
+class RecepcionOtro(Esquema):
+    """Conformidad de una línea OTRO (flete, instalación, servicio): no genera inventario."""
+    OCL_Linea: int
+    cantidad: int = Field(..., gt=0)
+    precio_unitario: Optional[Decimal] = Field(None, ge=0, max_digits=14, decimal_places=2)
+
+
 class DiferenciaRecepcion(Esquema):
     """Justificación de una diferencia en una línea (el sistema la exige)."""
     OCL_Linea: int
@@ -164,6 +171,7 @@ class RecepcionOrden(Esquema):
     consumibles: List[RecepcionConsumible] = Field(default_factory=list)
     activos: List[RecepcionActivo] = Field(default_factory=list)
     licencias: List[RecepcionLicencia] = Field(default_factory=list)
+    otros: List[RecepcionOtro] = Field(default_factory=list)
     # Guía de remisión o factura con que llegó la entrega.
     documento: Optional[str] = Field(None, max_length=100)
     observacion: Optional[str] = Field(None, max_length=500)

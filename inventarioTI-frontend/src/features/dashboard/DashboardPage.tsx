@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, Box, Card, CardContent, Chip, CircularProgress, Divider, LinearProgress, List, ListItem, ListItemText, Typography, } from '@mui/material';
+import { Box, Card, CardContent, Chip, CircularProgress, Divider, LinearProgress, List, ListItem, ListItemText, Typography, } from '@mui/material';
 import BuildIcon from '@mui/icons-material/Build';
 import ComputerIcon from '@mui/icons-material/Computer';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
@@ -14,6 +14,7 @@ import { KpiCard, PageHeader } from '../../components/ui';
 import { ensureReadable } from '../../theme/theme';
 import type { PanelProps } from '../../types/ui';
 import { formatMoneyTotals } from '../../utils/currency';
+import { AttentionInbox } from './AttentionInbox';
 interface DashboardDistributionItem {
     label: string;
     total: number;
@@ -126,9 +127,6 @@ export const DashboardPage = () => {
     const maxType = Math.max(1, ...typeItems.map((item) => item.total));
     const departmentItems: DashboardDistributionItem[] = (stats?.por_departamento || []).map((item) => ({ label: item.departamento, total: item.total }));
     const maxDepartment = Math.max(1, ...departmentItems.map((item) => item.total));
-    const warrantiesExpiring = stats?.garantias_por_vencer_total ?? 0;
-    const expiredWarranties = stats?.garantias_vencidas ?? 0;
-    const licensesLow = stats?.licencias_por_agotar ?? [];
     const language = i18n.resolvedLanguage ?? i18n.language;
     return (<Box sx={{ maxWidth: 1440, mx: 'auto' }}>
       <PageHeader
@@ -136,11 +134,7 @@ export const DashboardPage = () => {
         subtitle={t('dashboard.subtitle')}
       />
 
-      {(warrantiesExpiring > 0 || licensesLow.length > 0 || expiredWarranties > 0) && (<Alert severity="warning" icon={<WarningIcon />} sx={{ mb: 3 }}>
-          {warrantiesExpiring > 0 && `${t('dashboard.alerts.warranties_expiring', { count: warrantiesExpiring })} `}
-          {expiredWarranties > 0 && `${t('dashboard.alerts.warranties_expired', { count: expiredWarranties })} `}
-          {licensesLow.length > 0 && t('dashboard.alerts.licenses_low', { count: licensesLow.length })}
-        </Alert>)}
+      <AttentionInbox />
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' }, gap: 2, mb: 2 }}>
         <KpiCard title={t('dashboard.kpi.total_assets')} value={stats?.activos_totales ?? 0} icon={ComputerIcon} tone="primary"/>

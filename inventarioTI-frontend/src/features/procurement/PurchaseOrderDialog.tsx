@@ -6,7 +6,10 @@ import { useTranslation } from 'react-i18next';
 import { useSnackbar } from 'notistack';
 import { getApiErrorDetail, getApiErrorMessage } from '../../api/errors';
 import { procurementService } from './procurementService';
-import { Proveedor, LineaOrden, OrdenCompra } from '../../types/procurement';
+import { Proveedor, LineaOrden, OrdenCompra, TIPOS_LINEA, TipoLinea } from '../../types/procurement';
+import { consumableService } from '../consumables/consumableService';
+import type { Consumible } from '../../types/consumables';
+import { hoyLocal } from '../../utils/dates';
 import { SectionCard, SedeField, SuggestionHint } from '../../components/ui';
 import { useSedes } from '../../hooks/useSedes';
 import { useSuggestion } from '../../hooks/useSuggestion';
@@ -17,15 +20,18 @@ interface Props {
     onClose: (refresh?: boolean) => void;
     /** Órdenes ya cargadas en la página: sugieren la moneda habitual del proveedor. */
     recentOrders?: OrdenCompra[];
+    /** Líneas propuestas (p. ej. reponer un consumible bajo el mínimo). */
+    lineasIniciales?: LineaOrden[];
 }
-const emptyLine = (): LineaOrden => ({ OCL_Descripcion: '', OCL_Cantidad: 1, OCL_Precio_Unitario: '0' });
-export const PurchaseOrderDialog = ({ open, onClose, recentOrders }: Props) => {
+const emptyLine = (): LineaOrden => ({ OCL_Descripcion: '', OCL_Cantidad: 1, OCL_Precio_Unitario: '0', OCL_Tipo: 'ACTIVO' });
+export const PurchaseOrderDialog = ({ open, onClose, recentOrders, lineasIniciales }: Props) => {
     const { t } = useTranslation();
     const { enqueueSnackbar } = useSnackbar();
     const [proveedores, setProveedores] = useState<Proveedor[]>([]);
     const [provId, setProvId] = useState<number | ''>('');
     const [numero, setNumero] = useState('');
-    const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10));
+    const [fecha, setFecha] = useState(() => hoyLocal());
+    const [consumibles, setConsumibles] = useState<Consumible[]>([]);
     const [moneda, setMoneda] = useState<string>(DEFAULT_CURRENCY);
     const [notas, setNotas] = useState('');
     const [lineas, setLineas] = useState<LineaOrden[]>([emptyLine()]);
@@ -46,14 +52,15 @@ export const PurchaseOrderDialog = ({ open, onClose, recentOrders }: Props) => {
         if (!open)
             return;
         procurementService.listProveedores(true).then(setProveedores).catch(() => setProveedores([]));
+        consumableService.list().then(setConsumibles).catch(() => setConsumibles([]));
         setProvId('');
         setNumero('');
-        setFecha(new Date().toISOString().slice(0, 10));
+        setFecha(hoyLocal());
         setMoneda(DEFAULT_CURRENCY);
         setNotas('');
-        setLineas([emptyLine()]);
+        setLineas(lineasIniciales?.length ? lineasIniciales.map((l) => ({ ...l })) : [emptyLine()]);
         setSede('');
-    }, [open]);
+    }, [open, lineasIniciales]);
     // Moneda de la última orden del proveedor (si las órdenes ya están cargadas).
     const lastOrder = useMemo(() => {
         if (!provId || !recentOrders)
@@ -95,6 +102,8 @@ export const PurchaseOrderDialog = ({ open, onClose, recentOrders }: Props) => {
                     OCL_Descripcion: l.OCL_Descripcion.trim(),
                     OCL_Cantidad: Number(l.OCL_Cantidad),
                     OCL_Precio_Unitario: String(l.OCL_Precio_Unitario),
+                    OCL_Tipo: l.OCL_Tipo ?? undefined,
+                    CON_Consumible: l.OCL_Tipo === 'CONSUMIBLE' ? l.CON_Consumible ?? undefined : undefined,
                 })),
             });
             enqueueSnackbar(t('procurement.order_created'), { variant: 'success' });
@@ -141,7 +150,18 @@ export const PurchaseOrderDialog = ({ open, onClose, recentOrders }: Props) => {
             </Stack>
           </SectionCard>
           <SectionCard title={t('procurement.lines')}>
-            {lineas.map((l, i) => (<Stack key={i} direction="row" spacing={1} sx={{ mb: 1 }} alignItems="center">
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>{t('procurement.line_type_help')}</Typography>
+            {lineas.map((l, i) => (<Stack key={i} direction={{ xs: 'column', md: 'row' }} spacing={1} sx={{ mb: 1.5 }} alignItems={{ md: 'center' }}>
+                <TextField select size="small" label={t('procurement.line_type')} value={l.OCL_Tipo ?? 'ACTIVO'} onChange={(e) => updateLine(i, { OCL_Tipo: e.target.value as TipoLinea, CON_Consumible: null })} sx={{ minWidth: 150 }}>
+                  {TIPOS_LINEA.map((tp) => <MenuItem key={tp} value={tp}>{t(`procurement.line_types.${tp}`)}</MenuItem>)}
+                </TextField>
+                {l.OCL_Tipo === 'CONSUMIBLE' && (<TextField select size="small" label={t('menu.consumables')} value={l.CON_Consumible ?? ''} onChange={(e) => {
+                    const id = Number(e.target.value);
+                    const con = consumibles.find((c) => c.CON_Consumible === id);
+                    updateLine(i, { CON_Consumible: id, OCL_Descripcion: l.OCL_Descripcion || con?.CON_Nombre || '' });
+                }} sx={{ minWidth: 180 }}>
+                    {consumibles.map((c) => <MenuItem key={c.CON_Consumible} value={c.CON_Consumible}>{c.CON_Nombre}</MenuItem>)}
+                  </TextField>)}
                 <TextField size="small" fullWidth label={t('procurement.line_desc')} value={l.OCL_Descripcion} onChange={(e) => updateLine(i, { OCL_Descripcion: e.target.value })}/>
                 <TextField size="small" type="number" label={t('procurement.line_qty')} value={l.OCL_Cantidad} onChange={(e) => updateLine(i, { OCL_Cantidad: Number(e.target.value) })} sx={{ width: 90 }}/>
                 <TextField size="small" type="number" label={t('procurement.line_price')} value={l.OCL_Precio_Unitario} onChange={(e) => updateLine(i, { OCL_Precio_Unitario: e.target.value })} sx={{ width: 120 }}/>

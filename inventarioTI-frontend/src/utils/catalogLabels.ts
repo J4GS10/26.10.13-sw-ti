@@ -27,3 +27,11 @@ const STATE_VARIANT: Record<string, StatusVariant> = {
 /** Color del chip según el estado canónico (independiente del idioma). */
 export const stateVariant = (name?: string | null): StatusVariant =>
   STATE_VARIANT[catalogSlug(name ?? '')] ?? 'default';
+
+/** Tipos de activo del catálogo base (Laptop, Monitor…); los propios se muestran tal cual. */
+export const typeLabel = (t: TFunction, name?: string | null): string =>
+  name ? t(`catalog.asset_types.${catalogSlug(name)}`, { defaultValue: name }) : '—';
+
+/** Tipos de mantenimiento (Preventivo, Correctivo, Predictivo) en el idioma de la aplicación. */
+export const maintenanceTypeLabel = (t: TFunction, name?: string | null): string =>
+  name ? t(`catalog.maintenance_types.${catalogSlug(name)}`, { defaultValue: name }) : '—';

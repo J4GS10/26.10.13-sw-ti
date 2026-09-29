@@ -14,6 +14,11 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import CategoryIcon from '@mui/icons-material/Category';
+import HistoryIcon from '@mui/icons-material/History';
+import { LicenseHistoryDialog } from './LicenseHistoryDialog';
+import { ExportMenuButton } from '../../components/ExportMenuButton';
+import { downloadCsv } from '../../api/downloadCsv';
+import { formatMoney } from '../../utils/currency';
 import { useTranslation } from 'react-i18next';
 import { getApiErrorMessage } from '../../api/errors';
 import { softwareService } from './softwareService';
@@ -80,7 +85,8 @@ const keyValueSx: SxProps<Theme> = (theme) => ({
     overflowWrap: 'anywhere',
     wordBreak: 'break-word',
 });
-const Row = ({ row, onAddLicense, onEdit, onDelete, onEditLicense, onDeleteLicense, refreshKey }: {
+const Row = ({ row, onAddLicense, onEdit, onDelete, onEditLicense, onDeleteLicense, onHistory, refreshKey }: {
+    onHistory: (lic: Licencia, row: Software) => void;
     row: Software;
     onAddLicense: (s: Software) => void;
     onEdit: (s: Software) => void;
@@ -97,7 +103,7 @@ const Row = ({ row, onAddLicense, onEdit, onDelete, onEditLicense, onDeleteLicen
     const [loadingKeys, setLoadingKeys] = useState<Record<number, boolean>>({});
     const [keyErrors, setKeyErrors] = useState<Record<number, string | null>>({});
     const [visibleKeys, setVisibleKeys] = useState<Record<number, boolean>>({});
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const { canAdminInventory } = usePermissions();
     const { enqueueSnackbar } = useSnackbar();
     // Cargar licencias solo al expandir
@@ -252,6 +258,9 @@ const Row = ({ row, onAddLicense, onEdit, onDelete, onEditLicense, onDeleteLicen
                             </TableCell>
                             <TableCell>
                               {lic.LIC_Cantidad_Usada} / {lic.LIC_Cantidad_Total}
+                              {lic.LIC_Costo != null && (<Typography variant="caption" display="block" color="text.secondary">
+                                  {formatMoney(lic.LIC_Costo, lic.LIC_Moneda ?? 'GTQ', i18n.language)}
+                                </Typography>)}
                               {hasIndividualKeys && (<Chip size="small" sx={{ ml: 1 }} variant="outlined" icon={<VpnKeyIcon />} label={t('software.keys_available', {
                             available: lic.LIC_Claves_Disponibles ?? 0,
                             total: lic.LIC_Claves_Total ?? 0,
@@ -275,6 +284,11 @@ const Row = ({ row, onAddLicense, onEdit, onDelete, onEditLicense, onDeleteLicen
                                     {keysOpen ? <KeyboardArrowUpIcon fontSize="small"/> : <VpnKeyIcon fontSize="small"/>}
                                   </IconButton>
                                 </Tooltip>)}
+                              <Tooltip title={t('software.history')}>
+                                <IconButton size="small" onClick={() => onHistory(lic, row)} aria-label={t('software.history')}>
+                                  <HistoryIcon fontSize="small"/>
+                                </IconButton>
+                              </Tooltip>
                               {canAdminInventory && (<>
                               <Tooltip title={t('software.edit_license')}>
                                 <IconButton size="small" onClick={() => onEditLicense(lic, row)} aria-label={t('software.edit_license')}>
@@ -405,7 +419,8 @@ const Row = ({ row, onAddLicense, onEdit, onDelete, onEditLicense, onDeleteLicen
 };
 export const SoftwarePage = () => {
     const { t } = useTranslation();
-    const { canAdminInventory } = usePermissions();
+    const { canAdminInventory, canExport } = usePermissions();
+    const [historial, setHistorial] = useState<{ lic: Licencia; titulo: string } | null>(null);
     const confirm = useConfirm();
     const [search, setSearch] = useState('');
     const { enqueueSnackbar } = useSnackbar();
@@ -489,13 +504,16 @@ export const SoftwarePage = () => {
       <PageHeader
         title={t('software.page_title')}
         badge={filtered.length}
-        actions={canAdminInventory ? (<>
+        actions={(canAdminInventory || canExport) ? (<>
+          {canExport && <ExportMenuButton onExport={(lang) => downloadCsv('/inventario/licencias.csv', 'licencias.csv', lang)}/>}
+          {canAdminInventory && (<>
           <Button variant="outlined" startIcon={<CategoryIcon />} onClick={() => setLicenseTypesOpen(true)}>
             {t('app.license_types_title')}
           </Button>
           <Button variant="contained" startIcon={<AddIcon />} onClick={() => { setSoftwareToEdit(undefined); setOpenSoftDialog(true); }}>
             {t('software.btn_new')}
           </Button>
+          </>)}
         </>) : undefined}
       />
 
@@ -505,6 +523,7 @@ export const SoftwarePage = () => {
 
       <LicenseDialog open={licenseDialogOpen} softwarePreseleccionado={selectedSoft} licenciaToEdit={licenciaToEdit} onClose={handleCloseLicenseDialog}/>
       <LicenseTypesDialog open={licenseTypesOpen} onClose={() => setLicenseTypesOpen(false)} />
+      <LicenseHistoryDialog licencia={historial?.lic ?? null} titulo={historial?.titulo} onClose={() => setHistorial(null)}/>
 
       <DataTableShell
         columns={[
@@ -517,7 +536,7 @@ export const SoftwarePage = () => {
         rows={filtered}
         loading={loading}
         emptyTitle={t('common.no_records')}
-        renderRow={(row) => (<Row key={row.SOF_Software} row={row} onAddLicense={handleAddLicense} onEdit={handleEdit} onDelete={handleDelete} onEditLicense={handleEditLicense} onDeleteLicense={handleDeleteLicense} refreshKey={licRefreshKey}/>)}
+        renderRow={(row) => (<Row key={row.SOF_Software} row={row} onAddLicense={handleAddLicense} onEdit={handleEdit} onDelete={handleDelete} onEditLicense={handleEditLicense} onDeleteLicense={handleDeleteLicense} onHistory={(lic, sw) => setHistorial({ lic, titulo: `${sw.SOF_Nombre}${sw.SOF_Version ? ` ${sw.SOF_Version}` : ''}` })} refreshKey={licRefreshKey}/>)}
       />
     </Box>);
 };

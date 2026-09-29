@@ -419,6 +419,14 @@ class ReportesService:
         agregar("STOCK_BAJO", "media",
                 [{"id": c, "nombre": n, "stock": s, "minimo": m} for c, n, s, m in filas])
 
+        from app.models.procurement import OrdenCompra
+        filas = (await self.db.execute(
+            select(OrdenCompra.OCO_Orden, OrdenCompra.OCO_Numero, OrdenCompra.OCO_Fecha)
+            .where(OrdenCompra.OCO_Estado == "PARCIAL").order_by(OrdenCompra.OCO_Fecha)
+        )).all()
+        agregar("ORDEN_PARCIAL", "media",
+                [{"id": o, "numero": num, "fecha": f.isoformat()} for o, num, f in filas])
+
         limite_ticket = datetime.utcnow() - timedelta(days=15)
         filas = (await self.db.execute(
             select(Mantenimiento.MAN_Mantenimiento, Activo.ACT_Codigo_Interno, Mantenimiento.MAN_Fecha_Ingreso)

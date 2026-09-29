@@ -21,6 +21,9 @@ const ACCIONES = [
     'LOGIN_SUCCESS', 'LOGIN_FAILED', 'LOGOUT', 'LOGOUT_ALL', 'PASSWORD_RESET_REQUEST', 'PASSWORD_RESET',
     'PASSWORD_RESET_BY_ADMIN', '2FA_RESET_BY_ADMIN', 'ACCOUNT_UNLOCKED_BY_ADMIN', 'SESSIONS_REVOKED_BY_ADMIN',
     'REFRESH_TOKEN_REUSE',
+    'RECEIVE', 'CLOSE_WITH_SHORTAGE', 'COMPONENT_INSTALL', 'COMPONENT_REMOVE', 'STOCK_ADJUST',
+    'INVENTORY_COUNT_OPEN', 'INVENTORY_COUNT_CLOSE', 'INVENTORY_COUNT_CANCEL',
+    'ASSET_SEDE_CHANGE', 'VIEW_KEYS', 'DATA_FIX', 'AD_SYNC', 'AUDIT_EXPORT',
 ];
 const ENTIDADES = [
     '', 'INV_ACTIVO', 'INV_MOVIMIENTO', 'INV_INSTALACION', 'INV_LICENCIA',
@@ -30,6 +33,8 @@ const ENTIDADES = [
     'INV_PAIS', 'INV_ESTADO', 'INV_MUNICIPIO', 'INV_SEDE',
     'INV_EDIFICIO', 'INV_NIVEL', 'INV_AREA', 'SYS_CONFIGURACION',
     'INV_CONSUMIBLE', 'INV_ADJUNTO', 'INV_PROVEEDOR', 'INV_ORDEN_COMPRA',
+    'INV_ESPECIFICACION', 'INV_LICENCIA_CLAVE', 'INV_TOMA_INVENTARIO', 'INV_TIPO_LICENCIA',
+    'INV_TIPO_MANTENIMIENTO', 'INV_ESTADO_OPERATIVO',
 ];
 const formatAuditDate = (value: string) => {
     const date = new Date(value);
@@ -101,6 +106,9 @@ export const AuditPage = () => {
         const params = new URLSearchParams();
         if (fromDate) params.set('from_date', fromDate);
         if (toDate) params.set('to_date', toDate);
+        // Exporta exactamente lo filtrado en pantalla.
+        if (accion) params.set('accion', accion);
+        if (entidad) params.set('entidad', entidad);
         const query = params.toString();
         try {
             await downloadCsv(`/gov/auditoria.csv${query ? `?${query}` : ''}`, `auditoria_${new Date().toISOString().slice(0, 10)}.csv`, exportLanguage);
@@ -109,6 +117,8 @@ export const AuditPage = () => {
             enqueueSnackbar(t('common.error_generic'), { variant: 'error' });
         }
     };
+    const accionLabel = (a: string) => t(`audit.actions.${a}`, { defaultValue: a });
+    const entidadLabel = (e: string) => t(`audit.entities.${e}`, { defaultValue: e });
     const colorFor = (acc: string): ChipColor => {
         if (acc.startsWith('DELETE') || acc === 'OFFBOARDING')
             return 'error';
@@ -143,10 +153,10 @@ export const AuditPage = () => {
       >
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, alignItems: 'center' }}>
           <TextField select size="small" label={t('audit.action')} value={accion} onChange={(e) => { setAccion(e.target.value); setPage(0); }} sx={filterSx}>
-            {ACCIONES.map((a) => <MenuItem key={a || 'all'} value={a}>{a || t('audit.all')}</MenuItem>)}
+            {ACCIONES.map((a) => <MenuItem key={a || 'all'} value={a}>{a ? accionLabel(a) : t('audit.all')}</MenuItem>)}
           </TextField>
           <TextField select size="small" label={t('audit.entity')} value={entidad} onChange={(e) => { setEntidad(e.target.value); setPage(0); }} sx={filterSx}>
-            {ENTIDADES.map((e) => <MenuItem key={e || 'all'} value={e}>{e || t('audit.all')}</MenuItem>)}
+            {ENTIDADES.map((e) => <MenuItem key={e || 'all'} value={e}>{e ? entidadLabel(e) : t('audit.all')}</MenuItem>)}
           </TextField>
           <TextField size="small" type="datetime-local" label={t('audit.from')} value={fromDate} onChange={(e) => { setFromDate(e.target.value); setPage(0); }} InputLabelProps={{ shrink: true }} sx={filterSx}/>
           <TextField size="small" type="datetime-local" label={t('audit.to')} value={toDate} onChange={(e) => { setToDate(e.target.value); setPage(0); }} InputLabelProps={{ shrink: true }} sx={filterSx}/>
@@ -174,17 +184,17 @@ export const AuditPage = () => {
             <TableCell sx={{ fontFamily: '"Roboto Mono", "Consolas", monospace', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
               {formatAuditDate(ev.AUD_Fecha_Hora)}
             </TableCell>
-            <TableCell><Chip label={ev.AUD_Accion} size="small" color={colorFor(ev.AUD_Accion)}/></TableCell>
+            <TableCell><Tooltip title={ev.AUD_Accion}><Chip label={accionLabel(ev.AUD_Accion)} size="small" color={colorFor(ev.AUD_Accion)}/></Tooltip></TableCell>
             <TableCell>
               <Typography variant="body2" sx={{ fontFamily: '"Roboto Mono", "Consolas", monospace', overflowWrap: 'anywhere' }}>
-                {ev.AUD_Entidad_Afectada}
+                {entidadLabel(ev.AUD_Entidad_Afectada)}
               </Typography>
             </TableCell>
             <TableCell sx={{ fontFamily: '"Roboto Mono", "Consolas", monospace', fontSize: '0.8rem' }}>
               {ev.AUD_IP_Origen ?? '—'}
             </TableCell>
             <TableCell sx={{ fontFamily: '"Roboto Mono", "Consolas", monospace', fontSize: '0.8rem', overflowWrap: 'anywhere' }}>
-              {ev.USU_Usuario || t('audit.system_user')}
+              {ev.usuario_nombre || ev.USU_Usuario || t('audit.system_user')}
             </TableCell>
             <TableCell align="right">
               <Tooltip title={t('audit.view_snapshot') as string}>
@@ -201,17 +211,17 @@ export const AuditPage = () => {
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between">
             <Box>
               <Typography variant="subtitle1">
-                {t('audit.snapshot_for')} {selected.AUD_Entidad_Afectada}
+                {t('audit.snapshot_for')} {entidadLabel(selected.AUD_Entidad_Afectada)}
               </Typography>
               <Typography variant="caption" color="text.secondary">
                 {formatAuditDate(selected.AUD_Fecha_Hora)}
               </Typography>
             </Box>
-            <Chip label={selected.AUD_Accion} size="small" color={colorFor(selected.AUD_Accion)}/>
+            <Chip label={accionLabel(selected.AUD_Accion)} size="small" color={colorFor(selected.AUD_Accion)}/>
           </Stack>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1.5 }}>
             <Chip variant="outlined" label={`${t('audit.col_ip')}: ${selected.AUD_IP_Origen ?? '—'}`}/>
-            <Chip variant="outlined" label={`${t('audit.col_user')}: ${selected.USU_Usuario || t('audit.system_user')}`}/>
+            <Chip variant="outlined" label={`${t('audit.col_user')}: ${selected.usuario_nombre || selected.USU_Usuario || t('audit.system_user')}`}/>
           </Stack>
           {selected.AUD_User_Agent && (<Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, overflowWrap: 'anywhere' }}>
               {t('audit.user_agent')}: {selected.AUD_User_Agent}

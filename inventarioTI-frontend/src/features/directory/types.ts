@@ -57,6 +57,7 @@ export const NOTIFICATION_EVENTS = [
   'mantenimiento_cerrado',
   'stock_bajo',
   'garantia_por_vencer',
+  'recepcion_diferencias',
 ] as const;
 
 export type NotificationEvent = (typeof NOTIFICATION_EVENTS)[number];

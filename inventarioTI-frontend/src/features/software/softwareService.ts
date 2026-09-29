@@ -4,7 +4,7 @@ import {
   Licencia, LicenciaCreate,
   LicenciaClave,
   TipoLicencia, TipoLicenciaCreate,
-  Instalacion, InstalacionCreate
+  Instalacion, InstalacionCreate, HistorialLicencia,
 } from '../../types/software';
 
 export const softwareService = {
@@ -49,6 +49,10 @@ export const softwareService = {
   // --- LICENCIAS (INVENTARIO) ---
   getLicenciasBySoftware: async (softwareId: number): Promise<Licencia[]> => {
     const response = await client.get<Licencia[]>(`/soft/licencias?software_id=${softwareId}`);
+    return response.data;
+  },
+  historialLicencia: async (licenciaId: number): Promise<HistorialLicencia[]> => {
+    const response = await client.get<HistorialLicencia[]>(`/soft/licencias/${licenciaId}/historial`);
     return response.data;
   },
   getClavesLicencia: async (licenciaId: number): Promise<LicenciaClave[]> => {

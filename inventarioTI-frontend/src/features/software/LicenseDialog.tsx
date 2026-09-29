@@ -6,7 +6,8 @@ import { useSnackbar } from 'notistack';
 import { getApiErrorMessage } from '../../api/errors';
 import { softwareService } from './softwareService';
 import { Licencia, LicenciaCreate, Software, TipoLicencia } from '../../types/software';
-import { SectionCard } from '../../components/ui';
+import { MoneyField, SectionCard } from '../../components/ui';
+import { DEFAULT_CURRENCY } from '../../utils/currency';
 interface Props {
     open: boolean;
     softwarePreseleccionado?: Software | null;
@@ -19,6 +20,8 @@ interface FormValues {
     LIC_Claves_Texto: string;
     LIC_Cantidad_Total: string;
     LIC_Fecha_Vencimiento: string;
+    LIC_Costo: string;
+    LIC_Moneda: string;
 }
 const empty: FormValues = {
     TLI_Tipo_Licencia: '',
@@ -26,6 +29,8 @@ const empty: FormValues = {
     LIC_Claves_Texto: '',
     LIC_Cantidad_Total: '1',
     LIC_Fecha_Vencimiento: '',
+    LIC_Costo: '',
+    LIC_Moneda: DEFAULT_CURRENCY,
 };
 export const LicenseDialog = ({ open, softwarePreseleccionado, licenciaToEdit, onClose }: Props) => {
     const { t } = useTranslation();
@@ -49,6 +54,8 @@ export const LicenseDialog = ({ open, softwarePreseleccionado, licenciaToEdit, o
                 LIC_Claves_Texto: '',
                 LIC_Cantidad_Total: String(licenciaToEdit.LIC_Cantidad_Total ?? 1),
                 LIC_Fecha_Vencimiento: licenciaToEdit.LIC_Fecha_Vencimiento ?? '',
+                LIC_Costo: licenciaToEdit.LIC_Costo != null ? String(licenciaToEdit.LIC_Costo) : '',
+                LIC_Moneda: licenciaToEdit.LIC_Moneda ?? DEFAULT_CURRENCY,
             });
         }
         else {
@@ -73,6 +80,10 @@ export const LicenseDialog = ({ open, softwarePreseleccionado, licenciaToEdit, o
             }
             if (data.LIC_Fecha_Vencimiento)
                 payload.LIC_Fecha_Vencimiento = data.LIC_Fecha_Vencimiento;
+            if (data.LIC_Costo !== '') {
+                payload.LIC_Costo = data.LIC_Costo;
+                payload.LIC_Moneda = data.LIC_Moneda;
+            }
             if (isEdit && licenciaToEdit) {
                 await softwareService.updateLicencia(licenciaToEdit.LIC_Licencia, payload);
                 enqueueSnackbar(t('common.success_update'), { variant: 'success' });
@@ -123,6 +134,7 @@ export const LicenseDialog = ({ open, softwarePreseleccionado, licenciaToEdit, o
                 <Controller name="LIC_Cantidad_Total" control={control} rules={{ required: true, min: 1 }} render={({ field }) => (<TextField {...field} fullWidth type="number" label={t('software.seats')} error={!!errors.LIC_Cantidad_Total} required/>)}/>
                 <Controller name="LIC_Fecha_Vencimiento" control={control} render={({ field }) => (<TextField {...field} fullWidth type="date" label={t('software.expiry')} InputLabelProps={{ shrink: true }}/>)}/>
               </Box>
+              <Controller name="LIC_Moneda" control={control} render={({ field: moneda }) => (<Controller name="LIC_Costo" control={control} render={({ field }) => (<MoneyField fullWidth sx={{ mt: 2 }} label={t('software.license_cost')} helperText={t('software.license_cost_help')} value={field.value} onChange={field.onChange} currency={moneda.value} onCurrencyChange={moneda.onChange}/>)}/>)}/>
             </SectionCard>
           </Stack>
         </DialogContent>

@@ -1,5 +1,5 @@
 import client from '../../api/axios';
-import { Movimiento, MovimientoCreate, TipoMovimiento } from '../../types/traceability';
+import { Movimiento, MovimientoCreate, TransferenciaCreate, TipoMovimiento } from '../../types/traceability';
 import { Activo } from '../../types/inventory';
 import { PersonaResumen } from '../../types/users';
 import { Area } from '../../types/geo';
@@ -20,6 +20,12 @@ export const movementService = {
   // --- ESCRITURA ---
   createMovement: async (data: MovimientoCreate): Promise<Movimiento> => {
     const response = await client.post<Movimiento>('/trazabilidad/movimientos', data);
+    return response.data;
+  },
+
+  /** Cambia la custodia de un equipo ya asignado (cierra la anterior y abre la nueva). */
+  transfer: async (data: TransferenciaCreate): Promise<Movimiento> => {
+    const response = await client.post<Movimiento>('/trazabilidad/transferencia', data);
     return response.data;
   },
 

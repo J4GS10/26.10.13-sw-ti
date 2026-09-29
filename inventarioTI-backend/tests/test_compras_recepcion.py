@@ -167,3 +167,29 @@ async def test_cierre_con_faltante_y_sin_cancelar_con_recepciones(client, auth_h
     r = await client.post(f"{BASE}/ordenes/{oid}/recibir", headers=h, json={
         "consumibles": [{"OCL_Linea": linea, "CON_Consumible": cid, "cantidad": 1}]})
     assert r.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_lineas_otro_se_reciben_por_conformidad(client, auth_headers, domain_seed):
+    """Fletes o servicios (OTRO) no generan inventario pero sí completan la orden."""
+    h, d = auth_headers, domain_seed
+    pid = await _proveedor(client, h)
+    orden = await _orden(client, h, pid, "OC-OTRO", [
+        {"OCL_Descripcion": "Laptop", "OCL_Cantidad": 1, "OCL_Precio_Unitario": "900", "OCL_Tipo": "ACTIVO"},
+        {"OCL_Descripcion": "Flete", "OCL_Cantidad": 1, "OCL_Precio_Unitario": "50", "OCL_Tipo": "OTRO"}])
+    oid = orden["OCO_Orden"]
+    la, lo = (ln["OCL_Linea"] for ln in orden["lineas"])
+
+    # Un OTRO no se puede recibir como activo.
+    r = await client.post(f"{BASE}/ordenes/{oid}/recibir", headers=h, json={"activos": [_activo(lo, "OTRO-S0", d)]})
+    assert r.status_code == 400 and r.json()["detail"] == f"LINE_TYPE_MISMATCH:{lo}"
+
+    r = await client.post(f"{BASE}/ordenes/{oid}/recibir", headers=h, json={"activos": [_activo(la, "OTRO-S1", d)]})
+    assert r.json()["OCO_Estado"] == "PARCIAL"
+    # La orden parcial aparece en la bandeja «Requiere su atención».
+    atencion = (await client.get("/api/v1/inventario/atencion", headers=h)).json()
+    parciales = next(i for i in atencion["items"] if i["clave"] == "ORDEN_PARCIAL")
+    assert any(x["numero"] == "OC-OTRO" for x in parciales["items"])
+    r = await client.post(f"{BASE}/ordenes/{oid}/recibir", headers=h, json={"otros": [{"OCL_Linea": lo, "cantidad": 1}]})
+    assert r.status_code == 200, r.text
+    assert r.json()["OCO_Estado"] == "RECIBIDA"

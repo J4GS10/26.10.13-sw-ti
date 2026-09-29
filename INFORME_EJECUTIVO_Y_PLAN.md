@@ -17,10 +17,10 @@ InventarioTI es un sistema de gestión de activos de TI para Lombardi. Tecnolog�
 - **Frontend:** React con MUI, en tres idiomas (español, inglés e italiano).
 - **Despliegue:** Caddy, nginx, cuatro workers y réplica de lectura, con adjuntos en MinIO.
 
-**Estado actual:**
-- La base técnica es sólida: seguridad por roles, alcance por sede en dos capas, sesiones robustas, actas, reportes y concurrencia controlada.
-- La QA integral del 2026-09-28 encontró **5 defectos bloqueantes y 14 altos**. Se concentran en las reglas de negocio de compras y de estados de activos, en la integración con Active Directory y en flujos de interfaz incompletos.
-- **El sistema todavía no está listo para producción.**
+**Estado actual (actualizado el 2026-09-29, ver §8):**
+- Las fases 0 a 6 del plan se ejecutaron. Los 5 defectos bloqueantes y los 14 altos de la QA del 2026-09-28 quedaron corregidos y cubiertos por pruebas automáticas.
+- Los cinco controles solicitados (inventario, asignaciones, entradas y salidas, reasignaciones de equipos y componentes, licencias) ya funcionan en pantalla, CSV y PDF sobre un **kardex unificado**.
+- Queda pendiente la QA integral de cierre (los 8 agentes) y algunos puntos de pulido listados en §8.3 antes de la puesta en producción.
 
 **Respuesta a la consulta de esta fecha:**
 - **Sí es posible** generar el control de inventario, el control de asignaciones, la bitácora de entradas y salidas, la bitácora de reasignaciones de equipos y componentes, y el control de licencias sobre la base actual.
@@ -348,3 +348,36 @@ Los registros actuales se conservan. El kardex se carga con una migración que r
 3. **Bajas:** catálogo de motivos y destinos, y quién aprueba.
 4. **Recepción:** tolerancia de precio (propuesta: ±2 %) y quién autoriza los sobrantes.
 5. **Toma de inventario:** frecuencia y responsables por sede.
+
+---
+
+## 8. Estado de ejecución (sesión 12, 2026-09-29)
+
+### 8.1 Avance por fase
+
+| Fase | Estado | Qué quedó funcionando |
+|---|---|---|
+| 0 | Hecha (con una excepción) | CI en GitHub Actions (backend contra PostgreSQL 16, cabeza única de Alembic; frontend `tsc`, `eslint`, `build` y traducciones). Respaldos programados de PostgreSQL y MinIO con scripts de restauración; MinIO con versionado, retención, cifrado SSE y usuario de servicio propio. **Excepción:** la protección de la rama `main` exige GitHub Pro en repositorios privados. |
+| 1 | Hecha | Máquina de estados de activos y órdenes; el estado solo cambia por operaciones; no se asigna a personas inactivas ni equipos en mantenimiento; cierre atómico de tickets; detalle y fechas del activo; sede obligatoria; Active Directory con protección contra bajas masivas; script `app.diagnostico_inventario` (reporte y `--corregir`). |
+| 2 | Hecha | Límites del rol de seguridad, permisos de base de datos sobre cuentas, MFA de un solo uso sin bloqueos injustos, validación del contenido de los adjuntos, código 2FA fuera de los logs, unicidad sin distinguir mayúsculas ni espacios, límite de peticiones por usuario. |
+| 3 | Hecha | Recepción controlada: entregas parciales, pendiente por línea, precio real con tolerancia (±2 %, `RECEPCION_TOLERANCIA_PRECIO_PCT`), sobrantes solo justificados, conformidad de fletes y servicios (líneas «OTRO»), cierre con faltante, cada entrega con su guía o factura, aviso por correo de las diferencias. Devolución individual desde Movimientos y desde la ficha; asignación con búsqueda en el servidor. |
+| 4 | Hecha | Kardex unificado de solo inserción (341 eventos reconstruidos de los datos reales), baja formal con motivo y destino de catálogo, componentes con historial, historial de licencias con motivo del retiro, costo y moneda de licencias y consumibles, toma de inventario por sede o área con QR y conciliación, reportes (kardex, custodia, entradas y salidas, licencias, hoja de vida en PDF). |
+| 5 | Hecha | Ficha del activo como centro de acciones según su estado; siguiente paso tras crear un activo (asignar, etiqueta, otro igual), tras asignar (acta), tras devolver (descargo o ticket si llegó dañado), tras recibir (códigos, etiquetas, pendientes) y tras una salida que deja el stock bajo el mínimo (orden de compra propuesta). Bandeja «Requiere su atención» en el tablero con acceso directo a cada caso. |
+| 6 | Hecha en lo esencial | Traducción de todos los códigos de error del servidor (≈140 nuevos), zona horaria de Guatemala en fechas, actas y CSV, bitácora legible (acción, entidad y nombre del usuario traducidos; exportación con los filtros de pantalla), correo sin el código 2FA en el asunto, fechas de Active Directory en hora local. Ver §8.3 para lo no incluido. |
+
+### 8.2 Verificación
+
+- **Pruebas del backend:** 389/389 en verde contra PostgreSQL 16 (incluye las regresiones de cada defecto y de los flujos nuevos).
+- **Frontend:** `tsc`, `eslint`, `build` y `verify.py` sin errores; 1 928 claves por idioma, sin claves huérfanas.
+- **Stack de producción (`inv_ui`):** migraciones aplicadas sobre los datos reales, RLS activo. `herramientas-qa/qa9_fases.py` recorre por la API los flujos nuevos (recepción parcial, precio justificado, sobrante rechazado, cierre con faltante, bandeja de atención, kardex, hoja de vida, baja, consumibles con costo, ajuste por conteo, reportes y rutas del frontend). Resultado final: 26/26 casos. La primera ejecución detectó que el costo del consumible no se devolvía en la API; quedó corregido con su prueba de regresión.
+
+### 8.3 Pendiente antes de producción
+
+1. **QA integral de cierre** con los 8 agentes de `PROMPT_QA.md`, incluida la parte visual (Playwright) de las pantallas nuevas.
+2. **Pulido no incluido en esta sesión:** pantallas de catálogo para estados operativos, tipos de especificación, tipos de conexión y cargos; búsqueda global (Ctrl+K), acciones en lote y «deshacer»; vista en tarjetas para móvil en todas las tablas; avisos previos al reemplazo de un equipo del mismo tipo o en garantía.
+3. **Infraestructura:** protección de la rama `main` (requiere GitHub Pro o repositorio de organización); imagen de MinIO fijada por digest local (Docker Hub dejó de publicarla; ver `DEPLOYMENT.md` §8.2); prueba de Active Directory y correo con los accesos reales.
+4. **Datos:** revisar con el área usuaria el reporte de `python -m app.diagnostico_inventario` y aprobar la corrección de las incoherencias heredadas (3 índices de unicidad quedaron pendientes por duplicados en los datos de QA).
+
+### 8.4 Decisiones aplicadas por defecto (§7)
+
+Se aplicaron las recomendaciones del §7 mientras no haya otra instrucción: orden de fases recomendado; cualquier activo puede instalarse como componente y los cambios de especificación quedan en el historial; catálogo fijo de motivos y destinos de baja, ejecutada por ADMIN_TI; tolerancia de precio de ±2 % configurable y sobrantes solo con motivo, por un administrador; toma de inventario a demanda por sede o área.

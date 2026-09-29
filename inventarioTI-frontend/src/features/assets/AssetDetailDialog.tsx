@@ -17,19 +17,38 @@ import ShieldIcon from '@mui/icons-material/ShieldOutlined';
 import LanIcon from '@mui/icons-material/LanOutlined';
 import SourceIcon from '@mui/icons-material/SourceOutlined';
 import DnsIcon from '@mui/icons-material/DnsOutlined';
+import ExtensionIcon from '@mui/icons-material/Extension';
+import AssignmentIndIcon from '@mui/icons-material/AssignmentInd';
+import UndoIcon from '@mui/icons-material/Undo';
+import BuildIcon from '@mui/icons-material/Build';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
+import { useNavigate } from 'react-router-dom';
+import { KardexTimeline } from '../../components/ui';
+import { usePermissions } from '../../hooks/usePermissions';
+import { inventarioService } from '../../api/inventarioService';
+import type { KardexEvento } from '../../types/kardex';
+import { normalizeLanguage } from '../../types/language';
+import { formatDate } from '../../utils/dates';
+import { typeLabel } from '../../utils/catalogLabels';
+import { BajaDialog } from './BajaDialog';
+import { ComponentesSection } from './ComponentesSection';
+import { DevolucionDialog } from '../operations/DevolucionDialog';
+import { AssignmentDialog } from '../operations/AssignmentDialog';
 import { useTranslation } from 'react-i18next';
-import { movementTypeLabel, stateLabel } from '../../utils/catalogLabels';
+import { stateLabel } from '../../utils/catalogLabels';
 import { EmptyState } from '../../components/ui';
-import { useConfirm } from '../../components/confirm-context';
 import { useSnackbar } from 'notistack';
 import { AttachmentsSection } from '../attachments/AttachmentsSection';
 import { SectionCard } from '../../components/ui';
 import { Activo, EstadoOperativo, Marca, Modelo, TipoActivo } from '../../types/inventory';
 import { assetService, InstalacionDetalle, Especificacion, TipoEspecificacion } from './assetService';
+import { catalogService } from '../catalogs/catalogService';
 import client from '../../api/axios';
 import { getApiErrorDetail, getApiErrorMessage } from '../../api/errors';
 import type { Movimiento } from '../../types/traceability';
 import { formatMoney } from '../../utils/currency';
+const SIN_DATOS: never[] = [];
 interface Props {
     open: boolean;
     asset: Activo | null;
@@ -117,12 +136,34 @@ const statusChipColor = (name?: string): ChipProps['color'] => {
         return 'error';
     return 'default';
 };
-export const AssetDetailDialog = ({ open, asset, marcas = [], modelos = [], tipos = [], estados = [], onClose, onChanged, }: Props) => {
+export const AssetDetailDialog = ({ open, asset, marcas: marcasProp = SIN_DATOS, modelos: modelosProp = SIN_DATOS, tipos: tiposProp = SIN_DATOS, estados: estadosProp = SIN_DATOS, onClose, onChanged, }: Props) => {
     const { t, i18n } = useTranslation();
-    const confirm = useConfirm();
     const { enqueueSnackbar } = useSnackbar();
     const theme = useTheme();
+    const navigate = useNavigate();
+    const { canOperate, canAdminInventory } = usePermissions();
+    const [kardex, setKardex] = useState<KardexEvento[]>([]);
+    const [dialogo, setDialogo] = useState<'asignar' | 'devolver' | 'baja' | null>(null);
+    // Desinstalar una licencia pide el motivo (queda en el historial de la licencia).
+    const [retiroLicencia, setRetiroLicencia] = useState<number | null>(null);
+    const [motivoRetiro, setMotivoRetiro] = useState('');
     const [tab, setTab] = useState(0);
+    // Abierta desde el escáner o el tablero no recibe catálogos: los carga ella misma.
+    const [catalogos, setCatalogos] = useState<{ marcas: Marca[]; modelos: Modelo[]; tipos: TipoActivo[]; estados: EstadoOperativo[] } | null>(null);
+    const faltanCatalogos = estadosProp.length === 0;
+    useEffect(() => {
+        if (!open || !faltanCatalogos || catalogos)
+            return;
+        let vivo = true;
+        Promise.all([assetService.getMarcas(), catalogService.getModelosFlat(), assetService.getTipos(), assetService.getEstados()])
+            .then(([ma, mo, ti, es]) => { if (vivo) setCatalogos({ marcas: ma, modelos: mo as Modelo[], tipos: ti, estados: es }); })
+            .catch(() => undefined);
+        return () => { vivo = false; };
+    }, [open, faltanCatalogos, catalogos]);
+    const marcas = (marcasProp.length ? marcasProp : catalogos?.marcas ?? []) as Marca[];
+    const modelos = (modelosProp.length ? modelosProp : catalogos?.modelos ?? []) as Modelo[];
+    const tipos = (tiposProp.length ? tiposProp : catalogos?.tipos ?? []) as TipoActivo[];
+    const estados = (estadosProp.length ? estadosProp : catalogos?.estados ?? []) as EstadoOperativo[];
     const [instalaciones, setInstalaciones] = useState<InstalacionDetalle[]>([]);
     const [historial, setHistorial] = useState<Movimiento[]>([]);
     const [loading, setLoading] = useState(false);
@@ -194,12 +235,14 @@ export const AssetDetailDialog = ({ open, asset, marcas = [], modelos = [], tipo
             return;
         setLoading(true);
         try {
-            const [ins, hist] = await Promise.all([
+            const [ins, hist, kdx] = await Promise.all([
                 assetService.getInstalaciones(asset.ACT_Activo, true),
                 assetService.getHistorial(asset.ACT_Activo),
+                inventarioService.kardex({ activo_id: asset.ACT_Activo }, 300),
             ]);
             setInstalaciones(ins);
             setHistorial(hist);
+            setKardex(kdx.items);
         }
         catch {
             enqueueSnackbar(t('common.error_loading'), { variant: 'error' });
@@ -258,10 +301,9 @@ export const AssetDetailDialog = ({ open, asset, marcas = [], modelos = [], tipo
     const handleDesinstalar = async (licenciaId: number) => {
         if (!asset)
             return;
-        if (!(await confirm({ message: t('software.confirm_uninstall'), destructive: true, confirmText: t('software.uninstall') })))
-            return;
+        setRetiroLicencia(null);
         try {
-            await assetService.desinstalarLicencia(asset.ACT_Activo, licenciaId);
+            await assetService.desinstalarLicencia(asset.ACT_Activo, licenciaId, motivoRetiro ? t(`software.uninstall_reasons.${motivoRetiro}`) : undefined);
             enqueueSnackbar(t('software.uninstalled_ok'), { variant: 'success' });
             await loadAll();
             onChanged?.();
@@ -272,6 +314,12 @@ export const AssetDetailDialog = ({ open, asset, marcas = [], modelos = [], tipo
     };
     if (!asset)
         return null;
+    // Custodia vigente (movimiento abierto) para el resumen y las acciones.
+    const abierto = historial.find((m) => !m.MOV_Fecha_Devolucion);
+    const custodia = abierto ? {
+        persona: abierto.persona ? `${abierto.persona.PER_Primer_Nombre} ${abierto.persona.PER_Primer_Apellido}` : '—',
+        area: abierto.area?.ARE_Nombre ?? '—',
+    } : null;
     const modelo = modelos.find((item) => item.MOD_Modelo === asset.MOD_Modelo);
     const marca = modelo ? marcas.find((item) => item.MAR_Marca === modelo.MAR_Marca) : undefined;
     const tipo = tipos.find((item) => item.TAC_Tipo_Activo === asset.TAC_Tipo_Activo);
@@ -316,16 +364,28 @@ export const AssetDetailDialog = ({ open, asset, marcas = [], modelos = [], tipo
         },
     ];
     const specSections = allSpecSections.filter((section) => visibleGroups[section.key].length > 0);
+    // Ficha como centro de acciones: la acción principal depende del estado.
+    const estadoSlug = normalizeSpecName(estado?.EOP_Nombre ?? '');
+    const deBaja = estadoSlug === 'baja';
+    const esComponente = !!asset.ACT_Activo_Padre;
     const summaryItems: SummaryItem[] = [
-        { label: t('assets.dialog.type'), value: tipo?.TAC_Nombre ?? asset.TAC_Tipo_Activo },
+        { label: t('assets.dialog.type'), value: tipo ? typeLabel(t, tipo.TAC_Nombre) : asset.TAC_Tipo_Activo },
         { label: t('assets.dialog.brand'), value: marca?.MAR_Nombre ?? '-' },
         { label: t('assets.dialog.model'), value: modelo?.MOD_Nombre ?? asset.MOD_Modelo },
         { label: t('assets.table.status'), value: estado ? stateLabel(t, estado.EOP_Nombre) : asset.EOP_Estado_Operativo },
-        { label: t('assets.dialog.purchase_date'), value: asset.ACT_Fecha_Compra },
-        { label: t('assets.detail.warranty'), value: asset.ACT_Fin_Garantia ?? '-' },
+        { label: t('assets.dialog.purchase_date'), value: formatDate(asset.ACT_Fecha_Compra, i18n.language) },
+        { label: t('assets.detail.warranty'), value: asset.ACT_Fin_Garantia ? formatDate(asset.ACT_Fin_Garantia, i18n.language) : '-' },
+        { label: t('assets.detail.custodian'), value: custodia ? `${custodia.persona} · ${custodia.area}` : t('assets.detail.no_custodian') },
         { label: t('assets.dialog.cost'), value: formatMoney(asset.ACT_Costo, asset.ACT_Moneda, i18n.language) },
         { label: t('assets.table.serial'), value: asset.ACT_Serie_Fabricante, monospace: true },
     ];
+    const cerrarDialogo = (changed: boolean) => {
+        setDialogo(null);
+        if (changed) {
+            loadAll();
+            onChanged?.();
+        }
+    };
     const renderSpecSection = (section: SpecSection) => {
         const Icon = section.icon;
         return (<Box key={section.key} sx={{
@@ -411,9 +471,35 @@ export const AssetDetailDialog = ({ open, asset, marcas = [], modelos = [], tipo
         </IconButton>
       </DialogTitle>
 
-      <Tabs value={tab} onChange={(_, v: number) => setTab(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
+      {(canOperate || deBaja) && (<Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ px: 3, pb: 1.5 }}>
+          {deBaja && (<Chip color="error" label={t('assets.detail.decommissioned_info', {
+                reason: asset.ACT_Baja_Motivo ? t(`decommission.reasons.${asset.ACT_Baja_Motivo}`) : '—',
+                destination: asset.ACT_Baja_Destino ? t(`decommission.destinations.${asset.ACT_Baja_Destino}`) : '—',
+            })}/>)}
+          {canOperate && !deBaja && !esComponente && !custodia && estadoSlug !== 'en reparacion' && (<Button size="small" variant="contained" startIcon={<AssignmentIndIcon />} onClick={() => setDialogo('asignar')}>
+              {t('assets.actions.assign')}
+            </Button>)}
+          {canOperate && custodia && (<Button size="small" variant="contained" startIcon={<UndoIcon />} onClick={() => setDialogo('devolver')}>
+              {t('assets.actions.return')}
+            </Button>)}
+          {canOperate && custodia && (<Button size="small" startIcon={<AssignmentIndIcon />} onClick={() => setDialogo('asignar')}>
+              {t('assets.actions.transfer')}
+            </Button>)}
+          {canOperate && !deBaja && estadoSlug !== 'en reparacion' && (<Button size="small" startIcon={<BuildIcon />} onClick={() => { onClose(); navigate(`/mantenimiento?nuevo=${asset.ACT_Activo}`); }}>
+              {t('assets.actions.maintenance')}
+            </Button>)}
+          <Button size="small" startIcon={<PictureAsPdfIcon />} onClick={() => inventarioService.hojaDeVida(asset.ACT_Activo, normalizeLanguage(i18n.language)).catch((err) => enqueueSnackbar(getApiErrorMessage(err, t('common.error_generic')), { variant: 'error' }))}>
+            {t('assets.actions.history_pdf')}
+          </Button>
+          {canAdminInventory && !deBaja && !custodia && (<Button size="small" color="error" startIcon={<DeleteForeverIcon />} onClick={() => setDialogo('baja')}>
+              {t('assets.actions.decommission')}
+            </Button>)}
+        </Stack>)}
+
+      <Tabs value={tab} onChange={(_, v: number) => setTab(v)} variant="scrollable" allowScrollButtonsMobile sx={{ borderBottom: 1, borderColor: 'divider' }}>
         <Tab icon={<InfoOutlinedIcon />} iconPosition="start" label={t('assets.detail.tab_info')}/>
         <Tab icon={<AppsIcon />} iconPosition="start" label={t('software.installed_on_asset')}/>
+        <Tab icon={<ExtensionIcon />} iconPosition="start" label={t('components.tab')}/>
         <Tab icon={<HistoryIcon />} iconPosition="start" label={t('assets.detail.tab_history')}/>
         <Tab icon={<AttachFileIcon />} iconPosition="start" label={t('assets.detail.tab_attachments')}/>
       </Tabs>
@@ -498,10 +584,10 @@ export const AssetDetailDialog = ({ open, asset, marcas = [], modelos = [], tipo
                         <TableCell>
                           {i.licencia?.tipo_licencia?.TLI_Nombre && (<Chip size="small" label={i.licencia.tipo_licencia.TLI_Nombre}/>)}
                         </TableCell>
-                        <TableCell>{i.INS_Fecha_Instalacion}</TableCell>
+                        <TableCell>{formatDate(i.INS_Fecha_Instalacion, i18n.language)}</TableCell>
                         <TableCell align="right">
                           <Tooltip title={t('software.uninstall') as string}>
-                            <IconButton size="small" color="error" onClick={() => handleDesinstalar(i.LIC_Licencia)}>
+                            <IconButton size="small" color="error" onClick={() => { setMotivoRetiro(''); setRetiroLicencia(i.LIC_Licencia); }}>
                               <DeleteIcon fontSize="small"/>
                             </IconButton>
                           </Tooltip>
@@ -538,43 +624,36 @@ export const AssetDetailDialog = ({ open, asset, marcas = [], modelos = [], tipo
               </SectionCard>)}
           </Stack>)}
 
-        {tab === 2 && (<SectionCard noPadding title={t('assets.detail.history_title')} icon={<HistoryIcon fontSize="small"/>}>
-            {loading ? (<Box display="flex" justifyContent="center" py={3}><CircularProgress /></Box>) : historial.length === 0 ? (<Box sx={{ p: 2.5 }}><EmptyState compact title={t('assets.detail.no_history')}/></Box>) : (<TableContainer>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>{t('operations.table.date')}</TableCell>
-                      <TableCell>{t('operations.table.type')}</TableCell>
-                      <TableCell>{t('operations.table.responsible')}</TableCell>
-                      <TableCell>{t('departments.location')}</TableCell>
-                      <TableCell>{t('assets.detail.return_date')}</TableCell>
-                      <TableCell>{t('operations.dialog.notes')}</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {historial.map((m) => (<TableRow key={m.MOV_Movimiento} hover>
-                        <TableCell>{m.MOV_Fecha_Asignacion?.slice(0, 19).replace('T', ' ')}</TableCell>
-                        <TableCell><Chip size="small" label={movementTypeLabel(t, m.tipo_movimiento?.TMO_Nombre)}/></TableCell>
-                        <TableCell>
-                          {m.persona ? `${m.persona.PER_Primer_Nombre} ${m.persona.PER_Primer_Apellido}` : '-'}
-                        </TableCell>
-                        <TableCell>{m.area?.ARE_Nombre ?? '-'}</TableCell>
-                        <TableCell>{m.MOV_Fecha_Devolucion ? m.MOV_Fecha_Devolucion.slice(0, 10) : '-'}</TableCell>
-                        <TableCell sx={{ maxWidth: 320, overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
-                          {m.MOV_Observacion ?? ''}
-                        </TableCell>
-                      </TableRow>))}
-                  </TableBody>
-                </Table>
-              </TableContainer>)}
+        {tab === 2 && (<SectionCard title={t('components.title')} subtitle={t('components.subtitle')} icon={<ExtensionIcon fontSize="small"/>}>
+            <ComponentesSection activoId={asset.ACT_Activo} canOperate={canOperate && !deBaja} onChanged={() => { loadAll(); onChanged?.(); }}/>
           </SectionCard>)}
 
-        {tab === 3 && (<SectionCard title={t('assets.detail.attachments_title')} icon={<AttachFileIcon fontSize="small"/>}>
+        {tab === 3 && (<SectionCard title={t('assets.detail.history_title')} subtitle={t('assets.detail.history_hint')} icon={<HistoryIcon fontSize="small"/>}>
+            {loading ? (<Box display="flex" justifyContent="center" py={3}><CircularProgress /></Box>) : <KardexTimeline eventos={kardex}/>}
+          </SectionCard>)}
+
+        {tab === 4 && (<SectionCard title={t('assets.detail.attachments_title')} icon={<AttachFileIcon fontSize="small"/>}>
             <AttachmentsSection activoId={asset.ACT_Activo}/>
           </SectionCard>)}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>{t('common.close')}</Button>
       </DialogActions>
+      <AssignmentDialog open={dialogo === 'asignar'} activoInicial={asset} onClose={(refresh) => cerrarDialogo(!!refresh)}/>
+      <DevolucionDialog open={dialogo === 'devolver'} activo={asset} custodio={custodia?.persona} onClose={cerrarDialogo}/>
+      <BajaDialog open={dialogo === 'baja'} activo={asset} onClose={cerrarDialogo}/>
+      <Dialog open={retiroLicencia != null} onClose={() => setRetiroLicencia(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>{t('software.uninstall')}</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>{t('software.confirm_uninstall')}</Typography>
+          <TextField select fullWidth label={t('software.uninstall_reason')} value={motivoRetiro} onChange={(e) => setMotivoRetiro(e.target.value)}>
+            {['liberar', 'vencida', 'no_requerida', 'reinstalacion', 'cambio_equipo'].map((m) => (<MenuItem key={m} value={m}>{t(`software.uninstall_reasons.${m}`)}</MenuItem>))}
+          </TextField>
+        </DialogContent>
+        <DialogActions>
+          <Button color="inherit" onClick={() => setRetiroLicencia(null)}>{t('common.cancel')}</Button>
+          <Button variant="contained" color="error" disabled={!motivoRetiro} onClick={() => retiroLicencia != null && handleDesinstalar(retiroLicencia)}>{t('software.uninstall')}</Button>
+        </DialogActions>
+      </Dialog>
     </Dialog>);
 };

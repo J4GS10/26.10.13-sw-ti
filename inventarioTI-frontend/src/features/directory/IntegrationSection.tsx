@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { parseApiDate } from '../../utils/dates';
 import type { ReactNode } from 'react';
 import {
   Alert,
@@ -164,10 +165,11 @@ const detectPreset = (c: IntegrationOut): Preset => {
   return 'custom';
 };
 
-const isFuture = (iso: string | null): iso is string => !!iso && new Date(iso).getTime() > Date.now();
+// El servidor envía UTC sin zona: parseApiDate lo interpreta como UTC.
+const isFuture = (iso: string | null): iso is string => !!iso && (parseApiDate(iso)?.getTime() ?? 0) > Date.now();
 
 const formatTime = (iso: string) =>
-  new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  (parseApiDate(iso) ?? new Date(iso)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 /* ─────────────────────────── Validación ─────────────────────────── */
 

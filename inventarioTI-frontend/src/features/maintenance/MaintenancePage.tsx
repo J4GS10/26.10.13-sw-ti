@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Box, TableCell, TableRow, Button, Chip, IconButton, Tooltip, } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { PageHeader, DataTableShell } from '../../components/ui';
@@ -21,7 +22,10 @@ export const MaintenancePage = () => {
     const { enqueueSnackbar } = useSnackbar();
     const [tickets, setTickets] = useState<Mantenimiento[]>([]);
     const [loading, setLoading] = useState(true);
-    const [createOpen, setCreateOpen] = useState(false);
+    const [searchParams, setSearchParams] = useSearchParams();
+    // ?nuevo=<activo>: llega desde la ficha del activo o una devolución con daño.
+    const activoNuevo = searchParams.get('nuevo');
+    const [createOpen, setCreateOpen] = useState(!!activoNuevo);
     const [detailOpen, setDetailOpen] = useState(false);
     const [selected, setSelected] = useState<Mantenimiento | null>(null);
     const loadData = useCallback(() => {
@@ -58,7 +62,7 @@ export const MaintenancePage = () => {
         actions={canOperate ? <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>{t('maintenance.new_ticket')}</Button> : undefined}
       />
 
-      <MaintenanceDialog open={createOpen} onClose={(refresh) => { setCreateOpen(false); if (refresh)
+      <MaintenanceDialog open={createOpen} activoInicialId={activoNuevo} onClose={(refresh) => { setCreateOpen(false); if (activoNuevo) setSearchParams({}); if (refresh)
         loadData(); }}/>
       <MaintenanceDetailDialog open={detailOpen} ticket={selected} onClose={() => { setDetailOpen(false); setSelected(null); }} onChanged={loadData}/>
 

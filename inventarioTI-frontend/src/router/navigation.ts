@@ -17,6 +17,8 @@ import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import PolicyIcon from '@mui/icons-material/Policy';
 import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import ContactMailIcon from '@mui/icons-material/ContactMail';
+import TimelineIcon from '@mui/icons-material/Timeline';
+import FactCheckIcon from '@mui/icons-material/FactCheck';
 import type { SvgIconComponent } from '@mui/icons-material';
 import { UserRole } from '../types/auth';
 import { ADMIN_READER_ROLES, AUDIT_READER_ROLES, IAM_ROLES, INVENTORY_READER_ROLES, INVENTORY_ROLES } from '../utils/roles';
@@ -59,6 +61,20 @@ export const NAVIGATION_ITEMS: NavItem[] = [
     title: 'menu.movements',
     path: '/operaciones/movimientos',
     icon: SwapHorizIcon,
+    allowedRoles: INVENTORY_READER_ROLES,
+    group: 'OPERATIONS',
+  },
+  {
+    title: 'menu.traceability',
+    path: '/trazabilidad',
+    icon: TimelineIcon,
+    allowedRoles: INVENTORY_READER_ROLES,
+    group: 'OPERATIONS',
+  },
+  {
+    title: 'menu.inventory_count',
+    path: '/inventario/tomas',
+    icon: FactCheckIcon,
     allowedRoles: INVENTORY_READER_ROLES,
     group: 'OPERATIONS',
   },

@@ -223,6 +223,17 @@ Todo el trabajo de las sesiones 4–10 subido a la rama `feature/sesiones-4-10` 
 
 ---
 
+### 2.12 Sesión 12 — Fases 0 a 6 del plan (2026-09-29)
+
+- **Monorepo formal** `J4GS10/Inventario-TI` (frontend + backend), CI en GitHub Actions, respaldos de PostgreSQL y MinIO con restauración.
+- **Integridad (F1) y seguridad (F2):** máquina de estados, reglas de asignación, cierre atómico de tickets, AD protegido, MFA de un solo uso, adjuntos validados por contenido, unicidad sin mayúsculas ni espacios, script `app.diagnostico_inventario`.
+- **Compras (F3):** recepción parcial con pendiente por línea, precio real con tolerancia, sobrantes justificados, conformidad de servicios (líneas OTRO), cierre con faltante, entregas con documento y aviso por correo. UI: `ReceiveOrderDialog` (resumen con códigos, etiquetas y pendientes), `OrderDetailDialog` (pedido/recibido/pendiente, entregas, cierre con faltante), tipo por línea en la orden.
+- **Trazabilidad (F4):** kardex unificado (migración `e2f3a4b5c6d7`), baja formal, componentes, historial de licencias, costos en moneda de origen en licencias y consumibles, toma de inventario (`/inventario/tomas`), reportes (`/trazabilidad`, hoja de vida PDF, licencias CSV).
+- **Diálogo (F5):** ficha del activo como centro de acciones, siguiente paso tras crear/asignar/devolver/recibir, propuesta de orden de compra cuando el stock queda bajo el mínimo, bandeja «Requiere su atención» en el tablero.
+- **Pulido (F6):** ≈140 códigos de error traducidos, bitácora legible con exportación filtrada, fechas en hora de Guatemala, textos formales.
+- **QA:** `herramientas-qa/qa9_fases.py` contra `inv_ui`; detectó y se corrigió que la API de consumibles no devolvía costo ni moneda (prueba `test_consumible_costo.py`).
+- Pendientes: ver `INFORME_EJECUTIVO_Y_PLAN.md` §8.3.
+
 ## 3. Pendientes
 
 > **Histórico (sesiones 1–2).** Casi todo lo de esta sección y de la §5 ya se resolvió en sesiones posteriores. Los pendientes vigentes están en **`CONTINUAR.md` §4**.

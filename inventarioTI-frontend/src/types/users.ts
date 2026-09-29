@@ -28,6 +28,8 @@ export interface PersonaCombo {
   PER_Primer_Nombre: string;
   PER_Primer_Apellido: string;
   PER_Email_Corporativo: string;
+  /** Inactiva = ya salió de la organización (no recibe equipos ni reporta tickets). */
+  PER_Estado?: boolean;
 }
 
 export type PersonaBackend = PersonaResumen;

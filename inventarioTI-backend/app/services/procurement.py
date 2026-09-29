@@ -248,7 +248,7 @@ class ProcurementService(BaseService[ProcurementRepository]):
             raise HTTPException(404, "PURCHASE_ORDER_NOT_FOUND")
         if orden.OCO_Estado not in ("BORRADOR", "PARCIAL"):
             raise HTTPException(409, "ORDER_NOT_RECEIVABLE")  # recibida, cerrada o cancelada
-        if not (schema.consumibles or schema.activos or schema.licencias):
+        if not (schema.consumibles or schema.activos or schema.licencias or schema.otros):
             raise HTTPException(400, "EMPTY_RECEIPT")
 
         lineas_validas = {ln.OCL_Linea: ln for ln in orden.lineas}
@@ -285,6 +285,9 @@ class ProcurementService(BaseService[ProcurementRepository]):
             acumular(ra.OCL_Linea, "ACTIVO", 1, ra.ACT_Costo)
         for rl in schema.licencias:
             acumular(rl.OCL_Linea, "LICENCIA", int(rl.cantidad or 0), rl.precio_unitario)
+        # Fletes, instalación o servicios: solo se da conformidad (sin inventario).
+        for ro in schema.otros:
+            acumular(ro.OCL_Linea, "OTRO", ro.cantidad, ro.precio_unitario)
 
         tolerancia = Decimal(str(settings.RECEPCION_TOLERANCIA_PRECIO_PCT)) / Decimal(100)
         diferencias: list[dict] = []

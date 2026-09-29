@@ -15,11 +15,38 @@ export function getApiErrorDetail(error: unknown): string | undefined {
   return typeof detail === 'string' ? detail : undefined;
 }
 
+/** Código del error sin sus parámetros (`RECEIPT_EXCEEDS_PENDING:12:1` → `RECEIPT_EXCEEDS_PENDING`). */
+export function getApiErrorCode(error: unknown): string | undefined {
+  return getApiErrorDetail(error)?.split(':')[0];
+}
+
+/** Parámetros del código (`RECEIPT_EXCEEDS_PENDING:12:1` → `['12', '1']`). */
+export function getApiErrorParams(error: unknown): string[] {
+  const detail = getApiErrorDetail(error);
+  return detail ? detail.split(':').slice(1) : [];
+}
+
+/**
+ * Errores sin código del backend: el proxy (413 de nginx), el límite de
+ * peticiones o la red. Se traducen igual que los códigos del backend.
+ */
+function codeFromStatus(error: unknown): string | undefined {
+  if (!isAxiosError(error)) return undefined;
+  if (!error.response) return error.code === 'ECONNABORTED' ? 'REQUEST_TIMEOUT' : 'NETWORK_ERROR';
+  if (error.response.status === 413) return 'FILE_TOO_LARGE';
+  if (error.response.status === 429) return 'RATE_LIMIT_EXCEEDED';
+  if (error.response.status === 403) return 'FORBIDDEN';
+  return undefined;
+}
+
 export function getApiErrorMessage(error: unknown, fallback: string): string {
   const detail = getApiErrorDetail(error);
-  if (!detail) return fallback;
+  if (!detail) {
+    const code = codeFromStatus(error);
+    return code && i18n.exists(`api_errors.${code}`) ? i18n.t(`api_errors.${code}`) : fallback;
+  }
   // Algunos códigos traen parámetros: `PASSWORD_POLICY_VIOLATION:min_length:12,require_symbol`.
-  const code = detail.split(':')[0];
+  const [code, ...params] = detail.split(':');
   const key = `api_errors.${code}`;
   if (code === 'PASSWORD_POLICY_VIOLATION' && i18n.exists(key)) {
     // Motivos concretos (palabra común, datos personales, secuencias…).
@@ -30,9 +57,17 @@ export function getApiErrorMessage(error: unknown, fallback: string): string {
     return [i18n.t(key), ...reasons].join(' ');
   }
   if (code === 'PASSWORD_REUSED' && i18n.exists(key)) {
-    return i18n.t(key, { count: Number(detail.split(':')[1]) || 5 });
+    return i18n.t(key, { count: Number(params[0]) || 5 });
   }
-  if (API_ERROR_CODE.test(code) && i18n.exists(key)) return i18n.t(key);
+  if (API_ERROR_CODE.test(code) && i18n.exists(key)) {
+    // Parámetros posicionales disponibles como {{p1}}, {{p2}}… y {{count}}.
+    const values: Record<string, string | number> = {};
+    params.forEach((value, index) => { values[`p${index + 1}`] = value; });
+    if (params.length && !Number.isNaN(Number(params[params.length - 1]))) {
+      values.count = Number(params[params.length - 1]);
+    }
+    return i18n.t(key, values);
+  }
   // Un código técnico sin traducción no debe mostrarse al usuario.
   return API_ERROR_CODE.test(code) ? fallback : detail;
 }

@@ -43,4 +43,15 @@ export interface MovimientoCreate {
   TMO_Tipo_Movimiento: number;
   MOV_Observacion?: string;
   ACT_Hostname?: string | null;
+  /** Préstamos: fecha comprometida de devolución (YYYY-MM-DD). */
+  MOV_Fecha_Prevista_Devolucion?: string | null;
+  MOV_Motivo?: string;
+}
+
+export interface TransferenciaCreate {
+  ACT_Activo: string;
+  PER_Persona_Destino: string;
+  ARE_Area_Destino: number;
+  MOV_Observacion?: string;
+  MOV_Motivo?: string;
 }

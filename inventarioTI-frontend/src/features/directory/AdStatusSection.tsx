@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { formatDateTimeValue } from '../../utils/dates';
 import { Link as RouterLink } from 'react-router-dom';
 import {
   Alert,
@@ -98,7 +99,7 @@ const SyncCounts = ({ result }: { result: SyncResult }) => {
 };
 
 const SyncResultView = ({ result }: { result: SyncResult }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   return (
     <Stack spacing={2}>
       <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap">
@@ -106,7 +107,7 @@ const SyncResultView = ({ result }: { result: SyncResult }) => {
           {result.dry_run ? t('directory.sync.result_dry_title') : t('directory.sync.result_title')}
         </Typography>
         <Typography variant="caption" color="text.secondary">
-          {new Date(result.fecha).toLocaleString()}
+          {formatDateTimeValue(result.fecha, i18n.language)}
         </Typography>
       </Stack>
       {result.dry_run && <Typography variant="body2" color="text.secondary">{t('directory.sync.dry_run_note')}</Typography>}
@@ -179,7 +180,7 @@ interface Props {
 }
 
 export const AdStatusSection = ({ canTestConnection, refreshKey = 0 }: Props) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { enqueueSnackbar } = useSnackbar();
   const [status, setStatus] = useState<DirectoryStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -337,7 +338,7 @@ export const AdStatusSection = ({ canTestConnection, refreshKey = 0 }: Props) =>
               {t('directory.ad.last_sync')}
               {status.last_sync && (
                 <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-                  {new Date(status.last_sync.fecha).toLocaleString()}
+                  {formatDateTimeValue(status.last_sync.fecha, i18n.language)}
                   {status.last_sync.dry_run && ` · ${t('directory.sync.simulation')}`}
                 </Typography>
               )}

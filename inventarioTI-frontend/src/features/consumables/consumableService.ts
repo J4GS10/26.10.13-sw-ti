@@ -1,6 +1,6 @@
 import client from '../../api/axios';
 import {
-  Consumible, ConsumibleCreate, MovimientoConsumible, StockMovimientoCreate,
+  Consumible, ConsumibleCreate, MovimientoConsumible, StockAjusteCreate, StockMovimientoCreate,
 } from '../../types/consumables';
 
 export const consumableService = {
@@ -31,6 +31,12 @@ export const consumableService = {
 
   salida: async (id: number, data: StockMovimientoCreate): Promise<MovimientoConsumible> => {
     const r = await client.post<MovimientoConsumible>(`/consumibles/${id}/salida`, data);
+    return r.data;
+  },
+
+  /** Ajuste por conteo físico: fija la existencia real (con motivo). */
+  ajuste: async (id: number, data: StockAjusteCreate): Promise<MovimientoConsumible> => {
+    const r = await client.post<MovimientoConsumible>(`/consumibles/${id}/ajuste`, data);
     return r.data;
   },
 

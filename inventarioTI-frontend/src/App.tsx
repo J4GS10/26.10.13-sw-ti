@@ -38,6 +38,8 @@ const PersonsPage = lazy(() => import('./features/persons/PersonsPage').then((m)
 const DepartmentsPage = lazy(() => import('./features/departments/DepartmentsPage').then((m) => ({ default: m.DepartmentsPage })));
 const DirectoryPage = lazy(() => import('./features/directory/DirectoryPage').then((m) => ({ default: m.DirectoryPage })));
 const SecurityGate = lazy(() => import('./features/auth/security/SecurityGate').then((m) => ({ default: m.SecurityGate })));
+const TrazabilidadPage = lazy(() => import('./features/traceability/TrazabilidadPage').then((m) => ({ default: m.TrazabilidadPage })));
+const TomasPage = lazy(() => import('./features/inventory-count/TomasPage').then((m) => ({ default: m.TomasPage })));
 const AuditPage = lazy(() => import('./features/audit/AuditPage').then((m) => ({ default: m.AuditPage })));
 const PageFallback = () => (<Box role="status" aria-live="polite" sx={{
         display: 'flex',
@@ -175,6 +177,8 @@ const ThemedApp = () => {
                     <Route path="/operaciones/movimientos" element={<MovementsPage />}/>
                     <Route path="/mantenimiento" element={<MaintenancePage />}/>
                     <Route path="/consumibles" element={<ConsumablesPage />}/>
+                    <Route path="/trazabilidad" element={<TrazabilidadPage />}/>
+                    <Route path="/inventario/tomas" element={<TomasPage />}/>
                   </Route>
 
                   <Route element={<ProtectedRoute allowedRoles={ADMIN_READER_ROLES}/>}>

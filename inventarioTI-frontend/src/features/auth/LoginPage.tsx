@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Box, Button, Card, CardContent, TextField, Typography, Alert, Container, Divider, InputAdornment, IconButton, alpha, useTheme } from '@mui/material';
 import { Login as LoginIcon, Visibility, VisibilityOff } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
+import { getApiErrorCode, getApiErrorMessage } from '../../api/errors';
 import { Link as MuiLink } from '@mui/material';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { tokenStorage } from '../../api/tokenStorage';
@@ -68,9 +69,13 @@ export const LoginPage = () => {
                 navigate('/');
             }
         }
-        catch {
+        catch (err) {
             // No logueamos detalles del error: evita filtrar info en la consola del navegador.
-            setError(t('auth.error_credentials'));
+            const code = getApiErrorCode(err);
+            setError(code === 'ACCOUNT_LOCKED' || code === 'INACTIVE_USER' || code === 'RATE_LIMIT_EXCEEDED'
+                || code === 'NETWORK_ERROR' || code === 'REQUEST_TIMEOUT'
+                ? getApiErrorMessage(err, t('auth.error_credentials'))
+                : t('auth.error_credentials'));
         }
         finally {
             setLoading(false);
@@ -86,8 +91,16 @@ export const LoginPage = () => {
             login(r.access_token, r.restriction);
             navigate('/');
         }
-        catch {
-            setError(t('auth.error_2fa'));
+        catch (err) {
+            const code = getApiErrorCode(err);
+            if (code === 'INVALID_OR_EXPIRED_2FA_CHALLENGE' || code === 'ACCOUNT_LOCKED') {
+                // El desafío ya no sirve: se vuelve a pedir usuario y contraseña.
+                setChallenge(null);
+                setOtp('');
+            }
+            setError(code && code !== 'INVALID_2FA_CODE'
+                ? getApiErrorMessage(err, t('auth.error_2fa'))
+                : t('auth.error_2fa'));
         }
         finally {
             setLoading(false);
