@@ -21,12 +21,15 @@ raw = {l: open(f'{LOC}/{l}.json', encoding='utf-8', newline='').read() for l in 
 L = {l: flat(json.loads(raw[l])) for l in LANGS}
 errors = []
 
-# 0. formato: CRLF, 4 espacios, sin '?' corrupto
+# 0. formato: finales de línea consistentes (CRLF en Windows, LF en el CI de
+#    Linux según .gitattributes), 4 espacios, sin '?' corrupto
 for l in LANGS:
     r = raw[l]
-    if '\n' in r.replace('\r\n', ''):
-        errors.append(f'{l}: LF sin CR')
-    if not r.startswith('{\r\n    "'):
+    crlf = r.count('\r\n')
+    if crlf and '\n' in r.replace('\r\n', ''):
+        errors.append(f'{l}: finales de línea mezclados (CRLF y LF)')
+    salto = '\r\n' if crlf else '\n'
+    if not r.startswith('{' + salto + '    "'):
         errors.append(f'{l}: indentación inesperada')
     for k, v in L[l].items():
         if re.search(r'\w\?\w|\s\?\s', v):
