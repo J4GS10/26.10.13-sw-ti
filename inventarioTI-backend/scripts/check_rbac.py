@@ -21,8 +21,8 @@ import pathlib
 ROOT = pathlib.Path(__file__).resolve().parents[1] / "app" / "api" / "v1" / "endpoints"
 MUTATOR = re.compile(r"@router\.(post|put|patch|delete)\(")
 ROLE_TOKENS = (
-    "require_admin", "require_super_admin", "require_operativo",
-    "WRITE", "ADMIN", "SUPER", "OPERATIVO",
+    "require_admin", "require_super_admin", "require_operativo", "require_iam", "require_aprobador",
+    "WRITE", "ADMIN", "SUPER", "OPERATIVO", "IAM",
 )
 SELF_SERVICE_FILES = {"login.py", "twofactor.py"}
 # Lecturas implementadas como POST (llevan cuerpo de filtros) — no son escritura.

@@ -22,7 +22,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUser, get_client_ip, require_admin, require_export, require_operativo
+from app.api.deps import CurrentUser, RoleChecker, get_client_ip, require_admin, require_export, require_operativo
 from app.core.limiter import limiter
 from app.db.session import get_db, get_read_db
 from app.schemas.kardex import (
@@ -78,6 +78,19 @@ async def kardex(
     db: AsyncSession = Depends(get_read_db),
 ):
     return await ReportesService(db).kardex_pagina(filtros, limite=limite, desplazamiento=desplazamiento)
+
+
+@router.get("/kardex/verificar", dependencies=[Depends(RoleChecker(["SUPER_ADMIN", "JEFE_TI", "AUDITOR"]))])
+async def verificar_kardex(db: AsyncSession = Depends(get_db)):
+    """
+    Recalcula el sello encadenado de todo el kardex: confirma que ningún evento
+    se alteró, borró ni intercaló. Devuelve el último sello (secuencia y hash)
+    para anotarlo fuera del sistema en cada cierre.
+    """
+    from app.core.data_scope import elevated
+    from app.db.kardex_integridad import verificar
+    async with elevated(db):
+        return await verificar(db)
 
 
 @router.get("/kardex.csv", dependencies=[Depends(require_export)])

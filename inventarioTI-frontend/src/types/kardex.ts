@@ -7,8 +7,8 @@ export const TIPOS_EVENTO = [
   'ALTA', 'RECEPCION', 'ASIGNACION', 'PRESTAMO', 'DEVOLUCION', 'TRANSFERENCIA', 'TRASLADO_SEDE',
   'MANTENIMIENTO_ENTRADA', 'MANTENIMIENTO_SALIDA', 'COMPONENTE_INSTALADO', 'COMPONENTE_RETIRADO',
   'ESPECIFICACION', 'CAMBIO_ESTADO', 'BAJA', 'INVENTARIO_FISICO',
-  'CONSUMIBLE_ENTRADA', 'CONSUMIBLE_SALIDA', 'CONSUMIBLE_AJUSTE',
-  'LICENCIA_ALTA', 'LICENCIA_ASIGNADA', 'LICENCIA_RETIRADA', 'LICENCIA_AJUSTE',
+  'CONSUMIBLE_ENTRADA', 'CONSUMIBLE_SALIDA', 'CONSUMIBLE_AJUSTE', 'CONSUMIBLE_TRASLADO',
+  'LICENCIA_ALTA', 'LICENCIA_ASIGNADA', 'LICENCIA_RETIRADA', 'LICENCIA_AJUSTE', 'LICENCIA_BAJA',
 ] as const;
 export type TipoEvento = typeof TIPOS_EVENTO[number];
 
@@ -24,12 +24,17 @@ export interface KardexEvento {
   KDX_Cantidad?: number | null;
   KDX_Saldo?: number | null;
   KDX_Costo?: string | number | null;
+  /** Valor del saldo al costo promedio ponderado. */
+  KDX_Saldo_Valor?: string | number | null;
   KDX_Moneda?: string | null;
   KDX_Documento_Tipo?: string | null;
   KDX_Documento_Ref?: string | null;
   KDX_Motivo?: string | null;
   KDX_Detalle?: Record<string, unknown> | null;
   KDX_Migrado: boolean;
+  /** Sello encadenado: posición en la cadena y hash SHA-256. */
+  KDX_Secuencia?: number | null;
+  KDX_Hash?: string | null;
   origen_persona?: string | null;
   origen_area?: string | null;
   origen_sede?: string | null;
@@ -83,7 +88,7 @@ export interface ResumenEntradasSalidas {
 export type SeveridadAtencion = 'alta' | 'media' | 'baja';
 export interface ItemAtencion {
   clave: 'ASIGNADO_SIN_CUSTODIO' | 'ALMACEN_CON_CUSTODIO' | 'PERSONA_INACTIVA_CON_EQUIPOS' | 'PRESTAMO_VENCIDO'
-    | 'STOCK_BAJO' | 'ORDEN_PARCIAL' | 'TICKET_ANTIGUO' | 'GARANTIA_POR_VENCER' | 'LICENCIA_POR_VENCER' | 'DATOS_INCOMPLETOS';
+    | 'STOCK_BAJO' | 'ORDEN_PARCIAL' | 'BAJA_CON_CUSTODIA' | 'APROBACION_PENDIENTE' | 'TICKET_ANTIGUO' | 'GARANTIA_POR_VENCER' | 'LICENCIA_POR_VENCER' | 'DATOS_INCOMPLETOS';
   severidad: SeveridadAtencion;
   total: number;
   items: Array<Record<string, unknown>>;

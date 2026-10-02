@@ -170,13 +170,18 @@ async def search_activos(
 # =====================================================================
 # BAJA FORMAL
 # =====================================================================
-@router.post("/activos/{activo_id}/baja", response_model=ActivoResponse, dependencies=ADMIN)
-async def dar_de_baja(
+@router.post("/activos/{activo_id}/baja", status_code=202, dependencies=ADMIN)
+async def solicitar_baja(
     activo_id: uuid.UUID, schema: BajaActivo, request: Request, current_user: CurrentUser,
-    service: CoreService = Depends(get_service),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Salida del inventario con motivo, destino, fecha y documento de respaldo."""
-    return await service.dar_de_baja(activo_id, schema, usuario_id=current_user.USU_Usuario)
+    """
+    Solicita la salida del inventario (motivo, destino, fecha y documento). Se
+    valida ahora y se ejecuta cuando el Jefe de TI la aprueba
+    (POST /aprobaciones/{id}/aprobar). Devuelve la solicitud PENDIENTE.
+    """
+    from app.services.aprobaciones import AprobacionService
+    return await AprobacionService(db).solicitar_baja(activo_id, schema, **_ctx(request, current_user))
 
 
 # =====================================================================

@@ -11,6 +11,7 @@ from app.models.consumable import MovimientoConsumible
 from app.repositories.consumable import ConsumibleRepository
 from app.repositories.governance import GovernanceRepository
 from app.services.base import BaseService
+from app.services import valoracion
 from app.services.kardex import KardexService
 from app.schemas.consumable import (
     ConsumibleCreate, ConsumibleUpdate, StockMovimientoCreate,
@@ -59,7 +60,18 @@ class ConsumableService(BaseService[ConsumibleRepository]):
             existe = await self.repo.get_by_name(schema.CON_Nombre)
         if existe:
             raise HTTPException(409, "CONSUMABLE_ALREADY_EXISTS")
+        if schema.CON_Costo_Unitario is not None and not schema.CON_Moneda:
+            schema.CON_Moneda = "GTQ"
         obj = await self.repo.create(schema)
+        if schema.CON_Stock_Actual > 0:
+            # Saldo inicial: el kardex del consumible cuadra desde cero.
+            await KardexService(self.db).registrar(
+                "CONSUMIBLE_ENTRADA", consumible_id=obj.CON_Consumible, referencia=schema.CON_Nombre,
+                cantidad=schema.CON_Stock_Actual, saldo=schema.CON_Stock_Actual,
+                costo=schema.CON_Costo_Unitario, moneda=schema.CON_Moneda,
+                saldo_valor=valoracion.valor_saldo(schema.CON_Stock_Actual, schema.CON_Costo_Unitario),
+                destino={"sede": schema.SED_Sede}, motivo="Saldo inicial", usuario_id=usuario_id,
+            )
         await self.gov_repo.create_audit_log(
             "CREATE", "INV_CONSUMIBLE",
             {"nombre": schema.CON_Nombre, "stock_inicial": schema.CON_Stock_Actual,
@@ -77,7 +89,17 @@ class ConsumableService(BaseService[ConsumibleRepository]):
             from app.core.data_scope import require_sede
             schema.SED_Sede = require_sede(schema.SED_Sede, required=False)
             sede_final = schema.SED_Sede
+        sede_antes = obj.SED_Sede
+        stock, promedio, moneda_val, nombre = obj.CON_Stock_Actual, obj.CON_Costo_Unitario, obj.CON_Moneda, obj.CON_Nombre
         updated = await self.repo.update(id, schema)
+        if sede_final != sede_antes:
+            # Traslado de bodega: la existencia sale de una sede y entra en otra.
+            await KardexService(self.db).registrar(
+                "CONSUMIBLE_TRASLADO", consumible_id=id, referencia=nombre,
+                cantidad=stock, saldo=stock, costo=promedio, moneda=moneda_val,
+                saldo_valor=valoracion.valor_saldo(stock, promedio),
+                origen={"sede": sede_antes}, destino={"sede": sede_final}, usuario_id=usuario_id,
+            )
         await self.gov_repo.create_audit_log(
             "UPDATE", "INV_CONSUMIBLE",
             {"id": id, "cambios": schema.model_dump(exclude_unset=True)},
@@ -129,6 +151,14 @@ class ConsumableService(BaseService[ConsumibleRepository]):
         nombre, minimo, unidad, categoria = (
             obj.CON_Nombre, obj.CON_Stock_Minimo, obj.CON_Unidad, obj.CON_Categoria,
         )
+        # Costo promedio ponderado: se calcula antes de mover el stock (una
+        # entrada en otra moneda se rechaza sin tocar nada).
+        promedio, moneda_val, costo = obj.CON_Costo_Unitario, obj.CON_Moneda, obj.CON_Costo_Unitario
+        if tipo == "ENTRADA":
+            promedio, moneda_val, costo = valoracion.entrada(
+                stock_antes, promedio, moneda_val, schema.MOC_Cantidad,
+                getattr(schema, "precio_unitario", None), getattr(schema, "moneda", None),
+            )
 
         if tipo == "ENTRADA":
             ok = await self.repo.incrementar_stock(id, schema.MOC_Cantidad)
@@ -152,16 +182,12 @@ class ConsumableService(BaseService[ConsumibleRepository]):
             USU_Usuario=usuario_id,
         )
         await self.repo.add_movimiento(mov)
-        costo = moneda = None
-        if tipo == "ENTRADA" and getattr(schema, "precio_unitario", None) is not None:
-            costo = schema.precio_unitario
-            moneda = schema.moneda or refreshed.CON_Moneda or "GTQ"
-            refreshed.CON_Costo_Unitario = costo
-            refreshed.CON_Moneda = moneda
+        refreshed.CON_Costo_Unitario = promedio
+        refreshed.CON_Moneda = moneda_val
         await KardexService(self.db).registrar(
             "CONSUMIBLE_ENTRADA" if tipo == "ENTRADA" else "CONSUMIBLE_SALIDA",
             consumible_id=id, referencia=nombre, cantidad=schema.MOC_Cantidad, saldo=stock_despues,
-            costo=costo or refreshed.CON_Costo_Unitario, moneda=moneda or refreshed.CON_Moneda,
+            costo=costo, moneda=moneda_val, saldo_valor=valoracion.valor_saldo(stock_despues, promedio),
             destino={"persona": schema.PER_Persona, "sede": sede} if tipo == "SALIDA" else {"sede": sede},
             origen={"sede": sede} if tipo == "SALIDA" else None,
             motivo=schema.MOC_Motivo, usuario_id=usuario_id,
@@ -206,6 +232,8 @@ class ConsumableService(BaseService[ConsumibleRepository]):
         await KardexService(self.db).registrar(
             "CONSUMIBLE_AJUSTE", consumible_id=id, referencia=obj.CON_Nombre,
             cantidad=schema.CON_Stock_Real - antes, saldo=schema.CON_Stock_Real,
+            costo=obj.CON_Costo_Unitario, moneda=obj.CON_Moneda,
+            saldo_valor=valoracion.valor_saldo(schema.CON_Stock_Real, obj.CON_Costo_Unitario),
             destino={"sede": obj.SED_Sede}, motivo=schema.MOC_Motivo, usuario_id=usuario_id,
             detalle={"stock_antes": antes, "stock_despues": schema.CON_Stock_Real},
         )

@@ -2,6 +2,16 @@ import client from './axios';
 import { downloadCsv, downloadFile } from './downloadCsv';
 import type { SupportedLanguage } from '../types/language';
 import { hoyLocal } from '../utils/dates';
+import type { Aprobacion } from '../types/aprobaciones';
+
+export interface VerificacionKardex {
+  total: number;
+  integro: boolean;
+  problemas: { evento: number; secuencia: number | null; problema: 'SIN_SELLO' | 'EVENTO_ALTERADO' | 'CADENA_ROTA' | 'EVENTO_FALTANTE' }[];
+  ultima_secuencia: number;
+  ultimo_hash: string | null;
+  ultima_fecha: string | null;
+}
 import type {
   BajaPayload, ComponentesActivo, CustodiaItem, DevolucionPayload, DevolucionResultado, ItemAtencion,
   KardexFiltros, KardexPagina, LecturaResultado, ResumenEntradasSalidas, Toma, TomaDetalle,
@@ -62,8 +72,11 @@ export const inventarioService = {
     estadoDestino: 'Disponible' | 'En Bodega') =>
     (await client.post<ComponentesActivo>(`/core/activos/${activoId}/componentes/${componenteId}/retirar`,
       { motivo: motivo || undefined, estado_destino: estadoDestino })).data,
+  /** Recalcula el sello encadenado del kardex (integridad verificable). */
+  verificarKardex: async () => (await client.get<VerificacionKardex>('/inventario/kardex/verificar')).data,
+  /** Solicita la baja: queda PENDIENTE hasta que el Jefe de TI la aprueba. */
   darDeBaja: async (activoId: string, data: BajaPayload) =>
-    (await client.post(`/core/activos/${activoId}/baja`, data)).data,
+    (await client.post<Aprobacion>(`/core/activos/${activoId}/baja`, data)).data,
   devolver: async (data: DevolucionPayload) =>
     (await client.post<DevolucionResultado>('/trazabilidad/devolucion', data)).data,
 };

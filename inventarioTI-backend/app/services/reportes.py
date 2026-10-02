@@ -60,6 +60,8 @@ TIPOS_EVENTO_I18N: dict[str, dict[str, str]] = {
     "LICENCIA_ASIGNADA": {"es": "Licencia asignada", "en": "License assigned", "it": "Licenza assegnata"},
     "LICENCIA_RETIRADA": {"es": "Licencia retirada", "en": "License removed", "it": "Licenza rimossa"},
     "LICENCIA_AJUSTE": {"es": "Ajuste de licencia", "en": "License adjustment", "it": "Rettifica della licenza"},
+    "LICENCIA_BAJA": {"es": "Baja de licencia", "en": "License removed", "it": "Licenza dismessa"},
+    "CONSUMIBLE_TRASLADO": {"es": "Traslado de bodega", "en": "Storage transfer", "it": "Trasferimento di magazzino"},
 }
 
 OBJETO_I18N = {
@@ -390,6 +392,18 @@ class ReportesService:
         agregar("ALMACEN_CON_CUSTODIO", "alta", await contar_activos(
             Activo.EOP_Estado_Operativo.in_([estados.get("Disponible"), estados.get("En Bodega")]),
             Activo.ACT_Activo.in_(custodias)))
+
+        if baja:
+            agregar("BAJA_CON_CUSTODIA", "alta", await contar_activos(
+                Activo.EOP_Estado_Operativo == baja, Activo.ACT_Activo.in_(custodias)))
+
+        from app.models.aprobacion import Aprobacion
+        filas = (await self.db.execute(
+            select(Aprobacion.APR_Aprobacion, Aprobacion.APR_Tipo, Aprobacion.APR_Resumen)
+            .where(Aprobacion.APR_Estado == "PENDIENTE").order_by(Aprobacion.APR_Fecha_Solicitud)
+        )).all()
+        agregar("APROBACION_PENDIENTE", "alta",
+                [{"id": i, "tipo": t, "resumen": r} for i, t, r in filas])
 
         filas = (await self.db.execute(
             select(Persona.PER_Persona, Persona.PER_Primer_Nombre, Persona.PER_Primer_Apellido,

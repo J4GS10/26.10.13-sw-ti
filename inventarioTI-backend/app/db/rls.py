@@ -184,6 +184,14 @@ def _policies() -> dict[str, list[tuple[str, str, str | None, str | None]]]:
             ("todo", "ALL", _sede('"INV_TOMA_INVENTARIO"."SED_Sede"'), _sede('"INV_TOMA_INVENTARIO"."SED_Sede"')),
         ],
         "INV_TOMA_LECTURA": [("todo", "ALL", toma_visible, toma_visible)],
+        # Solicitudes de aprobación: las de las sedes del alcance y las propias.
+        "INV_APROBACION": [(
+            "todo", "ALL",
+            "({} OR \"INV_APROBACION\".\"APR_Solicitante\" = (SELECT inv_rls_usuario()))".format(
+                _sede('"INV_APROBACION"."SED_Sede"')),
+            "({} OR \"INV_APROBACION\".\"APR_Solicitante\" = (SELECT inv_rls_usuario()))".format(
+                _sede('"INV_APROBACION"."SED_Sede"')),
+        )],
         # Kardex: igual que la bitácora, de solo inserción.
         "INV_KARDEX": [
             ("leer", "SELECT", kardex_visible, None),
@@ -252,6 +260,8 @@ def install_rls(conn: Connection, *, strict: bool = False) -> bool:
         # La bitácora es inmutable para las peticiones de usuario.
         f'REVOKE UPDATE, DELETE ON "INV_AUDITORIA_SISTEMA" FROM "{role}"',
         f'REVOKE UPDATE, DELETE ON "INV_KARDEX" FROM "{role}"',
+        # Las solicitudes de aprobación no se borran: se resuelven o anulan.
+        f'REVOKE DELETE ON "INV_APROBACION" FROM "{role}"',
         # Identidades: las políticas leen el alcance de INV_USUARIO e
         # INV_USUARIO_SEDE, así que el rol restringido no puede alterarlas (una
         # inyección SQL no puede darse alcance global ni sedes). Las altas y

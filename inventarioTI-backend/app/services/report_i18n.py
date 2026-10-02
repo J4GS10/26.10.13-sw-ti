@@ -162,6 +162,10 @@ _ACCIONES_AUDITORIA = [
     _entry("Corrección de datos", "Data correction", "Correzione dei dati", "DATA_FIX"),
     _entry("Sincronización con Active Directory", "Active Directory sync",
            "Sincronizzazione con Active Directory", "AD_SYNC"),
+    _entry("Solicitud de aprobación", "Approval request", "Richiesta di approvazione", "APPROVAL_REQUEST"),
+    _entry("Solicitud aprobada", "Request approved", "Richiesta approvata", "APPROVAL_APPROVE"),
+    _entry("Solicitud rechazada", "Request rejected", "Richiesta respinta", "APPROVAL_REJECT"),
+    _entry("Solicitud anulada", "Request cancelled", "Richiesta annullata", "APPROVAL_CANCEL"),
 ]
 
 _UNIDADES = [

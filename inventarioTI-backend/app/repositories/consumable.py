@@ -25,7 +25,7 @@ class ConsumibleRepository(BaseRepository["Consumible"]):
     def _pk_column(self): return Consumible.CON_Consumible
 
     async def create(self, schema: ConsumibleCreate) -> Consumible:
-        obj = Consumible(**schema.model_dump())
+        obj = Consumible(**schema.model_dump(exclude_none=True))
         self.db.add(obj)
         await self.db.flush()
         return obj

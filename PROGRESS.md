@@ -234,6 +234,14 @@ Todo el trabajo de las sesiones 4–10 subido a la rama `feature/sesiones-4-10` 
 - **QA:** `herramientas-qa/qa9_fases.py` contra `inv_ui`; detectó y se corrigió que la API de consumibles no devolvía costo ni moneda (prueba `test_consumible_costo.py`).
 - Pendientes: ver `INFORME_EJECUTIVO_Y_PLAN.md` §8.3.
 
+### 2.13 Sesión 13 — Control interno profesional (2026-10-02)
+
+- Evaluación profesional del inventario y la bitácora contra ITIL / ISO/IEC 19770 con datos reales; 7 brechas detectadas y corregidas (ver `INFORME_EJECUTIVO_Y_PLAN.md` §9).
+- Rol `JEFE_TI`, tabla `INV_APROBACION`, servicio `app/services/aprobaciones.py`, endpoints `/aprobaciones` y pantalla `/aprobaciones`: bajas y sobrantes los aprueba otra persona.
+- Costo promedio ponderado (`app/services/valoracion.py`), saldo inicial y traslado de consumibles en el kardex, `LICENCIA_BAJA`.
+- Kardex verificable (`app/db/kardex_integridad.py`): secuencia, hash encadenado, sin TRUNCATE; `GET /inventario/kardex/verificar`.
+- Migración `f3a4b5c6d7e8` probada en limpio (subir/bajar/subir) y sobre copia de los datos reales.
+
 ## 3. Pendientes
 
 > **Histórico (sesiones 1–2).** Casi todo lo de esta sección y de la §5 ya se resolvió en sesiones posteriores. Los pendientes vigentes están en **`CONTINUAR.md` §4**.

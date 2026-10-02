@@ -41,10 +41,12 @@ const ESTILO: Record<TipoEvento, { icon: SvgIconComponent; tono: Tono }> = {
   CONSUMIBLE_ENTRADA: { icon: InventoryIcon, tono: 'success' },
   CONSUMIBLE_SALIDA: { icon: InventoryIcon, tono: 'warning' },
   CONSUMIBLE_AJUSTE: { icon: TuneIcon, tono: 'info' },
+  CONSUMIBLE_TRASLADO: { icon: SwapHorizIcon, tono: 'info' },
   LICENCIA_ALTA: { icon: KeyIcon, tono: 'success' },
   LICENCIA_ASIGNADA: { icon: KeyIcon, tono: 'primary' },
   LICENCIA_RETIRADA: { icon: KeyIcon, tono: 'secondary' },
   LICENCIA_AJUSTE: { icon: TuneIcon, tono: 'info' },
+  LICENCIA_BAJA: { icon: DeleteForeverIcon, tono: 'error' },
 };
 
 const lugar = (...partes: Array<string | null | undefined>) => partes.filter(Boolean).join(' · ');

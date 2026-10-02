@@ -381,3 +381,26 @@ Los registros actuales se conservan. El kardex se carga con una migración que r
 ### 8.4 Decisiones aplicadas por defecto (§7)
 
 Se aplicaron las recomendaciones del §7 mientras no haya otra instrucción: orden de fases recomendado; cualquier activo puede instalarse como componente y los cambios de especificación quedan en el historial; catálogo fijo de motivos y destinos de baja, ejecutada por ADMIN_TI; tolerancia de precio de ±2 % configurable y sobrantes solo con motivo, por un administrador; toma de inventario a demanda por sede o área.
+
+---
+
+## 9. Evaluación profesional y control interno (2026-10-02)
+
+A pedido de la dirección se evaluó si el control de inventario y la bitácora alcanzan un nivel profesional (ITIL / ISO/IEC 19770 y prácticas de kardex). Se revisó el código y se cruzaron los datos reales del stack. Las brechas encontradas y su corrección:
+
+| # | Brecha | Corrección | Cómo se verifica |
+|---|---|---|---|
+| 1 | El stock inicial de un consumible no quedaba en el kardex | Al crearlo, el saldo inicial entra como evento (valorizado si se indica su costo). La migración reconstruyó el saldo inicial de los consumibles existentes | Los 15 consumibles de la base de revisión cuadran desde cero con su kardex (antes, 14 de 15) |
+| 2 | El traslado de un consumible a otra sede no quedaba en el kardex | Evento `CONSUMIBLE_TRASLADO` (origen → destino, cantidad y valor) | Prueba `test_control_interno.py` |
+| 3 | Eliminar una licencia solo quedaba en la auditoría | Evento `LICENCIA_BAJA` (salida del inventario) | Prueba `test_control_interno.py` |
+| 4 | «Eliminar activo» hacía una baja sin motivo | El DELETE ya no da de baja: toda salida es una solicitud formal con motivo y destino | El servidor responde `USE_DECOMMISSION_REQUEST` |
+| 5 | Sin separación de funciones | Rol **JEFE_TI**. Bajas y sobrantes de compras quedan **pendientes** hasta que otra persona (Jefe de TI o superadministrador) los aprueba. Nadie se aprueba a sí mismo (regla del servidor y restricción en la base). Mientras tanto, el equipo queda congelado y el inventario no cambia. El kardex registra quién solicitó y quién aprobó | Pruebas y bandeja `/aprobaciones` |
+| 6 | Valoración por último costo | **Costo promedio ponderado** en consumibles (4 decimales), salidas y ajustes al promedio vigente, valor del saldo en cada evento. Cada consumible se valora en una sola moneda (no se promedian quetzales con dólares) | Prueba: (10×10 + 10×20)/20 = 15; salida de 5 → saldo valor 225 |
+| 7 | Bitácora protegida solo contra modificación | **Sello encadenado**: secuencia sin huecos y hash SHA-256 de cada evento con el anterior; TRUNCATE bloqueado; verificación desde Trazabilidad («Verificar integridad») o `GET /inventario/kardex/verificar` | 362 eventos reales sellados; alterar uno se detecta como `EVENTO_ALTERADO` |
+| — | Datos heredados de la QA (2 bajas con custodia abierta) | Nuevo aviso «Activos de baja con custodia abierta» en la bandeja del tablero | Bandeja «Requiere su atención» |
+
+**Activos y licencias:** se valoran por **costo específico** (cada equipo y cada lote de licencias conserva su costo y moneda de compra). Es el criterio profesional para bienes individualizados; el promedio ponderado aplica a los bienes fungibles (consumibles).
+
+**Verificación:** 395 de 395 pruebas del backend en verde (PostgreSQL 16); frontend sin errores de compilación ni lint, build de producción y traducciones verificadas; migración `f3a4b5c6d7e8` aplicada al stack de revisión con los datos reales; `herramientas-qa/qa9_fases.py`, 33 de 33 casos (incluye: la baja queda pendiente, quien solicita no puede aprobar, el equipo queda congelado, el Jefe de TI aprueba, promedio ponderado y kardex íntegro); verificador RBAC sin mutadores desprotegidos.
+
+**Recomendación operativa:** anotar el «último sello» (secuencia y hash) que muestra la verificación en cada cierre mensual, fuera del sistema. Así se puede demostrar que el historial no se reescribió, incluso ante un administrador de la base de datos.

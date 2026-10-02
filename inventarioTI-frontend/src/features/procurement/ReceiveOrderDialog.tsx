@@ -259,20 +259,22 @@ export const ReceiveOrderDialog = ({ open, orden, onClose }: Props) => {
     if (resultado) {
         return (<Dialog open={open} onClose={() => onClose(true)} maxWidth="sm" fullWidth>
           <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <CheckCircleIcon color="success"/> {t('procurement.recv_done_title', { number: orden.OCO_Numero })}
+            <CheckCircleIcon color={resultado.aprobacion_pendiente ? 'warning' : 'success'}/> {resultado.aprobacion_pendiente ? t('procurement.recv_sent_title', { number: orden.OCO_Numero }) : t('procurement.recv_done_title', { number: orden.OCO_Numero })}
           </DialogTitle>
           <DialogContent>
             <Stack spacing={2}>
-              <Alert severity={resultado.OCO_Estado === 'RECIBIDA' ? 'success' : 'info'}>
+              {resultado.aprobacion_pendiente ? (<Alert severity="warning">
+                  {t('procurement.recv_pending_approval', { id: resultado.aprobacion_pendiente })}
+                </Alert>) : (<Alert severity={resultado.OCO_Estado === 'RECIBIDA' ? 'success' : 'info'}>
                 {t('procurement.recv_done_state', { state: estadoOrdenLabel(t, resultado.OCO_Estado) })}
-              </Alert>
+              </Alert>)}
               <Typography variant="body2">
                 {[
                     resultado.activos_creados ? t('procurement.recv_created', { count: resultado.activos_creados }) : null,
                     resultado.consumibles_reabastecidos ? t('procurement.recv_restocked', { count: resultado.consumibles_reabastecidos }) : null,
                     resultado.licencias_creadas ? t('procurement.recv_licenses', { count: resultado.licencias_creadas }) : null,
                     resultado.licencias_claves_creadas ? t('procurement.recv_license_keys', { count: resultado.licencias_claves_creadas }) : null,
-                ].filter(Boolean).join(' · ') || t('procurement.recv_only_services')}
+                ].filter(Boolean).join(' · ') || (resultado.aprobacion_pendiente ? t('procurement.recv_nothing_yet') : t('procurement.recv_only_services'))}
               </Typography>
               {resultado.activos_codigos.length > 0 && (<Box>
                   <Typography variant="subtitle2" gutterBottom>{t('procurement.recv_new_codes')}</Typography>
@@ -393,6 +395,7 @@ export const ReceiveOrderDialog = ({ open, orden, onClose }: Props) => {
                   <TextField size="small" fullWidth sx={{ mt: 1 }} label={t('procurement.recv_justification')} value={c.motivo ?? ''} onChange={(e) => upd(linea, { motivo: e.target.value })}
                     error={conError && (c.motivo ?? '').trim().length < 5} helperText={t('procurement.recv_justification_help')} inputProps={{ maxLength: 500 }}/>
                   {sobrante && (<FormControlLabel control={<Checkbox size="small" checked={!!c.aceptarSobrante} onChange={(e) => upd(linea, { aceptarSobrante: e.target.checked })}/>} label={t('procurement.recv_accept_surplus')}/>)}
+                  {sobrante && (<Typography variant="caption" display="block">{t('procurement.recv_surplus_needs_approval')}</Typography>)}
                 </Alert>)}
             </SectionCard>);
         })}

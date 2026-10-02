@@ -19,6 +19,8 @@ import uuid
 from datetime import date, timedelta
 
 import pytest
+
+from tests.aprobacion_utils import baja_aprobada
 from sqlalchemy import select, text
 
 from app.models.kardex import Kardex
@@ -45,7 +47,7 @@ async def _asignar(client, h, d, activo="act_1", persona="alice", **extra):
 
 
 @pytest.mark.asyncio
-async def test_vida_completa_de_un_activo_en_el_kardex(client, auth_headers, software_seed):
+async def test_vida_completa_de_un_activo_en_el_kardex(client, auth_headers, software_seed, jefe_headers):
     h, d = auth_headers, software_seed
     await client.patch(f"{BASE}/core/activos/{d['act_1']}", headers=h, json={"SED_Sede": d["sede"]})
     await _asignar(client, h, d, MOV_Motivo="Ingreso de personal")
@@ -62,10 +64,12 @@ async def test_vida_completa_de_un_activo_en_el_kardex(client, auth_headers, sof
         "MAN_Descripcion_Falla": "Pantalla rota", "MAN_Costo_Total": 0})).json()["MAN_Mantenimiento"]
     assert (await client.patch(f"{BASE}/mantenimiento/{tid}/cerrar", headers=h,
                                json={"MAN_Costo_Total": 350, "MAN_Moneda": "GTQ"})).status_code == 200
-    r = await client.post(f"{BASE}/core/activos/{d['act_1']}/baja", headers=h, json={
+    r = await baja_aprobada(client, h, jefe_headers, d["act_1"], {
         "motivo": "DANO_IRREPARABLE", "destino": "RECICLAJE", "documento": "Acta de baja 12"})
     assert r.status_code == 200, r.text
-    assert r.json()["ACT_Baja_Motivo"] == "DANO_IRREPARABLE"
+    assert r.json()["APR_Estado"] == "APROBADA"
+    activo = (await client.get(f"{BASE}/core/activos/{d['act_1']}", headers=h)).json()
+    assert activo["ACT_Baja_Motivo"] == "DANO_IRREPARABLE"
 
     eventos = await _eventos(client, h, activo_id=d["act_1"])
     tipos = [e["KDX_Tipo"] for e in reversed(eventos)]
@@ -79,6 +83,8 @@ async def test_vida_completa_de_un_activo_en_el_kardex(client, auth_headers, sof
     assert float(salida["KDX_Costo"]) == 350.0 and salida["KDX_Moneda"] == "GTQ"
     baja = next(e for e in eventos if e["KDX_Tipo"] == "BAJA")
     assert baja["KDX_Detalle"]["destino"] == "RECICLAJE" and baja["KDX_Documento_Ref"] == "Acta de baja 12"
+    # Quién la pidió y quién la aprobó quedan en el evento.
+    assert baja["KDX_Detalle"]["solicitado_por"] != baja["KDX_Detalle"]["aprobado_por"]
 
     # Categorías: entradas/salidas y reasignaciones.
     salidas = await _eventos(client, h, categoria="SALIDAS")
@@ -156,13 +162,12 @@ async def test_especificaciones_con_historial(client, auth_headers, domain_seed,
 
 
 @pytest.mark.asyncio
-async def test_licencias_historial_y_liberacion_en_baja(client, auth_headers, software_seed):
+async def test_licencias_historial_y_liberacion_en_baja(client, auth_headers, software_seed, jefe_headers):
     h, d = auth_headers, software_seed
     r = await client.post(f"{BASE}/soft/instalaciones", headers=h,
                           json={"LIC_Licencia": d["lic"], "ACT_Activo": d["act_1"], "INS_Fecha_Instalacion": "2026-09-01"})
     assert r.status_code in (200, 201), r.text
-    r = await client.post(f"{BASE}/core/activos/{d['act_1']}/baja", headers=h,
-                          json={"motivo": "OBSOLESCENCIA", "destino": "RECICLAJE"})
+    r = await baja_aprobada(client, h, jefe_headers, d["act_1"], {"motivo": "OBSOLESCENCIA", "destino": "RECICLAJE"})
     assert r.status_code == 200, r.text
     hist = (await client.get(f"{BASE}/soft/licencias/{d['lic']}/historial", headers=h)).json()
     assert hist[0]["INS_Estado"] is False
@@ -268,7 +273,9 @@ async def test_reconstruccion_del_historial(session, auth_headers, software_seed
     await _asignar(client, h, d)
     await client.post(f"{BASE}/trazabilidad/devolucion", headers=h, json={"ACT_Activo": d["act_1"]})
     # Simular una base previa al kardex: se borran los eventos (dueño de las tablas).
+    await session.execute(text('ALTER TABLE "INV_KARDEX" DISABLE TRIGGER trg_kardex_append_only'))
     await session.execute(text('DELETE FROM "INV_KARDEX"'))
+    await session.execute(text('ALTER TABLE "INV_KARDEX" ENABLE TRIGGER trg_kardex_append_only'))
     await session.commit()
     creados = await session.run_sync(lambda s: reconstruir(s.connection()))
     await session.commit()

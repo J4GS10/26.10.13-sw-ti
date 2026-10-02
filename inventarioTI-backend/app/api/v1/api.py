@@ -17,6 +17,7 @@ from app.api.v1.endpoints import (
     twofactor,
     directory,
     inventario,
+    aprobaciones,
 )
 from app.api import deps
 
@@ -79,6 +80,10 @@ api_router.include_router(
 )
 api_router.include_router(
     inventario.router, prefix="/inventario", tags=["Trazabilidad e inventario"],
+    dependencies=_business
+)
+api_router.include_router(
+    aprobaciones.router, prefix="/aprobaciones", tags=["Aprobaciones del Jefe de TI"],
     dependencies=_business
 )
 

@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, CircularProgress, Stack, } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { SectionCard, SedeField, SuggestionHint } from '../../components/ui';
+import { MoneyField, SectionCard, SedeField, SuggestionHint } from '../../components/ui';
+import { DEFAULT_CURRENCY } from '../../utils/currency';
 import { useSedes } from '../../hooks/useSedes';
 import { useSuggestion } from '../../hooks/useSuggestion';
 import { useSnackbar } from 'notistack';
@@ -30,6 +31,9 @@ export const ConsumableDialog = ({ open, onClose, toEdit }: Props) => {
     const [loading, setLoading] = useState(false);
     // Bodega (sede) donde se almacena; con una sola sede se prellena.
     const [sede, setSede] = useState<number | ''>('');
+    // Costo del saldo inicial (valoriza el stock desde el primer día).
+    const [costoInicial, setCostoInicial] = useState('');
+    const [moneda, setMoneda] = useState<string>(DEFAULT_CURRENCY);
     const { sedes, loading: loadingSedes, unica } = useSedes(open);
     const sedeHint = useSuggestion<number | ''>({
         current: sede,
@@ -55,6 +59,8 @@ export const ConsumableDialog = ({ open, onClose, toEdit }: Props) => {
         }
         else {
             reset({ CON_Nombre: '', CON_Descripcion: '', CON_Categoria: '', CON_Unidad: 'unidad', CON_Stock_Minimo: 0, CON_Stock_Actual: 0 });
+            setCostoInicial('');
+            setMoneda(DEFAULT_CURRENCY);
         }
     }, [open, toEdit, reset]);
     const onSubmit = async (data: ConsumibleFormValues) => {
@@ -70,6 +76,10 @@ export const ConsumableDialog = ({ open, onClose, toEdit }: Props) => {
                 CON_Stock_Actual: Number(data.CON_Stock_Actual ?? 0),
                 SED_Sede: sede === '' ? null : Number(sede),
             };
+            if (!isEdit && costoInicial !== '' && Number(payload.CON_Stock_Actual) > 0) {
+                payload.CON_Costo_Unitario = costoInicial;
+                payload.CON_Moneda = moneda;
+            }
             if (isEdit && toEdit) {
                 const updatePayload: Partial<ConsumibleCreate> = { ...payload };
                 delete updatePayload.CON_Stock_Actual;
@@ -112,6 +122,8 @@ export const ConsumableDialog = ({ open, onClose, toEdit }: Props) => {
           <Stack direction="row" spacing={2}>
             <TextField fullWidth margin="dense" type="number" label={t('consumables.field_min')} {...register('CON_Stock_Minimo', { required: true, min: 0 })}/>
             {!isEdit && (<TextField fullWidth margin="dense" type="number" label={t('consumables.field_initial')} {...register('CON_Stock_Actual', { required: true, min: 0 })}/>)}
+            {!isEdit && (<MoneyField fullWidth margin="dense" label={t('consumables.initial_cost')} helperText={t('consumables.initial_cost_help')}
+                value={costoInicial} onChange={setCostoInicial} currency={moneda} onCurrencyChange={setMoneda}/>)}
           </Stack>
           </SectionCard>
           </Stack>

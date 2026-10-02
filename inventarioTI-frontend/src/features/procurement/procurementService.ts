@@ -58,6 +58,8 @@ export interface RecibirOrdenResponse {
   activos_codigos: string[];
   pendientes: PendienteLinea[];
   diferencias: DiferenciaRegistrada[];
+  /** Traía un sobrante: quedó pendiente de aprobación del Jefe de TI (no se registró nada). */
+  aprobacion_pendiente?: number | null;
 }
 
 export const procurementService = {

@@ -6,6 +6,8 @@ Separación de funciones:
 - ADMIN_SEGURIDAD  identidades y accesos: crear usuarios, asignar roles
                    operativos, restablecer contraseñas y MFA, desbloquear,
                    cerrar sesiones, leer la auditoría. Sin acceso al inventario.
+- JEFE_TI          lo mismo que ADMIN_TI y, además, aprueba las bajas y los
+                   sobrantes de compras que solicita otra persona.
 - ADMIN_TI / TECNICO / CONSULTA  operación del inventario (sin gestión de usuarios).
 - AUDITOR          solo lectura del inventario, más la bitácora de auditoría y
                    su exportación. Sin ninguna operación de escritura.
@@ -18,12 +20,13 @@ from __future__ import annotations
 
 SUPER_ADMIN = "SUPER_ADMIN"
 ADMIN_SEGURIDAD = "ADMIN_SEGURIDAD"
+JEFE_TI = "JEFE_TI"
 ADMIN_TI = "ADMIN_TI"
 TECNICO = "TECNICO"
 AUDITOR = "AUDITOR"
 CONSULTA = "CONSULTA"
 
-ALL_ROLES: tuple[str, ...] = (SUPER_ADMIN, ADMIN_SEGURIDAD, ADMIN_TI, TECNICO, AUDITOR, CONSULTA)
+ALL_ROLES: tuple[str, ...] = (SUPER_ADMIN, ADMIN_SEGURIDAD, JEFE_TI, ADMIN_TI, TECNICO, AUDITOR, CONSULTA)
 ROLE_PATTERN = "^(" + "|".join(ALL_ROLES) + ")$"
 
 # Quién administra identidades.
@@ -33,9 +36,11 @@ AUDIT_READER_ROLES: tuple[str, ...] = (SUPER_ADMIN, ADMIN_SEGURIDAD, AUDITOR)
 # Roles con alcance global implícito (no se limitan por sede).
 ALWAYS_GLOBAL_ROLES: tuple[str, ...] = (SUPER_ADMIN, ADMIN_SEGURIDAD)
 # Roles del inventario a los que se asigna alcance (global o por sedes).
-SCOPED_ROLES: tuple[str, ...] = (ADMIN_TI, TECNICO, AUDITOR, CONSULTA)
+SCOPED_ROLES: tuple[str, ...] = (JEFE_TI, ADMIN_TI, TECNICO, AUDITOR, CONSULTA)
 # Quién accede al inventario (ADMIN_SEGURIDAD no: separación de funciones).
-BUSINESS_ROLES: tuple[str, ...] = (SUPER_ADMIN, ADMIN_TI, TECNICO, AUDITOR, CONSULTA)
+BUSINESS_ROLES: tuple[str, ...] = (SUPER_ADMIN, JEFE_TI, ADMIN_TI, TECNICO, AUDITOR, CONSULTA)
+# Quién aprueba bajas y sobrantes (nunca la misma persona que lo solicita).
+APPROVER_ROLES: tuple[str, ...] = (SUPER_ADMIN, JEFE_TI)
 # Roles que solo un SUPER_ADMIN puede otorgar o administrar (evita que un
 # administrador de seguridad se perpetúe o eleve a otros a su mismo nivel).
 PROTECTED_ROLES: tuple[str, ...] = (SUPER_ADMIN, ADMIN_SEGURIDAD)

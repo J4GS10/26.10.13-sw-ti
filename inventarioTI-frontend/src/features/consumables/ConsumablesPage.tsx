@@ -120,7 +120,7 @@ export const ConsumablesPage = () => {
           { key: 'category', label: t('consumables.field_category') },
           { key: 'stock', label: t('consumables.stock') },
           { key: 'min', label: t('consumables.field_min') },
-          { key: 'cost', label: t('consumables.unit_cost'), align: 'right' },
+          { key: 'cost', label: t('consumables.avg_cost'), align: 'right' },
           { key: 'actions', label: t('common.actions'), align: 'right' },
         ]}
         rows={filtered}

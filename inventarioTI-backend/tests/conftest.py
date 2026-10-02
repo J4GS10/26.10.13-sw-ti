@@ -113,9 +113,13 @@ async def _postgres_engine():
             # Capa RLS real (rol restringido + políticas), como en producción.
             from app.db.rls import install_rls
             await conn.run_sync(lambda c: install_rls(c, strict=True))
+            # Kardex verificable (sello encadenado, solo inserción, sin TRUNCATE).
+            from app.db.kardex_integridad import instalar
+            await conn.run_sync(instalar)
             _PG_SCHEMA_READY = True
         else:
             tables = ", ".join(f'"{t.name}"' for t in Base.metadata.sorted_tables)
+            await conn.execute(text("SET LOCAL inventario.mantenimiento = 'on'"))
             await conn.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
     return e
 
@@ -405,3 +409,31 @@ async def crear_sede(session, nombre: str = "Sede Test", *, con_area: bool = Tru
         ids["area"] = area.ARE_Area
     await session.commit()
     return ids
+
+
+@pytest_asyncio.fixture
+async def jefe_headers(client, session, sa_user):
+    """Usuario JEFE_TI (alcance global): aprueba bajas y sobrantes de otra persona."""
+    from app.core.security import get_password_hash
+    from app.models.organization import Persona, Usuario
+
+    from sqlalchemy import select
+    base = (await session.execute(select(Persona).where(Persona.PER_Persona == sa_user.PER_Persona))).scalar_one()
+    persona = Persona(
+        PER_Primer_Nombre="Jefa", PER_Primer_Apellido="TI", PER_Email_Corporativo="jefa.ti@test.local",
+        DEP_Departamento=base.DEP_Departamento, CAR_Cargo=base.CAR_Cargo,
+    )
+    session.add(persona)
+    await session.flush()
+    session.add(Usuario(
+        USU_Username="jefa.ti", USU_Password_Hash=get_password_hash("TestPassw0rd!"),
+        USU_Rol="JEFE_TI", PER_Persona=persona.PER_Persona, USU_Alcance_Global=True,
+    ))
+    await session.commit()
+    r = await client.post(
+        "/api/v1/login/access-token",
+        data={"username": "jefa.ti", "password": "TestPassw0rd!"},
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert r.status_code == 200, r.text
+    return {"Authorization": f"Bearer {r.json()['access_token']}"}

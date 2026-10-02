@@ -132,7 +132,8 @@
         "directory": "Directorio y notificaciones",
         "audit": "Auditoría",
         "traceability": "Trazabilidad",
-        "inventory_count": "Toma de inventario"
+        "inventory_count": "Toma de inventario",
+        "approvals": "Aprobaciones"
     },
     "audit": {
         "title": "Auditoría forense",
@@ -204,7 +205,11 @@
             "INVENTORY_COUNT_CLOSE": "Toma de inventario cerrada",
             "INVENTORY_COUNT_CANCEL": "Toma de inventario anulada",
             "DATA_FIX": "Corrección de datos",
-            "AD_SYNC": "Sincronización con Active Directory"
+            "AD_SYNC": "Sincronización con Active Directory",
+            "APPROVAL_REQUEST": "Solicitud de aprobación",
+            "APPROVAL_APPROVE": "Solicitud aprobada",
+            "APPROVAL_REJECT": "Solicitud rechazada",
+            "APPROVAL_CANCEL": "Solicitud anulada"
         },
         "entities": {
             "INV_ACTIVO": "Activo",
@@ -238,7 +243,8 @@
             "INV_TOMA_INVENTARIO": "Toma de inventario",
             "INV_TIPO_LICENCIA": "Tipo de licencia",
             "INV_TIPO_MANTENIMIENTO": "Tipo de mantenimiento",
-            "INV_ESTADO_OPERATIVO": "Estado operativo"
+            "INV_ESTADO_OPERATIVO": "Estado operativo",
+            "INV_APROBACION": "Solicitud de aprobación"
         }
     },
     "menu_groups": {
@@ -408,8 +414,7 @@
             "no_host": "Sin host"
         },
         "messages": {
-            "success_create": "Activo creado correctamente",
-            "deleted": "Activo dado de baja"
+            "success_create": "Activo creado correctamente"
         },
         "specs": {
             "dup": "Este equipo ya tiene esa característica (edítela o elimínela).",
@@ -450,7 +455,8 @@
             "custodian": "Custodio actual",
             "no_custodian": "En almacén",
             "history_hint": "Todo lo que le pasó al equipo, del alta a hoy.",
-            "decommissioned_info": "De baja: {{reason}} · {{destination}}"
+            "decommissioned_info": "De baja: {{reason}} · {{destination}}",
+            "decommission_pending": "Baja pendiente de aprobación"
         },
         "filter_type": "Tipo de componente",
         "all_types": "Todos los tipos",
@@ -764,7 +770,8 @@
             "ADMIN_TI": "Administrador de TI",
             "TECNICO": "Técnico",
             "AUDITOR": "Auditor",
-            "CONSULTA": "Solo consulta"
+            "CONSULTA": "Solo consulta",
+            "JEFE_TI": "Jefe de TI"
         },
         "messages": {
             "created_success": "Usuario creado correctamente",
@@ -986,13 +993,16 @@
         "adjust_done": "Existencia ajustada",
         "quantity_invalid": "Indique una cantidad válida.",
         "unit_cost": "Costo unitario",
-        "unit_cost_help": "Opcional. Valoriza el stock en la moneda de la compra.",
+        "unit_cost_help": "Opcional. Recalcula el costo promedio ponderado (en la moneda del consumible).",
         "low_title": "Stock bajo el mínimo",
         "low_message": "«{{name}}» quedó en {{stock}} {{unit}} (mínimo {{min}}).",
         "low_notify_admin": "Se notificó a los administradores para que gestionen la reposición.",
         "low_later": "Más tarde",
         "low_create_order": "Crear orden de compra ({{count}})",
-        "order_created_hint": "Orden creada. Al recibirla, el stock se sumará automáticamente."
+        "order_created_hint": "Orden creada. Al recibirla, el stock se sumará automáticamente.",
+        "avg_cost": "Costo promedio",
+        "initial_cost": "Costo unitario del saldo inicial",
+        "initial_cost_help": "Opcional. Valoriza el stock inicial; después se usa el costo promedio ponderado."
     },
     "maintenance": {
         "sections": {
@@ -1187,7 +1197,11 @@
         "recv_differences_notified": "Se notificó a los administradores.",
         "recv_still_pending": "Aún falta por recibir",
         "recv_pending_hint": "Cuando llegue, use «Recibir siguiente entrega»; si no llegará, «Cerrar con faltante».",
-        "recv_print_labels": "Imprimir etiquetas QR"
+        "recv_print_labels": "Imprimir etiquetas QR",
+        "recv_surplus_needs_approval": "El sobrante requiere la aprobación del Jefe de TI: la entrega quedará pendiente hasta entonces.",
+        "recv_sent_title": "Entrega enviada a aprobación · {{number}}",
+        "recv_pending_approval": "La entrega trae un sobrante y quedó pendiente (solicitud #{{id}}). El inventario no cambia hasta que el Jefe de TI la apruebe.",
+        "recv_nothing_yet": "Todavía no se registró nada."
     },
     "directory": {
         "title": "Directorio y notificaciones",
@@ -1719,7 +1733,16 @@
         "SSO_EMAIL_NOT_VERIFIED": "Su correo no está verificado en el proveedor.",
         "SSO_NOT_ENABLED_FOR_USER": "Su cuenta no tiene habilitado el inicio de sesión corporativo.",
         "SSO_PROVIDER_NOT_ALLOWED_FOR_USER": "Su cuenta no puede usar este proveedor.",
-        "SSO_USER_NOT_AUTHORIZED": "Su cuenta no está autorizada en el sistema."
+        "SSO_USER_NOT_AUTHORIZED": "Su cuenta no está autorizada en el sistema.",
+        "USE_DECOMMISSION_REQUEST": "La baja se hace con una solicitud formal (motivo y destino) que aprueba el Jefe de TI.",
+        "DECOMMISSION_ALREADY_REQUESTED": "Este activo ya tiene una solicitud de baja pendiente (#{{p1}}).",
+        "ASSET_HAS_PENDING_DECOMMISSION": "El activo tiene una baja pendiente de aprobación: no admite operaciones hasta que se resuelva.",
+        "CANNOT_APPROVE_OWN_REQUEST": "No puede aprobar ni rechazar su propia solicitud: debe hacerlo otra persona.",
+        "APPROVAL_ALREADY_RESOLVED": "La solicitud ya fue resuelta.",
+        "APPROVAL_NOT_FOUND": "No se encontró la solicitud.",
+        "APPROVAL_REQUIRES_REQUESTER": "La solicitud debe tener un solicitante.",
+        "ONLY_REQUESTER_CAN_CANCEL": "Solo quien hizo la solicitud puede anularla.",
+        "CURRENCY_DIFFERS_FROM_VALUATION": "Este consumible se valora en {{p1}}: registre la entrada en {{p1}} (no se promedian monedas distintas)."
     },
     "catalog": {
         "states": {
@@ -1957,7 +1980,9 @@
             "LICENCIA_ALTA": "Alta de licencia",
             "LICENCIA_ASIGNADA": "Licencia asignada",
             "LICENCIA_RETIRADA": "Licencia retirada",
-            "LICENCIA_AJUSTE": "Ajuste de licencia"
+            "LICENCIA_AJUSTE": "Ajuste de licencia",
+            "CONSUMIBLE_TRASLADO": "Traslado de bodega",
+            "LICENCIA_BAJA": "Baja de licencia"
         },
         "documentos": {
             "RECEPCION": "Recepción",
@@ -2027,6 +2052,22 @@
             "area": "Área",
             "since": "Desde",
             "expected_return": "Devolución prevista"
+        },
+        "verify": {
+            "button": "Verificar integridad",
+            "title": "Integridad del kardex",
+            "ok": "Íntegro: los {{count}} eventos conservan su sello y ninguno fue alterado, borrado ni intercalado.",
+            "broken_one": "Se detectó {{count}} problema en la cadena del kardex.",
+            "broken_other": "Se detectaron {{count}} problemas en la cadena del kardex.",
+            "problems": {
+                "SIN_SELLO": "evento sin sello",
+                "EVENTO_ALTERADO": "evento alterado",
+                "CADENA_ROTA": "cadena rota (evento quitado o reordenado)",
+                "EVENTO_FALTANTE": "falta un evento en la secuencia"
+            },
+            "last_seal": "Último sello",
+            "sequence": "Evento n.º {{n}}",
+            "anchor_hint": "Anote este hash en cada cierre mensual (fuera del sistema): permite demostrar que el historial no se reescribió."
         }
     },
     "inventory_count": {
@@ -2156,8 +2197,9 @@
         "has_components_one": "El equipo tiene {{count}} componente instalado.",
         "has_components_other": "El equipo tiene {{count}} componentes instalados.",
         "remove_components": "Retirarlos y dejarlos en bodega",
-        "confirm": "Dar de baja",
-        "done": "{{code}} fue dado de baja."
+        "approval_note": "La baja se envía como solicitud: el Jefe de TI (otra persona) la aprueba y en ese momento se ejecuta.",
+        "request": "Solicitar baja",
+        "requested": "Solicitud de baja de {{code}} enviada al Jefe de TI."
     },
     "components": {
         "tab": "Componentes",
@@ -2235,7 +2277,55 @@
                 "title_one": "{{count}} dato faltante en activos",
                 "title_other": "{{count}} datos faltantes en activos",
                 "hint": "{{sin_garantia}} sin fin de garantía y {{sin_costo}} sin costo."
+            },
+            "BAJA_CON_CUSTODIA": {
+                "title_one": "{{count}} activo de baja conserva una custodia abierta",
+                "title_other": "{{count}} activos de baja conservan una custodia abierta",
+                "hint": "Datos heredados: registre la devolución para cerrar la custodia."
+            },
+            "APROBACION_PENDIENTE": {
+                "title_one": "{{count}} solicitud espera la aprobación del Jefe de TI",
+                "title_other": "{{count}} solicitudes esperan la aprobación del Jefe de TI",
+                "hint": "Bajas y sobrantes de compras: el inventario no cambia hasta que se aprueben."
             }
+        }
+    },
+    "approvals": {
+        "title": "Aprobaciones",
+        "subtitle": "Bajas y sobrantes de compras que requieren la aprobación del Jefe de TI.",
+        "only_approver_hint": "Solo el Jefe de TI puede aprobar o rechazar. Usted puede consultar el estado de sus solicitudes y anularlas mientras estén pendientes.",
+        "tab_pending": "Pendientes",
+        "tab_history": "Historial",
+        "col_type": "Tipo",
+        "col_summary": "Solicitud",
+        "col_requester": "Solicitada por",
+        "col_status": "Estado",
+        "empty_pending": "No hay solicitudes pendientes de aprobación.",
+        "approve": "Aprobar",
+        "reject": "Rechazar",
+        "cancel_request": "Anular solicitud",
+        "own_request": "Solicitud propia: la aprueba otra persona.",
+        "approve_title": "Aprobar solicitud",
+        "reject_title": "Rechazar solicitud",
+        "comment_optional": "Comentario (opcional)",
+        "reject_reason": "Motivo del rechazo",
+        "approved_ok": "Solicitud aprobada y ejecutada.",
+        "rejected_ok": "Solicitud rechazada.",
+        "cancelled_ok": "Solicitud anulada.",
+        "resolution_note": "Resolución de {{name}}",
+        "types": {
+            "BAJA": "Baja de activo",
+            "RECEPCION_SOBRANTE": "Sobrante de compra"
+        },
+        "states": {
+            "PENDIENTE": "Pendiente",
+            "APROBADA": "Aprobada",
+            "RECHAZADA": "Rechazada",
+            "ANULADA": "Anulada"
+        },
+        "approve_effect": {
+            "BAJA": "Al aprobar, el equipo sale del inventario, se liberan sus licencias y la baja queda en el kardex con su nombre como aprobador.",
+            "RECEPCION_SOBRANTE": "Al aprobar, se registra la entrega completa (incluido el sobrante) tal como se recibió."
         }
     }
 }

@@ -198,7 +198,7 @@ async def test_cerrar_mantenimiento_sin_asignacion_va_a_bodega(
 async def test_no_se_puede_dar_baja_activo_asignado(
     client, auth_headers, software_seed,
 ):
-    """DELETE /core/activos/{id} debe fallar si el activo está asignado."""
+    """La solicitud de baja se rechaza si el activo está asignado (se valida al pedirla)."""
     s = software_seed
     await client.post(
         "/api/v1/trazabilidad/movimientos",
@@ -208,8 +208,9 @@ async def test_no_se_puede_dar_baja_activo_asignado(
         },
         headers=auth_headers,
     )
-    r = await client.delete(
-        f"/api/v1/core/activos/{s['act_1']}", headers=auth_headers,
+    r = await client.post(
+        f"/api/v1/core/activos/{s['act_1']}/baja", headers=auth_headers,
+        json={"motivo": "OBSOLESCENCIA", "destino": "RECICLAJE"},
     )
     assert r.status_code == 400
     assert r.json()["detail"] == "CANNOT_DELETE_ASSIGNED_ASSET_RETURN_IT_FIRST"

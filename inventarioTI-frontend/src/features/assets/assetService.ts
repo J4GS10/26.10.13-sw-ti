@@ -120,9 +120,6 @@ export const assetService = {
     const r = await client.patch<Activo>(`/core/activos/${id}`, data);
     return r.data;
   },
-  deleteActivo: async (id: string): Promise<void> => {
-    await client.delete(`/core/activos/${id}`);
-  },
 
   // Historial completo de movimientos
   getHistorial: async (activoId: string): Promise<Movimiento[]> => {

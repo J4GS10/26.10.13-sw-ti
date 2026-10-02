@@ -15,7 +15,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    BigInteger, Boolean, CheckConstraint, Column, DateTime, Index, Integer, Numeric, String, Uuid,
+    BigInteger, Boolean, CheckConstraint, Column, DateTime, Index, Integer, Numeric, String, UniqueConstraint, Uuid,
 )
 
 from app.db.base import Base
@@ -39,13 +39,13 @@ EVENTOS_ACTIVO = (
     "BAJA",
     "INVENTARIO_FISICO",        # hallazgo de una toma de inventario
 )
-EVENTOS_CONSUMIBLE = ("CONSUMIBLE_ENTRADA", "CONSUMIBLE_SALIDA", "CONSUMIBLE_AJUSTE")
-EVENTOS_LICENCIA = ("LICENCIA_ALTA", "LICENCIA_ASIGNADA", "LICENCIA_RETIRADA", "LICENCIA_AJUSTE")
+EVENTOS_CONSUMIBLE = ("CONSUMIBLE_ENTRADA", "CONSUMIBLE_SALIDA", "CONSUMIBLE_AJUSTE", "CONSUMIBLE_TRASLADO")
+EVENTOS_LICENCIA = ("LICENCIA_ALTA", "LICENCIA_ASIGNADA", "LICENCIA_RETIRADA", "LICENCIA_AJUSTE", "LICENCIA_BAJA")
 TIPOS_EVENTO = EVENTOS_ACTIVO + EVENTOS_CONSUMIBLE + EVENTOS_LICENCIA
 
 # Clasificación para la bitácora de entradas y salidas.
 EVENTOS_ENTRADA = ("ALTA", "RECEPCION", "CONSUMIBLE_ENTRADA", "LICENCIA_ALTA")
-EVENTOS_SALIDA = ("BAJA", "CONSUMIBLE_SALIDA")
+EVENTOS_SALIDA = ("BAJA", "CONSUMIBLE_SALIDA", "LICENCIA_BAJA")
 EVENTOS_REASIGNACION = (
     "ASIGNACION", "PRESTAMO", "DEVOLUCION", "TRANSFERENCIA",
     "COMPONENTE_INSTALADO", "COMPONENTE_RETIRADO", "LICENCIA_ASIGNADA", "LICENCIA_RETIRADA",
@@ -83,8 +83,12 @@ class Kardex(Base):
 
     KDX_Cantidad = Column(Integer, nullable=True)
     KDX_Saldo = Column(Integer, nullable=True)  # stock o cupo usado resultante
-    KDX_Costo = Column(Numeric(14, 2), nullable=True)
+    # Costo unitario del movimiento (consumibles: entradas a su precio,
+    # salidas y ajustes al costo promedio ponderado vigente).
+    KDX_Costo = Column(Numeric(16, 4), nullable=True)
     KDX_Moneda = Column(String(3), nullable=True)
+    # Valor del saldo tras el evento (saldo × costo promedio ponderado).
+    KDX_Saldo_Valor = Column(Numeric(16, 2), nullable=True)
 
     KDX_Documento_Tipo = Column(String(30), nullable=True)  # ORDEN_COMPRA, RECEPCION, ACTA, TICKET…
     KDX_Documento_Ref = Column(String(120), nullable=True)
@@ -96,11 +100,19 @@ class Kardex(Base):
     SED_Sede = Column(Integer, nullable=True, index=True)
     KDX_Migrado = Column(Boolean, nullable=False, default=False)
 
+    # Sello encadenado (los asigna el disparador de la base, ver
+    # app/db/kardex_integridad.py): orden sin huecos y hash SHA-256 del evento
+    # junto con el hash del anterior. Alterar o quitar un evento rompe la cadena.
+    KDX_Secuencia = Column(BigInteger().with_variant(Integer, "sqlite"), nullable=True)
+    KDX_Hash_Anterior = Column(String(64), nullable=True)
+    KDX_Hash = Column(String(64), nullable=True)
+
     __table_args__ = (
         CheckConstraint(f'"KDX_Tipo" IN ({_lista(TIPOS_EVENTO)})', name="ck_kardex_tipo"),
         CheckConstraint("\"KDX_Objeto\" IN ('ACTIVO', 'CONSUMIBLE', 'LICENCIA')", name="ck_kardex_objeto"),
         Index("ix_kardex_activo_fecha", "ACT_Activo", "KDX_Fecha"),
         Index("ix_kardex_tipo_fecha", "KDX_Tipo", "KDX_Fecha"),
+        UniqueConstraint("KDX_Secuencia", name="uq_kardex_secuencia"),
     )
 
 

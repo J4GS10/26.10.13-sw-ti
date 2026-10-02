@@ -20,6 +20,8 @@ const COLOR = { alta: 'error', media: 'warning', baja: 'info' } as const;
 const DESTINO: Record<string, { ruta: string; activos?: boolean }> = {
   ASIGNADO_SIN_CUSTODIO: { ruta: '/trazabilidad?vista=custodia', activos: true },
   ALMACEN_CON_CUSTODIO: { ruta: '/trazabilidad?vista=custodia', activos: true },
+  BAJA_CON_CUSTODIA: { ruta: '/trazabilidad?vista=custodia', activos: true },
+  APROBACION_PENDIENTE: { ruta: '/aprobaciones' },
   PERSONA_INACTIVA_CON_EQUIPOS: { ruta: '/trazabilidad?vista=custodia' },
   PRESTAMO_VENCIDO: { ruta: '/operaciones/movimientos' },
   STOCK_BAJO: { ruta: '/consumibles' },
@@ -72,6 +74,7 @@ export const AttentionInbox = () => {
       case 'PRESTAMO_VENCIDO': return `${f.codigo} · ${formatDate(String(f.fecha), i18n.language)}`;
       case 'STOCK_BAJO': return `${f.nombre}: ${f.stock}/${f.minimo}`;
       case 'ORDEN_PARCIAL': return String(f.numero);
+      case 'APROBACION_PENDIENTE': return String(f.resumen).slice(0, 60);
       case 'TICKET_ANTIGUO': return `${f.codigo} · ${formatDate(String(f.desde), i18n.language)}`;
       case 'LICENCIA_POR_VENCER': return `${f.nombre} · ${formatDate(String(f.fecha), i18n.language)}`;
       default: return String(f.codigo ?? f.nombre ?? '');

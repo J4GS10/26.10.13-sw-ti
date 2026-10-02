@@ -225,7 +225,8 @@ class ProcurementService(BaseService[ProcurementRepository]):
     # RECEPCIÓN — documento de entrada con control de diferencias
     # =====================================================================
     @transactional
-    async def recibir_orden(self, id: int, schema: RecepcionOrden, usuario_id=None, ip=None):
+    async def recibir_orden(self, id: int, schema: RecepcionOrden, usuario_id=None, ip=None,
+                            aprobacion: dict | None = None):
         """
         Registra una ENTREGA del proveedor (una orden puede recibirse en varias):
 
@@ -241,6 +242,7 @@ class ProcurementService(BaseService[ProcurementRepository]):
         from app.core.config import settings
         from app.core.data_scope import elevated
         from app.models.procurement import Recepcion, RecepcionLinea
+        from app.services import valoracion
         from app.services.kardex import KardexService
 
         orden = await self.repo.get_orden(id, with_lineas=True, lock=True)
@@ -322,6 +324,32 @@ class ProcurementService(BaseService[ProcurementRepository]):
         if len(series_payload) != len(set(series_payload)):
             raise HTTPException(400, "DUPLICATE_SERIAL_NUMBER_IN_RECEIPT")
 
+        # Separación de funciones: un sobrante no entra hasta que el Jefe de TI
+        # (otra persona) lo aprueba. Se guarda la entrega tal cual y no se toca
+        # el inventario; al aprobarse se ejecuta con estos mismos datos.
+        sobrantes = [d for d in diferencias if d["tipo"] == "SOBRANTE"]
+        if sobrantes and not aprobacion:
+            from app.services.aprobaciones import AprobacionService
+            solicitud = await AprobacionService(self.db).crear(
+                "RECEPCION_SOBRANTE", payload=schema.model_dump(mode="json"), solicitante=usuario_id,
+                resumen=(f"Sobrante en la OC {orden.OCO_Numero}: " + "; ".join(d["detalle"] for d in sobrantes))[:500],
+                motivo="; ".join(d["motivo"] or "" for d in sobrantes)[:500],
+                orden_id=id, sede=orden.SED_Sede, ip=ip,
+            )
+            return {
+                "OCO_Orden": id, "OCO_Estado": orden.OCO_Estado, "REC_Recepcion": None,
+                "consumibles_reabastecidos": 0, "activos_creados": 0,
+                "licencias_creadas": 0, "licencias_claves_creadas": 0, "activos_codigos": [],
+                "pendientes": [
+                    {"OCL_Linea": ln.OCL_Linea, "descripcion": ln.OCL_Descripcion, "tipo": ln.OCL_Tipo,
+                     "pedido": ln.OCL_Cantidad, "recibido": ln.OCL_Cantidad_Recibida or 0,
+                     "pendiente": ln.OCL_Cantidad - (ln.OCL_Cantidad_Recibida or 0)}
+                    for ln in orden.lineas if (ln.OCL_Cantidad_Recibida or 0) < ln.OCL_Cantidad
+                ],
+                "diferencias": diferencias,
+                "aprobacion_pendiente": solicitud.APR_Aprobacion,
+            }
+
         # --- 1. Consumibles: sumar stock (entrada auditada) ---
         reabastecidos = 0
         for rc in schema.consumibles:
@@ -330,11 +358,14 @@ class ProcurementService(BaseService[ProcurementRepository]):
                 raise HTTPException(404, "CONSUMABLE_NOT_FOUND")
             linea = lineas_validas[rc.OCL_Linea]
             precio = rc.precio_unitario if rc.precio_unitario is not None else linea.OCL_Precio_Unitario
+            # Costo promedio ponderado en la moneda de valoración del consumible.
+            promedio, moneda_val, costo = valoracion.entrada(
+                con.CON_Stock_Actual, con.CON_Costo_Unitario, con.CON_Moneda, rc.cantidad, precio, orden.OCO_Moneda,
+            )
             await con_repo.incrementar_stock(rc.CON_Consumible, rc.cantidad)
             refreshed = await con_repo.get_by_id(rc.CON_Consumible)
-            # Último costo de compra: valoriza el stock en la moneda de la orden.
-            refreshed.CON_Costo_Unitario = precio
-            refreshed.CON_Moneda = orden.OCO_Moneda
+            refreshed.CON_Costo_Unitario = promedio
+            refreshed.CON_Moneda = moneda_val
             await con_repo.add_movimiento(MovimientoConsumible(
                 CON_Consumible=rc.CON_Consumible, MOC_Tipo="ENTRADA",
                 MOC_Cantidad=rc.cantidad, MOC_Stock_Resultante=refreshed.CON_Stock_Actual,
@@ -342,9 +373,10 @@ class ProcurementService(BaseService[ProcurementRepository]):
             ))
             await kardex.registrar(
                 "CONSUMIBLE_ENTRADA", consumible_id=con.CON_Consumible, referencia=con.CON_Nombre,
-                cantidad=rc.cantidad, saldo=refreshed.CON_Stock_Actual, costo=precio, moneda=orden.OCO_Moneda,
+                cantidad=rc.cantidad, saldo=refreshed.CON_Stock_Actual, costo=costo, moneda=moneda_val,
+                saldo_valor=valoracion.valor_saldo(refreshed.CON_Stock_Actual, promedio),
                 destino={"sede": con.SED_Sede}, documento=documento, usuario_id=usuario_id,
-                motivo=f"Recepción OC {orden.OCO_Numero}",
+                motivo=f"Recepción OC {orden.OCO_Numero}", detalle=aprobacion,
             )
             linea.CON_Consumible = rc.CON_Consumible
             await self.gov_repo.create_audit_log(
@@ -414,7 +446,7 @@ class ProcurementService(BaseService[ProcurementRepository]):
             await kardex.registrar(
                 "RECEPCION", activo=nuevo, destino={"sede": orden.SED_Sede},
                 costo=costo, moneda=orden.OCO_Moneda, documento=documento, usuario_id=usuario_id,
-                motivo=f"Recepción OC {orden.OCO_Numero}",
+                motivo=f"Recepción OC {orden.OCO_Numero}", detalle=aprobacion,
             )
             await self.gov_repo.create_audit_log(
                 "CREATE", "INV_ACTIVO",
@@ -465,7 +497,11 @@ class ProcurementService(BaseService[ProcurementRepository]):
         ]
         nuevo_estado = "PARCIAL" if pendientes else "RECIBIDA"
         recepcion = Recepcion(
-            OCO_Orden=id, REC_Documento=schema.documento, REC_Observacion=schema.observacion,
+            OCO_Orden=id, REC_Documento=schema.documento,
+            REC_Observacion=(" · ".join(x for x in (
+                schema.observacion,
+                f"Sobrante aprobado (solicitud #{aprobacion['aprobacion']})" if aprobacion else None,
+            ) if x) or None),
             REC_Resultado="PARCIAL" if pendientes else "COMPLETA", USU_Usuario=usuario_id,
         )
         for linea_id, item in por_linea.items():
@@ -488,7 +524,8 @@ class ProcurementService(BaseService[ProcurementRepository]):
              "activos_creados": len(codigos_creados),
              "licencias_creadas": licencias_creadas,
              "licencias_claves_creadas": claves_creadas,
-             "pendientes": pendientes, "diferencias": diferencias},
+             "pendientes": pendientes, "diferencias": diferencias,
+             "aprobacion": {k: str(v) for k, v in (aprobacion or {}).items()} or None},
             usuario_id=usuario_id, ip_origen=ip, sede_id=orden.SED_Sede,
         )
         self._avisar_diferencias(orden, "recepcion", pendientes if diferencias else [], diferencias)

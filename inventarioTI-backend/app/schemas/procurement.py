@@ -206,6 +206,9 @@ class RecepcionResultado(Esquema):
     # Lo que falta por recibir tras esta entrega (vacío si quedó completa).
     pendientes: List[PendienteLinea] = Field(default_factory=list)
     diferencias: List[DiferenciaRegistrada] = Field(default_factory=list)
+    # La entrega trae un sobrante: quedó pendiente de aprobación del Jefe de TI
+    # (no se registró nada todavía).
+    aprobacion_pendiente: Optional[int] = None
 
 
 class RecepcionLineaResponse(Esquema):

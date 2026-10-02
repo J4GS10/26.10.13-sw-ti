@@ -239,29 +239,16 @@ class CoreService(BaseService[CoreRepository]):
     # =================================================================
     # DELETE (Baja Lógica) — ACID con validaciones
     # =================================================================
-    @transactional
     async def delete_activo(self, activo_id: uuid.UUID, usuario_id: uuid.UUID | None = None):
-        """Compatibilidad con DELETE /core/activos/{id}: baja sin detalle."""
-        from app.schemas.core import BajaActivo
-        return await self.dar_de_baja(
-            activo_id,
-            BajaActivo(motivo="OTRO", destino="RESGUARDO", observacion="Baja registrada sin detalle"),
-            usuario_id=usuario_id,
-        )
+        """
+        DELETE /core/activos/{id} ya no da de baja: toda salida del inventario
+        exige motivo, destino y la aprobación del Jefe de TI (solicitud de baja).
+        """
+        raise HTTPException(status_code=409, detail="USE_DECOMMISSION_REQUEST")
 
-    @transactional
-    async def dar_de_baja(self, activo_id: uuid.UUID, schema, usuario_id: uuid.UUID | None = None):
-        """
-        Baja formal: motivo, destino, fecha y documento de respaldo. Valida que el
-        equipo no esté asignado, en reparación ni instalado dentro de otro;
-        retira (si se pide) sus componentes, libera sus licencias y deja todo
-        en el kardex como SALIDA del inventario.
-        """
-        from datetime import date as _date
-        from sqlalchemy import update as _upd
-        from app.models.core import Activo as _Act
+    async def validar_baja(self, activo_id: uuid.UUID, schema):
+        """Reglas de la baja (al solicitarla y otra vez al aprobarla). Devuelve (activo, estado_baja, componentes)."""
         from app.models.traceability import Mantenimiento
-        from app.repositories.software import SoftwareRepository
 
         activo = await self.repo.get_by_id_simple(activo_id)
         if not activo:
@@ -286,11 +273,30 @@ class CoreService(BaseService[CoreRepository]):
         if estado_actual is not None and not AssetStateMachine.is_transition_allowed(
                 estado_actual, EstadoOperativoEnum.BAJA):
             raise HTTPException(status_code=400, detail="INVALID_STATE_TRANSITION")
-
-        kardex = KardexService(self.db)
         componentes = await self._componentes_de(activo_id)
         if componentes and not schema.retirar_componentes:
             raise HTTPException(status_code=409, detail=f"ASSET_HAS_COMPONENTS:{len(componentes)}")
+        return activo, estado_baja, componentes
+
+    @transactional
+    async def dar_de_baja(self, activo_id: uuid.UUID, schema, usuario_id: uuid.UUID | None = None,
+                          aprobacion: dict | None = None):
+        """
+        Ejecuta una baja APROBADA (ver services/aprobaciones.py): motivo, destino,
+        fecha y documento de respaldo. Revalida las reglas, retira (si se pidió)
+        los componentes, libera las licencias y deja todo en el kardex como
+        SALIDA del inventario, con quién la solicitó y quién la aprobó.
+        """
+        from datetime import date as _date
+        from sqlalchemy import update as _upd
+        from app.models.core import Activo as _Act
+        from app.repositories.software import SoftwareRepository
+
+        if not aprobacion:
+            # Separación de funciones: la baja solo se ejecuta desde una aprobación.
+            raise HTTPException(status_code=409, detail="USE_DECOMMISSION_REQUEST")
+        activo, estado_baja, componentes = await self.validar_baja(activo_id, schema)
+        kardex = KardexService(self.db)
         for comp in componentes:
             await self._retirar(activo, comp, "Retiro por baja del equipo", "En Bodega", usuario_id, kardex)
 
@@ -318,12 +324,14 @@ class CoreService(BaseService[CoreRepository]):
             costo=activo.ACT_Costo, moneda=activo.ACT_Moneda,
             documento=("BAJA", schema.documento) if schema.documento else None,
             motivo=schema.observacion,
-            detalle={"motivo": schema.motivo, "destino": schema.destino, "fecha": schema.fecha or _date.today()},
+            detalle={"motivo": schema.motivo, "destino": schema.destino, "fecha": schema.fecha or _date.today(),
+                     **aprobacion},
         )
         await self.gov_repo.create_audit_log(
             accion="DELETE_LOGIC", entidad="INV_ACTIVO",
             snapshot={"activo_id": str(activo_id), "codigo": activo.ACT_Codigo_Interno,
-                      "motivo": schema.motivo, "destino": schema.destino, "documento": schema.documento},
+                      "motivo": schema.motivo, "destino": schema.destino, "documento": schema.documento,
+                      **{k: str(v) for k, v in aprobacion.items()}},
             usuario_id=usuario_id, sede_id=activo.SED_Sede,
         )
         op_name, op_role, op_email = await self._operator_info(usuario_id)

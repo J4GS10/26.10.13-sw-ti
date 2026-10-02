@@ -9,13 +9,14 @@
 
 ## Roles
 
-> Actualizado el 2026-09-25 (rol AUDITOR y alcance por sede). Fuente de verdad:
+> Actualizado el 2026-10-02 (rol JEFE_TI y aprobaciones); antes, 2026-09-25 (rol AUDITOR y alcance por sede). Fuente de verdad:
 > `app/core/roles.py` y `app/api/deps.py`.
 
 | Rol | Atajos que lo incluyen | Capacidad | Alcance de datos |
 |---|---|---|---|
 | `SUPER_ADMIN` | todos | Total: configuración, cualquier cuenta, alcance global | Siempre global |
 | `ADMIN_SEGURIDAD` | `require_iam`, `require_audit_reader` | Identidades y accesos, bitácora. **Sin inventario** | Siempre global |
+| `JEFE_TI` | `require_admin`, `require_operativo`, `require_export`, `require_aprobador` | Lo mismo que ADMIN_TI y, además, **aprueba bajas y sobrantes** solicitados por otra persona; verifica la integridad del kardex | Sus sedes o global |
 | `ADMIN_TI` | `require_admin`, `require_operativo`, `require_export` | Inventario completo, catálogos, personas, compras | Sus sedes o global |
 | `TECNICO` | `require_operativo` | Operación de campo: activos, asignaciones, mantenimientos | Sus sedes o global |
 | `AUDITOR` | `require_business`, `require_audit_reader`, `require_export` | **Solo lectura** del inventario, bitácora y exportaciones | Sus sedes o global |
@@ -24,16 +25,29 @@
 Atajos (`app/api/deps.py`):
 - `require_super_admin = ["SUPER_ADMIN"]`
 - `require_iam = ["SUPER_ADMIN", "ADMIN_SEGURIDAD"]`
-- `require_business = ["SUPER_ADMIN", "ADMIN_TI", "TECNICO", "AUDITOR", "CONSULTA"]` (routers de inventario)
-- `require_admin = ["SUPER_ADMIN", "ADMIN_TI"]`
-- `require_operativo = ["SUPER_ADMIN", "ADMIN_TI", "TECNICO"]`
+- `require_business = ["SUPER_ADMIN", "JEFE_TI", "ADMIN_TI", "TECNICO", "AUDITOR", "CONSULTA"]` (routers de inventario)
+- `require_admin = ["SUPER_ADMIN", "JEFE_TI", "ADMIN_TI"]`
+- `require_operativo = ["SUPER_ADMIN", "JEFE_TI", "ADMIN_TI", "TECNICO"]`
+- `require_aprobador = ["SUPER_ADMIN", "JEFE_TI"]` (aprobar o rechazar; nunca lo propio)
 - `require_audit_reader = ["SUPER_ADMIN", "ADMIN_SEGURIDAD", "AUDITOR"]`
-- `require_export = ["SUPER_ADMIN", "ADMIN_TI", "AUDITOR"]`
+- `require_export = ["SUPER_ADMIN", "JEFE_TI", "ADMIN_TI", "AUDITOR"]`
 
 Reglas de gobierno (`app/core/roles.py`): nadie administra su propia cuenta;
 `ADMIN_SEGURIDAD` no gestiona ni otorga `SUPER_ADMIN`/`ADMIN_SEGURIDAD`; **solo un
 `SUPER_ADMIN` otorga el alcance global**; una cuenta de inventario debe tener al menos
 una sede o alcance global.
+
+## Separación de funciones (aprobaciones)
+
+| Operación | Solicita | Aprueba | Regla |
+|---|---|---|---|
+| Baja de activo (`POST /core/activos/{id}/baja` → 202) | `require_admin` | `require_aprobador` (`POST /aprobaciones/{id}/aprobar`) | Otra persona; el equipo queda congelado mientras está pendiente |
+| Sobrante en una recepción de compra | `require_admin` | `require_aprobador` | Otra persona; el inventario no cambia hasta aprobarse |
+| Anular una solicitud pendiente | quien la pidió | — | — |
+| Verificar el kardex (`GET /inventario/kardex/verificar`) | `SUPER_ADMIN`, `JEFE_TI`, `AUDITOR` | — | Solo lectura |
+
+`DELETE /core/activos/{id}` ya no da de baja (409 `USE_DECOMMISSION_REQUEST`).
+La base también impide que el aprobador sea el solicitante (`ck_aprobacion_otra_persona`).
 
 ## Alcance de datos por sede (RLS)
 

@@ -2,25 +2,31 @@ import type { ChipColor } from '../types/ui';
 import type { UserRole } from '../types/auth';
 
 /** Orden de presentación de los roles (de mayor a menor privilegio). */
-export const ALL_ROLES: readonly UserRole[] = ['SUPER_ADMIN', 'ADMIN_SEGURIDAD', 'ADMIN_TI', 'TECNICO', 'AUDITOR', 'CONSULTA'];
+export const ALL_ROLES: readonly UserRole[] = ['SUPER_ADMIN', 'ADMIN_SEGURIDAD', 'JEFE_TI', 'ADMIN_TI', 'TECNICO', 'AUDITOR', 'CONSULTA'];
 
 /** Roles que administran identidades y accesos. */
 export const IAM_ROLES: UserRole[] = ['SUPER_ADMIN', 'ADMIN_SEGURIDAD'];
 
 /** Roles que ven el inventario (el administrador de seguridad no lo ve). */
-export const INVENTORY_ROLES: UserRole[] = ['SUPER_ADMIN', 'ADMIN_TI', 'TECNICO', 'AUDITOR', 'CONSULTA'];
+export const INVENTORY_ROLES: UserRole[] = ['SUPER_ADMIN', 'JEFE_TI', 'ADMIN_TI', 'TECNICO', 'AUDITOR', 'CONSULTA'];
 
 /** Operación diaria (altas, asignaciones, mantenimiento). Espejo de `require_operativo`. */
-export const OPERATOR_ROLES: UserRole[] = ['SUPER_ADMIN', 'ADMIN_TI', 'TECNICO'];
+export const OPERATOR_ROLES: UserRole[] = ['SUPER_ADMIN', 'JEFE_TI', 'ADMIN_TI', 'TECNICO'];
 
 /** Administración del inventario (catálogos, compras, personas, bajas). Espejo de `require_admin`. */
-export const INVENTORY_ADMIN_ROLES: UserRole[] = ['SUPER_ADMIN', 'ADMIN_TI'];
+export const INVENTORY_ADMIN_ROLES: UserRole[] = ['SUPER_ADMIN', 'JEFE_TI', 'ADMIN_TI'];
+
+/** Aprueban bajas y sobrantes de otra persona. Espejo de `require_aprobador`. */
+export const APPROVER_ROLES: UserRole[] = ['SUPER_ADMIN', 'JEFE_TI'];
+
+/** Verifican la integridad del kardex (sello encadenado). */
+export const KARDEX_VERIFIER_ROLES: UserRole[] = ['SUPER_ADMIN', 'JEFE_TI', 'AUDITOR'];
 
 /** Lectura del detalle del inventario: operadores y el auditor (solo lectura). */
-export const INVENTORY_READER_ROLES: UserRole[] = ['SUPER_ADMIN', 'ADMIN_TI', 'TECNICO', 'AUDITOR'];
+export const INVENTORY_READER_ROLES: UserRole[] = ['SUPER_ADMIN', 'JEFE_TI', 'ADMIN_TI', 'TECNICO', 'AUDITOR'];
 
 /** Lectura de páginas administrativas del inventario (compras, personas): admins y auditor. */
-export const ADMIN_READER_ROLES: UserRole[] = ['SUPER_ADMIN', 'ADMIN_TI', 'AUDITOR'];
+export const ADMIN_READER_ROLES: UserRole[] = ['SUPER_ADMIN', 'JEFE_TI', 'ADMIN_TI', 'AUDITOR'];
 
 /** Bitácora de auditoría (el auditor la ve filtrada por su alcance). */
 export const AUDIT_READER_ROLES: UserRole[] = ['SUPER_ADMIN', 'ADMIN_SEGURIDAD', 'AUDITOR'];
@@ -48,7 +54,9 @@ export function permissionsFor(role: UserRole | undefined) {
   return {
     canOperate: !!role && OPERATOR_ROLES.includes(role),
     canAdminInventory: !!role && INVENTORY_ADMIN_ROLES.includes(role),
-    canExport: !!role && ['SUPER_ADMIN', 'ADMIN_TI', 'AUDITOR'].includes(role),
+    canExport: !!role && ['SUPER_ADMIN', 'JEFE_TI', 'ADMIN_TI', 'AUDITOR'].includes(role),
+    canApprove: !!role && APPROVER_ROLES.includes(role),
+    canVerifyKardex: !!role && KARDEX_VERIFIER_ROLES.includes(role),
     readOnly: role === 'AUDITOR' || role === 'CONSULTA',
   };
 }
@@ -56,6 +64,7 @@ export function permissionsFor(role: UserRole | undefined) {
 export function roleChipColor(role: UserRole): ChipColor {
   if (role === 'SUPER_ADMIN') return 'warning';
   if (role === 'ADMIN_SEGURIDAD') return 'secondary';
+  if (role === 'JEFE_TI') return 'success';
   if (role === 'ADMIN_TI') return 'primary';
   if (role === 'AUDITOR') return 'info';
   return 'default';

@@ -5,9 +5,11 @@ Recorre por la API, como sa, los flujos nuevos sobre datos reales:
   1. Compra con líneas de equipo y de servicio: recepción parcial, precio
      distinto (exige justificación), sobrante rechazado, conformidad del
      servicio, bandeja «Requiere su atención» y cierre con faltante.
-  2. Kardex y hoja de vida del equipo recibido; baja formal con motivo.
-  3. Consumible: entrada con costo, salida que deja el stock bajo el mínimo
-     (el servidor lo señala) y ajuste por conteo.
+  2. Kardex y hoja de vida del equipo recibido; baja formal con motivo, que
+     queda pendiente hasta que el Jefe de TI (otra persona) la aprueba.
+  3. Consumible: saldo inicial valorizado, costo promedio ponderado, salida
+     que deja el stock bajo el mínimo (el servidor lo señala) y ajuste por conteo.
+  (Requiere la cuenta JEFE_TI: python herramientas-qa/crear_jefe_ti.py)
   4. Reportes: licencias.csv, custodia, entradas y salidas.
   5. El frontend publicado incluye las pantallas nuevas.
 
@@ -35,6 +37,8 @@ def caso(nombre: str, ok: bool, detalle: str = "") -> None:
 
 def main() -> None:
     c = cliente_autenticado()
+    cj = json.loads((pathlib.Path(__file__).parent / "salidas" / "credenciales_jefe.json").read_text(encoding="utf-8"))
+    jefe = cliente_autenticado(cj["usuario"], cj["clave"], cj["totp_secret"])
     sufijo = time.strftime("%H%M%S")
 
     # ---------- Datos base ----------
@@ -114,21 +118,48 @@ def main() -> None:
         caso("Baja con motivo «Otro» exige observación", r.status_code in (400, 422), r.text[:200])
         r = c.post(f"{API}/core/activos/{aid}/baja", json={
             "motivo": "DANO_IRREPARABLE", "destino": "RECICLAJE", "documento": "Informe QA9"})
-        caso("Baja formal", r.status_code == 200, r.text[:200])
+        caso("Baja queda como solicitud pendiente", r.status_code == 202 and r.json()["APR_Estado"] == "PENDIENTE",
+             r.text[:200])
+        apr = r.json().get("APR_Aprobacion")
+        persona = next(x for x in c.get(f"{API}/org/personas").json() if x.get("PER_Estado", True))
+        area = next(x for x in c.get(f"{API}/geo/areas/all").json() if x.get("SED_Sede") in (None, sede))
+        tipos_mov = c.get(f"{API}/trazabilidad/tipos").json()
+        tmo = next(x for x in tipos_mov if "asign" in x["TMO_Nombre"].lower())
+        r = c.post(f"{API}/trazabilidad/movimientos", json={
+            "ACT_Activo": aid, "PER_Persona": persona["PER_Persona"], "ARE_Area": area["ARE_Area"],
+            "TMO_Tipo_Movimiento": tmo["TMO_Tipo_Movimiento"]})
+        caso("Equipo congelado mientras la baja está pendiente",
+             r.status_code == 409 and r.json().get("detail") == "ASSET_HAS_PENDING_DECOMMISSION", r.text[:200])
+        r = c.post(f"{API}/aprobaciones/{apr}/aprobar", json={})
+        caso("Quien solicita no puede aprobar", r.status_code == 403, r.text[:200])
+        r = jefe.post(f"{API}/aprobaciones/{apr}/aprobar", json={"comentario": "Revisado en QA9"})
+        caso("El Jefe de TI aprueba y la baja se ejecuta", r.status_code == 200 and r.json()["APR_Estado"] == "APROBADA",
+             r.text[:200])
         k = c.get(f"{API}/inventario/kardex", params={"activo_id": aid}).json()
-        caso("Kardex registra la baja", any(e["KDX_Tipo"] == "BAJA" for e in k.get("items", [])), "")
+        baja = next((e for e in k.get("items", []) if e["KDX_Tipo"] == "BAJA"), {})
+        caso("Kardex registra la baja con solicitante y aprobador",
+             bool(baja) and baja["KDX_Detalle"].get("aprobado_por") not in (None, baja["KDX_Detalle"].get("solicitado_por")),
+             json.dumps(baja)[:200])
         r = c.post(f"{API}/trazabilidad/movimientos", json={"ACT_Activo": aid})
         caso("Un activo de baja no admite asignación", r.status_code in (400, 409, 422), r.text[:200])
 
     # ---------- 3. Consumible ----------
     con = c.post(f"{API}/consumibles", json={"CON_Nombre": f"Tóner QA9 {sufijo}", "CON_Unidad": "unidad",
-                                              "CON_Stock_Actual": 0, "CON_Stock_Minimo": 3, "SED_Sede": sede}).json()
+                                              "CON_Stock_Actual": 2, "CON_Stock_Minimo": 3, "SED_Sede": sede,
+                                              "CON_Costo_Unitario": "20", "CON_Moneda": "USD"}).json()
     cid = con["CON_Consumible"]
-    r = c.post(f"{API}/consumibles/{cid}/entrada", json={"MOC_Cantidad": 5, "precio_unitario": "25.50", "moneda": "USD"})
+    ini = c.get(f"{API}/inventario/kardex", params={"consumible_id": cid}).json()["items"]
+    caso("El saldo inicial queda en el kardex valorizado",
+         len(ini) == 1 and ini[0]["KDX_Saldo"] == 2 and float(ini[0]["KDX_Saldo_Valor"]) == 40.0, json.dumps(ini)[:200])
+    r = c.post(f"{API}/consumibles/{cid}/entrada", json={"MOC_Cantidad": 2, "precio_unitario": "30", "moneda": "USD"})
     caso("Entrada de consumible con costo y moneda", r.status_code == 201, r.text[:200])
     det = c.get(f"{API}/consumibles/{cid}").json()
-    caso("El consumible guarda el costo en su moneda",
-         str(det.get("CON_Costo_Unitario")) in ("25.50", "25.5") and det.get("CON_Moneda") == "USD", json.dumps(det)[:200])
+    caso("Costo promedio ponderado ((2×20 + 2×30) / 4 = 25)",
+         float(det.get("CON_Costo_Unitario") or 0) == 25.0 and det.get("CON_Moneda") == "USD", json.dumps(det)[:200])
+    r = c.post(f"{API}/consumibles/{cid}/entrada", json={"MOC_Cantidad": 1, "precio_unitario": "100", "moneda": "GTQ"})
+    caso("No se promedian monedas distintas", r.status_code == 400, r.text[:200])
+    r = c.post(f"{API}/consumibles/{cid}/entrada", json={"MOC_Cantidad": 1})
+    caso("Entrada sin costo entra al promedio", r.status_code == 201, r.text[:200])
     r = c.post(f"{API}/consumibles/{cid}/salida", json={"MOC_Cantidad": 3})
     caso("Salida que deja el stock bajo el mínimo lo señala", r.status_code == 201 and r.json().get("bajo_minimo") is True, r.text[:200])
     r = c.post(f"{API}/consumibles/{cid}/ajuste", json={"CON_Stock_Real": 2, "MOC_Motivo": "corto"})
@@ -142,11 +173,17 @@ def main() -> None:
         r = c.get(f"{API}{ruta}")
         caso(f"Reporte {ruta.split('?')[0]}", r.status_code == 200, f"{r.status_code} {r.text[:120]}")
 
-    # ---------- 5. Frontend publicado ----------
+    # ---------- 5. Kardex verificable ----------
+    v = jefe.get(f"{API}/inventario/kardex/verificar").json()
+    caso("Kardex íntegro (sello encadenado)", v.get("integro") is True and v.get("ultima_secuencia") == v.get("total"),
+         json.dumps(v)[:200])
+
+    # ---------- 6. Frontend publicado ----------
     index = httpx.get(f"{BASE}/", verify=False).text
     js = [m for m in re.findall(r'src="(/assets/[^"]+\.js)"', index)]
     bundle = "".join(httpx.get(f"{BASE}{p}", verify=False).text for p in js)
-    caso("Frontend enruta /trazabilidad y /inventario/tomas", "/trazabilidad" in bundle and "/inventario/tomas" in bundle, str(js))
+    caso("Frontend enruta /trazabilidad, /inventario/tomas y /aprobaciones",
+         all(x in bundle for x in ("/trazabilidad", "/inventario/tomas", "/aprobaciones")), str(js))
 
     SALIDA.parent.mkdir(exist_ok=True)
     SALIDA.write_text(json.dumps(resultados, ensure_ascii=False, indent=2), encoding="utf-8")

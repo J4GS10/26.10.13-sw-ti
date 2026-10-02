@@ -23,6 +23,9 @@ export interface ConsumibleCreate {
   CON_Stock_Minimo: number;
   CON_Stock_Actual: number;
   SED_Sede?: number | null;
+  /** Costo unitario del saldo inicial y su moneda. */
+  CON_Costo_Unitario?: string | null;
+  CON_Moneda?: string | null;
 }
 
 export interface MovimientoConsumible {

@@ -132,7 +132,8 @@
         "directory": "Directory e notifiche",
         "audit": "Audit",
         "traceability": "Tracciabilità",
-        "inventory_count": "Inventario fisico"
+        "inventory_count": "Inventario fisico",
+        "approvals": "Approvazioni"
     },
     "audit": {
         "title": "Audit forense",
@@ -204,7 +205,11 @@
             "INVENTORY_COUNT_CLOSE": "Inventario fisico chiuso",
             "INVENTORY_COUNT_CANCEL": "Inventario fisico annullato",
             "DATA_FIX": "Correzione dei dati",
-            "AD_SYNC": "Sincronizzazione con Active Directory"
+            "AD_SYNC": "Sincronizzazione con Active Directory",
+            "APPROVAL_REQUEST": "Richiesta di approvazione",
+            "APPROVAL_APPROVE": "Richiesta approvata",
+            "APPROVAL_REJECT": "Richiesta respinta",
+            "APPROVAL_CANCEL": "Richiesta annullata"
         },
         "entities": {
             "INV_ACTIVO": "Asset",
@@ -238,7 +243,8 @@
             "INV_TOMA_INVENTARIO": "Inventario fisico",
             "INV_TIPO_LICENCIA": "Tipo di licenza",
             "INV_TIPO_MANTENIMIENTO": "Tipo di manutenzione",
-            "INV_ESTADO_OPERATIVO": "Stato operativo"
+            "INV_ESTADO_OPERATIVO": "Stato operativo",
+            "INV_APROBACION": "Richiesta di approvazione"
         }
     },
     "menu_groups": {
@@ -408,8 +414,7 @@
             "no_host": "Nessun host"
         },
         "messages": {
-            "success_create": "Bene creato correttamente",
-            "deleted": "Bene dismesso"
+            "success_create": "Bene creato correttamente"
         },
         "specs": {
             "dup": "Questo dispositivo ha già questa specifica (la modifichi o la elimini).",
@@ -450,7 +455,8 @@
             "custodian": "Assegnatario attuale",
             "no_custodian": "In magazzino",
             "history_hint": "Tutto ciò che è successo al dispositivo, dalla registrazione a oggi.",
-            "decommissioned_info": "Dismesso: {{reason}} · {{destination}}"
+            "decommissioned_info": "Dismesso: {{reason}} · {{destination}}",
+            "decommission_pending": "Dismissione in attesa di approvazione"
         },
         "filter_type": "Tipo di componente",
         "all_types": "Tutti i tipi",
@@ -764,7 +770,8 @@
             "ADMIN_TI": "Amministratore IT",
             "TECNICO": "Tecnico",
             "AUDITOR": "Revisore",
-            "CONSULTA": "Sola lettura"
+            "CONSULTA": "Sola lettura",
+            "JEFE_TI": "Responsabile IT"
         },
         "messages": {
             "created_success": "Utente creato correttamente",
@@ -986,13 +993,16 @@
         "adjust_done": "Giacenza rettificata",
         "quantity_invalid": "Indichi una quantità valida.",
         "unit_cost": "Costo unitario",
-        "unit_cost_help": "Facoltativo. Valorizza lo stock nella valuta dell'acquisto.",
+        "unit_cost_help": "Facoltativo. Ricalcola il costo medio ponderato (nella valuta del materiale di consumo).",
         "low_title": "Stock sotto il minimo",
         "low_message": "«{{name}}» è ora a {{stock}} {{unit}} (minimo {{min}}).",
         "low_notify_admin": "Gli amministratori sono stati avvisati per gestire il riassortimento.",
         "low_later": "Più tardi",
         "low_create_order": "Crea ordine di acquisto ({{count}})",
-        "order_created_hint": "Ordine creato. Alla ricezione, lo stock verrà aggiunto automaticamente."
+        "order_created_hint": "Ordine creato. Alla ricezione, lo stock verrà aggiunto automaticamente.",
+        "avg_cost": "Costo medio",
+        "initial_cost": "Costo unitario della giacenza iniziale",
+        "initial_cost_help": "Facoltativo. Valorizza lo stock iniziale; in seguito si usa il costo medio ponderato."
     },
     "maintenance": {
         "sections": {
@@ -1187,7 +1197,11 @@
         "recv_differences_notified": "Gli amministratori sono stati avvisati.",
         "recv_still_pending": "Ancora da ricevere",
         "recv_pending_hint": "Quando arriva, usi «Ricevi la prossima consegna»; se non arriverà, «Chiudi con mancanze».",
-        "recv_print_labels": "Stampa etichette QR"
+        "recv_print_labels": "Stampa etichette QR",
+        "recv_surplus_needs_approval": "L'eccedenza richiede l'approvazione del Responsabile IT: la consegna resterà in sospeso fino ad allora.",
+        "recv_sent_title": "Consegna inviata per l'approvazione · {{number}}",
+        "recv_pending_approval": "La consegna include un'eccedenza ed è in sospeso (richiesta #{{id}}). L'inventario non cambia finché il Responsabile IT non la approva.",
+        "recv_nothing_yet": "Non è stato ancora registrato nulla."
     },
     "directory": {
         "title": "Directory e notifiche",
@@ -1719,7 +1733,16 @@
         "SSO_EMAIL_NOT_VERIFIED": "La Sua email non è verificata presso il provider.",
         "SSO_NOT_ENABLED_FOR_USER": "Il Suo account non ha l'accesso aziendale abilitato.",
         "SSO_PROVIDER_NOT_ALLOWED_FOR_USER": "Il Suo account non può usare questo provider.",
-        "SSO_USER_NOT_AUTHORIZED": "Il Suo account non è autorizzato nel sistema."
+        "SSO_USER_NOT_AUTHORIZED": "Il Suo account non è autorizzato nel sistema.",
+        "USE_DECOMMISSION_REQUEST": "La dismissione si effettua con una richiesta formale (motivo e destinazione) approvata dal Responsabile IT.",
+        "DECOMMISSION_ALREADY_REQUESTED": "Questo asset ha già una richiesta di dismissione in sospeso (#{{p1}}).",
+        "ASSET_HAS_PENDING_DECOMMISSION": "L'asset ha una dismissione in attesa di approvazione: non consente operazioni finché non viene risolta.",
+        "CANNOT_APPROVE_OWN_REQUEST": "Non può approvare né respingere la Sua richiesta: deve farlo un'altra persona.",
+        "APPROVAL_ALREADY_RESOLVED": "La richiesta è già stata risolta.",
+        "APPROVAL_NOT_FOUND": "La richiesta non è stata trovata.",
+        "APPROVAL_REQUIRES_REQUESTER": "La richiesta deve avere un richiedente.",
+        "ONLY_REQUESTER_CAN_CANCEL": "Solo chi ha fatto la richiesta può annullarla.",
+        "CURRENCY_DIFFERS_FROM_VALUATION": "Questo materiale di consumo è valorizzato in {{p1}}: registri l'entrata in {{p1}} (non si fa la media di valute diverse)."
     },
     "catalog": {
         "states": {
@@ -1957,7 +1980,9 @@
             "LICENCIA_ALTA": "Licenza registrata",
             "LICENCIA_ASIGNADA": "Licenza assegnata",
             "LICENCIA_RETIRADA": "Licenza rimossa",
-            "LICENCIA_AJUSTE": "Rettifica della licenza"
+            "LICENCIA_AJUSTE": "Rettifica della licenza",
+            "CONSUMIBLE_TRASLADO": "Trasferimento di magazzino",
+            "LICENCIA_BAJA": "Licenza dismessa"
         },
         "documentos": {
             "RECEPCION": "Ricevimento",
@@ -2027,6 +2052,22 @@
             "area": "Area",
             "since": "Dal",
             "expected_return": "Restituzione prevista"
+        },
+        "verify": {
+            "button": "Verifica l'integrità",
+            "title": "Integrità del kardex",
+            "ok": "Integro: tutti i {{count}} eventi conservano il proprio sigillo e nessuno è stato alterato, eliminato o inserito.",
+            "broken_one": "È stato rilevato {{count}} problema nella catena del kardex.",
+            "broken_other": "Sono stati rilevati {{count}} problemi nella catena del kardex.",
+            "problems": {
+                "SIN_SELLO": "evento senza sigillo",
+                "EVENTO_ALTERADO": "evento alterato",
+                "CADENA_ROTA": "catena interrotta (evento rimosso o riordinato)",
+                "EVENTO_FALTANTE": "manca un evento nella sequenza"
+            },
+            "last_seal": "Ultimo sigillo",
+            "sequence": "Evento n. {{n}}",
+            "anchor_hint": "Annoti questo hash a ogni chiusura mensile (fuori dal sistema): dimostra che lo storico non è stato riscritto."
         }
     },
     "inventory_count": {
@@ -2156,8 +2197,9 @@
         "has_components_one": "Il dispositivo ha {{count}} componente installato.",
         "has_components_other": "Il dispositivo ha {{count}} componenti installati.",
         "remove_components": "Rimuoverli e lasciarli in magazzino",
-        "confirm": "Dismetti",
-        "done": "{{code}} è stato dismesso."
+        "approval_note": "La dismissione viene inviata come richiesta: il Responsabile IT (un'altra persona) la approva e viene eseguita in quel momento.",
+        "request": "Richiedi la dismissione",
+        "requested": "Richiesta di dismissione di {{code}} inviata al Responsabile IT."
     },
     "components": {
         "tab": "Componenti",
@@ -2235,7 +2277,55 @@
                 "title_one": "{{count}} dato mancante negli asset",
                 "title_other": "{{count}} dati mancanti negli asset",
                 "hint": "{{sin_garantia}} senza fine garanzia e {{sin_costo}} senza costo."
+            },
+            "BAJA_CON_CUSTODIA": {
+                "title_one": "{{count}} asset dismesso ha ancora una custodia aperta",
+                "title_other": "{{count}} asset dismessi hanno ancora una custodia aperta",
+                "hint": "Dati ereditati: registri la restituzione per chiudere la custodia."
+            },
+            "APROBACION_PENDIENTE": {
+                "title_one": "{{count}} richiesta attende l'approvazione del Responsabile IT",
+                "title_other": "{{count}} richieste attendono l'approvazione del Responsabile IT",
+                "hint": "Dismissioni ed eccedenze di acquisto: l'inventario non cambia finché non vengono approvate."
             }
+        }
+    },
+    "approvals": {
+        "title": "Approvazioni",
+        "subtitle": "Dismissioni ed eccedenze di acquisto che richiedono l'approvazione del Responsabile IT.",
+        "only_approver_hint": "Solo il Responsabile IT può approvare o respingere. Lei può consultare lo stato delle Sue richieste e annullarle finché sono in sospeso.",
+        "tab_pending": "In sospeso",
+        "tab_history": "Storico",
+        "col_type": "Tipo",
+        "col_summary": "Richiesta",
+        "col_requester": "Richiesta da",
+        "col_status": "Stato",
+        "empty_pending": "Non ci sono richieste in attesa di approvazione.",
+        "approve": "Approva",
+        "reject": "Respingi",
+        "cancel_request": "Annulla richiesta",
+        "own_request": "Richiesta propria: la approva un'altra persona.",
+        "approve_title": "Approva la richiesta",
+        "reject_title": "Respingi la richiesta",
+        "comment_optional": "Commento (facoltativo)",
+        "reject_reason": "Motivo del rifiuto",
+        "approved_ok": "Richiesta approvata ed eseguita.",
+        "rejected_ok": "Richiesta respinta.",
+        "cancelled_ok": "Richiesta annullata.",
+        "resolution_note": "Decisione di {{name}}",
+        "types": {
+            "BAJA": "Dismissione di asset",
+            "RECEPCION_SOBRANTE": "Eccedenza di acquisto"
+        },
+        "states": {
+            "PENDIENTE": "In sospeso",
+            "APROBADA": "Approvata",
+            "RECHAZADA": "Respinta",
+            "ANULADA": "Annullata"
+        },
+        "approve_effect": {
+            "BAJA": "Con l'approvazione, il dispositivo esce dall'inventario, le sue licenze vengono liberate e la dismissione resta nel kardex con il Suo nome come approvatore.",
+            "RECEPCION_SOBRANTE": "Con l'approvazione, viene registrata la consegna completa (eccedenza inclusa) così come è stata ricevuta."
         }
     }
 }

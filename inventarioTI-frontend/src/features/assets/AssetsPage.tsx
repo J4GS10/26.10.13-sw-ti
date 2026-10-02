@@ -14,6 +14,7 @@ import { useSnackbar } from 'notistack';
 import { getApiErrorMessage } from '../../api/errors';
 import { downloadCsv } from '../../api/downloadCsv';
 import { AssetDialog } from './AssetDialog';
+import { BajaDialog } from './BajaDialog';
 import { AssetDetailDialog } from './AssetDetailDialog';
 import { assetService } from './assetService';
 import { catalogService } from '../catalogs/catalogService';
@@ -21,14 +22,12 @@ import { Activo, EstadoOperativo, Marca, Modelo, TipoActivo } from '../../types/
 import { ExportMenuButton } from '../../components/ExportMenuButton';
 import { usePermissions } from '../../hooks/usePermissions';
 import { SearchInput } from '../../components/SearchInput';
-import { useConfirm } from '../../components/confirm-context';
 import { normalizeLanguage } from '../../types/language';
 import { CollapsibleToolbar } from '../../components/CollapsibleToolbar';
 
 export const AssetsPage = () => {
     const { t, i18n } = useTranslation();
     const { canOperate, canAdminInventory, canExport } = usePermissions();
-    const confirm = useConfirm();
     const { enqueueSnackbar } = useSnackbar();
 
     // ── Catálogos (para dropdowns) ──────────────────────────────────────────
@@ -206,16 +205,8 @@ export const AssetsPage = () => {
         }
     };
 
-    const handleDelete = async (asset: Activo) => {
-        if (!(await confirm({ message: t('common.confirm_delete'), destructive: true, confirmText: t('common.delete') }))) return;
-        try {
-            await assetService.deleteActivo(asset.ACT_Activo);
-            enqueueSnackbar(t('assets.messages.deleted'), { variant: 'success' });
-            loadActivos();
-        } catch (err: unknown) {
-            enqueueSnackbar(getApiErrorMessage(err, t('common.error_generic')), { variant: 'error' });
-        }
-    };
+    // Baja: siempre como solicitud formal (motivo, destino) que aprueba el Jefe de TI.
+    const [bajaTarget, setBajaTarget] = useState<Activo | null>(null);
 
     return (
         <Box>
@@ -377,8 +368,8 @@ export const AssetsPage = () => {
                                     </Tooltip>
                                 )}
                                 {canAdminInventory && (
-                                    <Tooltip title={t('common.delete') as string}>
-                                        <IconButton size="small" color="error" onClick={() => handleDelete(row)}>
+                                    <Tooltip title={t('assets.actions.decommission') as string}>
+                                        <IconButton size="small" color="error" onClick={() => setBajaTarget(row)} aria-label={t('assets.actions.decommission')}>
                                             <DeleteOutlineIcon fontSize="small" />
                                         </IconButton>
                                     </Tooltip>
@@ -388,6 +379,7 @@ export const AssetsPage = () => {
                     );
                 }}
             />
+            <BajaDialog open={!!bajaTarget} activo={bajaTarget} onClose={(changed) => { setBajaTarget(null); if (changed) loadActivos(); }} />
         </Box>
     );
 };

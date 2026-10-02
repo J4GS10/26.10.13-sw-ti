@@ -27,6 +27,7 @@ import { useNavigate } from 'react-router-dom';
 import { KardexTimeline } from '../../components/ui';
 import { usePermissions } from '../../hooks/usePermissions';
 import { inventarioService } from '../../api/inventarioService';
+import { aprobacionService } from '../../api/aprobacionService';
 import type { KardexEvento } from '../../types/kardex';
 import { normalizeLanguage } from '../../types/language';
 import { formatDate } from '../../utils/dates';
@@ -143,6 +144,8 @@ export const AssetDetailDialog = ({ open, asset, marcas: marcasProp = SIN_DATOS,
     const navigate = useNavigate();
     const { canOperate, canAdminInventory } = usePermissions();
     const [kardex, setKardex] = useState<KardexEvento[]>([]);
+    // Baja solicitada y pendiente de aprobación: el equipo queda congelado.
+    const [bajaPendiente, setBajaPendiente] = useState(false);
     const [dialogo, setDialogo] = useState<'asignar' | 'devolver' | 'baja' | null>(null);
     // Desinstalar una licencia pide el motivo (queda en el historial de la licencia).
     const [retiroLicencia, setRetiroLicencia] = useState<number | null>(null);
@@ -235,11 +238,13 @@ export const AssetDetailDialog = ({ open, asset, marcas: marcasProp = SIN_DATOS,
             return;
         setLoading(true);
         try {
-            const [ins, hist, kdx] = await Promise.all([
+            const [ins, hist, kdx, pend] = await Promise.all([
                 assetService.getInstalaciones(asset.ACT_Activo, true),
                 assetService.getHistorial(asset.ACT_Activo),
                 inventarioService.kardex({ activo_id: asset.ACT_Activo }, 300),
+                aprobacionService.listar({ activo_id: asset.ACT_Activo, estado: 'PENDIENTE' }).catch(() => []),
             ]);
+            setBajaPendiente(pend.some((a) => a.APR_Tipo === 'BAJA'));
             setInstalaciones(ins);
             setHistorial(hist);
             setKardex(kdx.items);
@@ -366,7 +371,7 @@ export const AssetDetailDialog = ({ open, asset, marcas: marcasProp = SIN_DATOS,
     const specSections = allSpecSections.filter((section) => visibleGroups[section.key].length > 0);
     // Ficha como centro de acciones: la acción principal depende del estado.
     const estadoSlug = normalizeSpecName(estado?.EOP_Nombre ?? '');
-    const deBaja = estadoSlug === 'baja';
+    const deBaja = estadoSlug === 'baja' || bajaPendiente;
     const esComponente = !!asset.ACT_Activo_Padre;
     const summaryItems: SummaryItem[] = [
         { label: t('assets.dialog.type'), value: tipo ? typeLabel(t, tipo.TAC_Nombre) : asset.TAC_Tipo_Activo },
@@ -472,7 +477,8 @@ export const AssetDetailDialog = ({ open, asset, marcas: marcasProp = SIN_DATOS,
       </DialogTitle>
 
       {(canOperate || deBaja) && (<Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ px: 3, pb: 1.5 }}>
-          {deBaja && (<Chip color="error" label={t('assets.detail.decommissioned_info', {
+          {bajaPendiente && (<Chip color="warning" label={t('assets.detail.decommission_pending')}/>)}
+          {deBaja && !bajaPendiente && (<Chip color="error" label={t('assets.detail.decommissioned_info', {
                 reason: asset.ACT_Baja_Motivo ? t(`decommission.reasons.${asset.ACT_Baja_Motivo}`) : '—',
                 destination: asset.ACT_Baja_Destino ? t(`decommission.destinations.${asset.ACT_Baja_Destino}`) : '—',
             })}/>)}

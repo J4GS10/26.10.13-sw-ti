@@ -1,7 +1,8 @@
 # InventarioTI — Estado actual y guía para continuar
 
-> Actualizado: 2026-09-29 (sesión 12). Documento de traspaso entre sesiones de trabajo.
+> Actualizado: 2026-10-02 (sesión 13). Documento de traspaso entre sesiones de trabajo.
 > **Sesión 12:** se ejecutaron las fases 0 a 6 de `INFORME_EJECUTIVO_Y_PLAN.md` (kardex, recepción controlada, componentes, bajas, licencias, toma de inventario, bandeja «Requiere su atención»). Estado y pendientes en su §8.
+> **Sesión 13:** control interno profesional (rol JEFE_TI con aprobación de bajas y sobrantes, costo promedio ponderado, kardex completo y verificable con sello encadenado). Detalle en `INFORME_EJECUTIVO_Y_PLAN.md` §9. Cuenta de revisión del Jefe de TI: `python herramientas-qa/crear_jefe_ti.py` (credenciales en `herramientas-qa/salidas/credenciales_jefe.json`).
 > El historial detallado de cada sesión está en `PROGRESS.md`, y el despliegue en `inventarioTI-backend/DEPLOYMENT.md`.
 
 ---
@@ -27,7 +28,7 @@ Arquitectura del backend: `endpoints → services → repositories → models`, 
 
 | Área | Estado |
 |---|---|
-| **Tests backend** | **389/389 en PostgreSQL 16** con RLS real. La suite solo corre contra PostgreSQL: `python herramientas-qa/pruebas_backend.py` |
+| **Tests backend** | **395/395 en PostgreSQL 16** con RLS real. La suite solo corre contra PostgreSQL: `python herramientas-qa/pruebas_backend.py` |
 | **Build frontend** | `tsc -b`, `eslint src` y `npm run build` limpios; `verify.py`: 3 idiomas con claves idénticas y sin huérfanas |
 | **Diseño/UI** | Un solo patrón: `PageHeader` + barra de filtros (`CollapsibleToolbar`) + `DataTableShell` + `SectionCard`. Sidebar con rail, menú de cuenta y AppBar móvil. Sin desbordes en 20 rutas × 3 tamaños × 3 idiomas |
 | **Colores** | El tema respeta el fondo configurado (claro u oscuro) y cumple WCAG AA en todas las paletas. Manrope autoalojada. Configuración con vista previa real y aplicación sin recargar |
@@ -38,7 +39,7 @@ Arquitectura del backend: `endpoints → services → repositories → models`, 
 | **Correo** | Cola persistente (outbox) con reintentos y cortacircuitos. Cuenta de servicio configurable desde la UI (SMTP o Microsoft Graph). ⏸ **Pausado por decisión del usuario** hasta que infraestructura entregue la cuenta |
 | **Active Directory** | Sincronización de personas y jefes, grupos AD como destinatarios. Solo probado con un AD simulado |
 | **Formularios** | Autocompletado relacional (ver §3) |
-| **Infraestructura** | nginx re-resuelve el backend (sin 502 tras redeploy), Caddy permite la cámara, el compose pasa todas las variables, migraciones lineales hasta `e2f3a4b5c6d7` (kardex, recepciones, componentes, tomas) |
+| **Infraestructura** | nginx re-resuelve el backend (sin 502 tras redeploy), Caddy permite la cámara, el compose pasa todas las variables, migraciones lineales hasta `f3a4b5c6d7e8` (aprobaciones del Jefe de TI, costo promedio ponderado y kardex verificable) |
 | **Moneda** | Cada costo guarda su moneda (GTQ, USD, CHF) sin convertir: activos (`ACT_Moneda`), mantenimientos (`MAN_Moneda`) y órdenes. Los activos recibidos toman la moneda de la orden; el tablero da un total por moneda. `app/core/currency.py`, `src/utils/currency.ts`, `MoneyField` |
 | **Git** | Todo versionado en la rama `feature/sesiones-4-10` de ambos repos (backend → `backendTEST`, frontend → `inventarioTI-frontend`). Falta abrir el PR y fusionar a `main` |
 

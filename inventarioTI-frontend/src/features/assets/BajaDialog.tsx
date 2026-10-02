@@ -55,7 +55,8 @@ export const BajaDialog = ({ open, activo, onClose }: Props) => {
         motivo, destino, fecha, documento: documento.trim() || undefined,
         observacion: observacion.trim() || undefined, retirar_componentes: retirar,
       });
-      enqueueSnackbar(t('decommission.done', { code: activo.ACT_Codigo_Interno }), { variant: 'success' });
+      // Separación de funciones: la baja la ejecuta el Jefe de TI al aprobarla.
+      enqueueSnackbar(t('decommission.requested', { code: activo.ACT_Codigo_Interno }), { variant: 'success' });
       onClose(true);
     } catch (err) {
       if (getApiErrorCode(err) === 'ASSET_HAS_COMPONENTS') {
@@ -75,6 +76,7 @@ export const BajaDialog = ({ open, activo, onClose }: Props) => {
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
           <Alert severity="warning">{t('decommission.warning')}</Alert>
+          <Alert severity="info">{t('decommission.approval_note')}</Alert>
           <TextField select required label={t('decommission.reason')} value={motivo}
             onChange={(e) => setMotivo(e.target.value as BajaPayload['motivo'])}>
             {MOTIVOS_BAJA.map((m) => <MenuItem key={m} value={m}>{t(`decommission.reasons.${m}`)}</MenuItem>)}
@@ -106,7 +108,7 @@ export const BajaDialog = ({ open, activo, onClose }: Props) => {
       <DialogActions sx={{ p: 3 }}>
         <Button color="inherit" onClick={() => onClose(false)}>{t('common.cancel')}</Button>
         <Button variant="contained" color="error" onClick={confirmar} disabled={!valido || enviando}>
-          {enviando ? <CircularProgress size={22} /> : t('decommission.confirm')}
+          {enviando ? <CircularProgress size={22} /> : t('decommission.request')}
         </Button>
       </DialogActions>
     </Dialog>

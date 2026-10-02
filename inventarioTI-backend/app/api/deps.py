@@ -197,13 +197,15 @@ require_super_admin = RoleChecker(["SUPER_ADMIN"])
 # Gestión de identidades y accesos (usuarios, contraseñas, MFA, sesiones).
 require_iam = RoleChecker(["SUPER_ADMIN", "ADMIN_SEGURIDAD"])
 # Módulos de inventario/operación (todos los roles salvo ADMIN_SEGURIDAD).
-require_business = RoleChecker(["SUPER_ADMIN", "ADMIN_TI", "TECNICO", "AUDITOR", "CONSULTA"])
-require_admin = RoleChecker(["SUPER_ADMIN", "ADMIN_TI"])
-require_operativo = RoleChecker(["SUPER_ADMIN", "ADMIN_TI", "TECNICO"])
+require_business = RoleChecker(["SUPER_ADMIN", "JEFE_TI", "ADMIN_TI", "TECNICO", "AUDITOR", "CONSULTA"])
+require_admin = RoleChecker(["SUPER_ADMIN", "JEFE_TI", "ADMIN_TI"])
+require_operativo = RoleChecker(["SUPER_ADMIN", "JEFE_TI", "ADMIN_TI", "TECNICO"])
+# Aprobación de bajas y sobrantes (separación de funciones: ver services/aprobaciones.py).
+require_aprobador = RoleChecker(["SUPER_ADMIN", "JEFE_TI"])
 # Lectura de la bitácora de auditoría (el AUDITOR la ve filtrada por su alcance).
 require_audit_reader = RoleChecker(["SUPER_ADMIN", "ADMIN_SEGURIDAD", "AUDITOR"])
 # Exportaciones CSV del inventario (lectura masiva de su alcance).
-require_export = RoleChecker(["SUPER_ADMIN", "ADMIN_TI", "AUDITOR"])
+require_export = RoleChecker(["SUPER_ADMIN", "JEFE_TI", "ADMIN_TI", "AUDITOR"])
 # Cualquier autenticado: usar Depends(get_current_user) directamente.
 
 

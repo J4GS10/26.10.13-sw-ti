@@ -215,6 +215,12 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
             raise HTTPException(409, detail="ASSET_IN_MAINTENANCE")
         if getattr(activo, "ACT_Activo_Padre", None) is not None:
             raise HTTPException(409, detail="ASSET_INSTALLED_AS_COMPONENT")
+        # Con una baja solicitada, el equipo queda congelado hasta que se resuelva.
+        from app.models.aprobacion import Aprobacion
+        if (await self.db.execute(select(Aprobacion.APR_Aprobacion).where(
+                Aprobacion.ACT_Activo == activo.ACT_Activo, Aprobacion.APR_Tipo == "BAJA",
+                Aprobacion.APR_Estado == "PENDIENTE"))).first():
+            raise HTTPException(409, detail="ASSET_HAS_PENDING_DECOMMISSION")
 
     async def _fijar_ubicacion(self, activo_id: uuid.UUID, area_id: int | None) -> None:
         """Ubicación física del equipo (área) tras un movimiento."""

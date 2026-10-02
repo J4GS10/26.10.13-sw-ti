@@ -22,8 +22,11 @@ class ConsumibleBase(Esquema):
 
 
 class ConsumibleCreate(ConsumibleBase):
-    # Stock inicial opcional al dar de alta el consumible.
+    # Stock inicial opcional al dar de alta el consumible (queda en el kardex
+    # como saldo inicial, valorizado si se indica su costo unitario).
     CON_Stock_Actual: int = Field(0, ge=0)
+    CON_Costo_Unitario: Optional[Decimal] = Field(None, ge=0, max_digits=14, decimal_places=4)
+    CON_Moneda: Optional[CurrencyCode] = None
 
 
 class ConsumibleUpdate(Esquema):

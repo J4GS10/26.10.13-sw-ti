@@ -40,6 +40,7 @@ const DirectoryPage = lazy(() => import('./features/directory/DirectoryPage').th
 const SecurityGate = lazy(() => import('./features/auth/security/SecurityGate').then((m) => ({ default: m.SecurityGate })));
 const TrazabilidadPage = lazy(() => import('./features/traceability/TrazabilidadPage').then((m) => ({ default: m.TrazabilidadPage })));
 const TomasPage = lazy(() => import('./features/inventory-count/TomasPage').then((m) => ({ default: m.TomasPage })));
+const AprobacionesPage = lazy(() => import('./features/approvals/AprobacionesPage').then((m) => ({ default: m.AprobacionesPage })));
 const AuditPage = lazy(() => import('./features/audit/AuditPage').then((m) => ({ default: m.AuditPage })));
 const PageFallback = () => (<Box role="status" aria-live="polite" sx={{
         display: 'flex',
@@ -188,9 +189,10 @@ const ThemedApp = () => {
                     <Route path="/compras/proveedores" element={<ProvidersPage />}/>
                     <Route path="/compras/ordenes" element={<PurchaseOrdersPage />}/>
                     <Route path="/compras/garantias" element={<WarrantiesPage />}/>
+                    <Route path="/aprobaciones" element={<AprobacionesPage />}/>
                   </Route>
 
-                  <Route element={<ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN_TI']}/>}>
+                  <Route element={<ProtectedRoute allowedRoles={['SUPER_ADMIN', 'JEFE_TI', 'ADMIN_TI']}/>}>
                     <Route path="/config/marcas" element={<BrandsPage />}/>
                     <Route path="/config/ubicaciones" element={<LocationsPage />}/>
                     <Route path="/config/tipos" element={<AssetTypesPage />}/>

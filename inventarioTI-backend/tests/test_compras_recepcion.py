@@ -78,7 +78,7 @@ async def test_recepcion_parcial_y_completa(client, auth_headers, domain_seed):
 
 
 @pytest.mark.asyncio
-async def test_sobrante_solo_con_justificacion(client, auth_headers, domain_seed):
+async def test_sobrante_solo_con_justificacion(client, auth_headers, domain_seed, jefe_headers):
     h = auth_headers
     pid = await _proveedor(client, h)
     cid = await _consumible(client, h)
@@ -93,8 +93,12 @@ async def test_sobrante_solo_con_justificacion(client, auth_headers, domain_seed
         **item, "diferencias": [{"OCL_Linea": linea, "motivo": "El proveedor bonificó 2 unidades",
                                  "aceptar_sobrante": True}]})
     assert r.status_code == 200, r.text
-    assert r.json()["OCO_Estado"] == "RECIBIDA"
     assert r.json()["diferencias"][0]["tipo"] == "SOBRANTE"
+    # El sobrante lo aprueba el Jefe de TI (otra persona) antes de entrar.
+    r = await client.post(f"/api/v1/aprobaciones/{r.json()['aprobacion_pendiente']}/aprobar",
+                          headers=jefe_headers, json={})
+    assert r.status_code == 200, r.text
+    assert (await client.get(f"{BASE}/ordenes/{oid}", headers=h)).json()["OCO_Estado"] == "RECIBIDA"
     assert (await client.get(f"/api/v1/consumibles/{cid}", headers=h)).json()["CON_Stock_Actual"] == 12
 
 

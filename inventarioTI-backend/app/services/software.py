@@ -384,6 +384,12 @@ class SoftwareService(BaseService[SoftwareRepository]):
             raise HTTPException(409, f"CANNOT_DELETE_LICENSE_WITH_ACTIVE_INSTALLATIONS:{activas}")
 
         try:
+            # Salida de la licencia del inventario (el kardex conserva su historia).
+            await KardexService(self.db).registrar(
+                "LICENCIA_BAJA", licencia_id=id, referencia=_ref_software(await self.db.get(SoftwareModel, obj.SOF_Software)),
+                cantidad=obj.LIC_Cantidad_Total, saldo=0, costo=obj.LIC_Costo, moneda=obj.LIC_Moneda,
+                motivo="Licencia eliminada del inventario", usuario_id=usuario_id,
+            )
             await self.repo.delete_licencia(id)
             await self.gov_repo.create_audit_log(
                 "DELETE", "INV_LICENCIA",

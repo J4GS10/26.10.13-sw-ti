@@ -18,6 +18,8 @@ import uuid
 from datetime import date, datetime, timedelta
 
 import pytest
+
+from tests.aprobacion_utils import baja_aprobada
 from sqlalchemy import select, update
 
 from app.models.core import Activo
@@ -199,8 +201,9 @@ async def test_devolver_en_reparacion_conserva_estado(client, auth_headers, soft
 async def test_cierre_no_resucita_una_baja(client, auth_headers, software_seed, session):
     d, h = software_seed, auth_headers
     tid = (await _abrir_ticket(client, h, d)).json()["MAN_Mantenimiento"]
-    # La baja exige cerrar el ticket antes.
-    r = await client.delete(f"{BASE}/core/activos/{d['act_1']}", headers=h)
+    # La baja exige cerrar el ticket antes (se valida ya al solicitarla).
+    r = await client.post(f"{BASE}/core/activos/{d['act_1']}/baja", headers=h,
+                          json={"motivo": "OBSOLESCENCIA", "destino": "RECICLAJE"})
     assert r.status_code == 409
     assert r.json()["detail"] == "ASSET_HAS_OPEN_MAINTENANCE"
     # Si igualmente quedó de baja (datos heredados), cerrar el ticket no la revierte.
@@ -213,15 +216,19 @@ async def test_cierre_no_resucita_una_baja(client, auth_headers, software_seed, 
 
 
 @pytest.mark.asyncio
-async def test_no_se_abre_ticket_de_un_activo_de_baja(client, auth_headers, software_seed):
+async def test_no_se_abre_ticket_de_un_activo_de_baja(client, auth_headers, software_seed, jefe_headers):
     d, h = software_seed, auth_headers
-    assert (await client.delete(f"{BASE}/core/activos/{d['act_1']}", headers=h)).status_code in (200, 204)
+    # El DELETE ya no da de baja: toda salida exige solicitud y aprobación.
+    r = await client.delete(f"{BASE}/core/activos/{d['act_1']}", headers=h)
+    assert r.status_code == 409 and r.json()["detail"] == "USE_DECOMMISSION_REQUEST"
+    baja = {"motivo": "OBSOLESCENCIA", "destino": "RECICLAJE"}
+    assert (await baja_aprobada(client, h, jefe_headers, d["act_1"], baja)).status_code == 200
     r = await _abrir_ticket(client, h, d)
     assert r.status_code == 400
     assert r.json()["detail"] == "ASSET_STATE_DOES_NOT_ALLOW_MAINTENANCE"
     # Y dar de baja dos veces no genera un segundo evento.
-    r = await client.delete(f"{BASE}/core/activos/{d['act_1']}", headers=h)
-    assert r.status_code == 409
+    r = await client.post(f"{BASE}/core/activos/{d['act_1']}/baja", headers=h, json=baja)
+    assert r.status_code == 409 and r.json()["detail"] == "ASSET_ALREADY_DECOMMISSIONED"
 
 
 @pytest.mark.asyncio

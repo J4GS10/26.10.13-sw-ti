@@ -33,6 +33,7 @@ class KardexEvento(BaseModel):
     KDX_Saldo: Optional[int] = None
     KDX_Costo: Optional[Decimal] = None
     KDX_Moneda: Optional[str] = None
+    KDX_Saldo_Valor: Optional[Decimal] = None
     KDX_Documento_Tipo: Optional[str] = None
     KDX_Documento_Ref: Optional[str] = None
     KDX_Motivo: Optional[str] = None
@@ -40,6 +41,8 @@ class KardexEvento(BaseModel):
     USU_Usuario: Optional[uuid.UUID] = None
     SED_Sede: Optional[int] = None
     KDX_Migrado: bool = False
+    KDX_Secuencia: Optional[int] = None
+    KDX_Hash: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 

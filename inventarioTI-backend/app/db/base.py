@@ -22,7 +22,8 @@ import app.models.software
 import app.models.traceability  
 import app.models.governance
 import app.models.kardex
-import app.models.inventario_fisico    
+import app.models.inventario_fisico
+import app.models.aprobacion    
 
 # 4. Unicidad sin distinguir mayúsculas ni espacios (índices funcionales):
 #    se registran al crear las tablas (evita la importación circular).

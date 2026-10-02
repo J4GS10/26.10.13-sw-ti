@@ -33,7 +33,7 @@ class Consumible(Base):
     CON_Stock_Actual = Column(Integer, nullable=False, default=0)
     CON_Stock_Minimo = Column(Integer, nullable=False, default=0)
     # Último costo unitario de compra (valoriza el stock) y su moneda.
-    CON_Costo_Unitario = Column(Numeric(14, 2), nullable=True)
+    CON_Costo_Unitario = Column(Numeric(16, 4), nullable=True)  # costo promedio ponderado
     CON_Moneda = Column(String(3), nullable=True)
 
     CON_Activo = Column(Boolean, nullable=False, default=True)

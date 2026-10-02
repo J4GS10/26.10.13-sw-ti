@@ -89,7 +89,7 @@ class Settings(BaseSettings):
     TWO_FACTOR_MAX_ATTEMPTS: int = 5                 # intentos por código de email
     TWO_FACTOR_RECOVERY_CODES: int = 8               # códigos de recuperación generados
     # Roles para los que 2FA es OBLIGATORIO (deben enrolarse; CSV de roles).
-    TWO_FACTOR_REQUIRED_ROLES: str = "SUPER_ADMIN,ADMIN_SEGURIDAD,ADMIN_TI"
+    TWO_FACTOR_REQUIRED_ROLES: str = "SUPER_ADMIN,ADMIN_SEGURIDAD,JEFE_TI,ADMIN_TI"
     # Base pública del frontend para construir el enlace de restablecimiento.
     FRONTEND_BASE_URL: str = "https://localhost"
 

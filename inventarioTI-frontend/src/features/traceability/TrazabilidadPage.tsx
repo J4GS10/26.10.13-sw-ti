@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Box, Card, CardContent, Chip, Grid, MenuItem, Stack, Tab, Tabs, TableCell, TableRow, TextField, Typography,
+  Alert, Box, Button, Card, CardContent, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Grid, MenuItem, Stack, Tab, TableCell, TableRow, Tabs, TextField, Typography,
 } from '@mui/material';
 import TimelineIcon from '@mui/icons-material/Timeline';
+import VerifiedIcon from '@mui/icons-material/VerifiedUser';
 import { useTranslation } from 'react-i18next';
 import { useSnackbar } from 'notistack';
 import { useSearchParams } from 'react-router-dom';
@@ -10,7 +11,7 @@ import { DataTableShell, PageHeader } from '../../components/ui';
 import { CollapsibleToolbar } from '../../components/CollapsibleToolbar';
 import { ExportMenuButton } from '../../components/ExportMenuButton';
 import { SearchInput } from '../../components/SearchInput';
-import { inventarioService } from '../../api/inventarioService';
+import { inventarioService, type VerificacionKardex } from '../../api/inventarioService';
 import { getApiErrorMessage } from '../../api/errors';
 import { useSedes } from '../../hooks/useSedes';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -39,7 +40,19 @@ const lugar = (...partes: Array<string | null | undefined>) => partes.filter(Boo
 export const TrazabilidadPage = () => {
   const { t, i18n } = useTranslation();
   const { enqueueSnackbar } = useSnackbar();
-  const { canExport } = usePermissions();
+  const { canExport, canVerifyKardex } = usePermissions();
+  const [verificacion, setVerificacion] = useState<VerificacionKardex | null>(null);
+  const [verificando, setVerificando] = useState(false);
+  const verificar = async () => {
+    setVerificando(true);
+    try {
+      setVerificacion(await inventarioService.verificarKardex());
+    } catch (err) {
+      enqueueSnackbar(getApiErrorMessage(err, t('common.error_generic')), { variant: 'error' });
+    } finally {
+      setVerificando(false);
+    }
+  };
   const { sedes } = useSedes();
   const [searchParams, setSearchParams] = useSearchParams();
   const vista = (VISTAS.includes(searchParams.get('vista') as Vista) ? searchParams.get('vista') : 'kardex') as Vista;
@@ -114,10 +127,43 @@ export const TrazabilidadPage = () => {
         title={t('traceability.title')}
         subtitle={t('traceability.subtitle')}
         badge={vista === 'custodia' ? custodia.length : vista === 'resumen' ? undefined : total}
-        actions={canExport && vista !== 'resumen'
-          ? <ExportMenuButton onExport={exportar} disabled={vista === 'custodia' ? custodia.length === 0 : total === 0} />
-          : undefined}
+        actions={<>
+          {canVerifyKardex && (
+            <Button variant="outlined" startIcon={verificando ? <CircularProgress size={16} /> : <VerifiedIcon />} onClick={verificar} disabled={verificando}>
+              {t('traceability.verify.button')}
+            </Button>
+          )}
+          {canExport && vista !== 'resumen' && (
+            <ExportMenuButton onExport={exportar} disabled={vista === 'custodia' ? custodia.length === 0 : total === 0} />
+          )}
+        </>}
       />
+      <Dialog open={!!verificacion} onClose={() => setVerificacion(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>{t('traceability.verify.title')}</DialogTitle>
+        <DialogContent>
+          {verificacion && (verificacion.integro ? (
+            <Alert severity="success">{t('traceability.verify.ok', { count: verificacion.total })}</Alert>
+          ) : (
+            <Alert severity="error">
+              {t('traceability.verify.broken', { count: verificacion.problemas.length })}
+              {verificacion.problemas.slice(0, 10).map((p) => (
+                <Typography key={`${p.evento}-${p.problema}`} variant="body2">
+                  #{p.secuencia ?? '—'} · {t(`traceability.verify.problems.${p.problema}`)}
+                </Typography>
+              ))}
+            </Alert>
+          ))}
+          {verificacion?.ultimo_hash && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle2">{t('traceability.verify.last_seal')}</Typography>
+              <Typography variant="body2">{t('traceability.verify.sequence', { n: verificacion.ultima_secuencia })} · {formatDateTimeValue(verificacion.ultima_fecha, i18n.language)}</Typography>
+              <Typography variant="body2" sx={{ fontFamily: 'monospace', overflowWrap: 'anywhere' }}>{verificacion.ultimo_hash}</Typography>
+              <Typography variant="caption" color="text.secondary">{t('traceability.verify.anchor_hint')}</Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions><Button onClick={() => setVerificacion(null)}>{t('common.close')}</Button></DialogActions>
+      </Dialog>
 
       <Tabs value={vista} onChange={cambiarVista} variant="scrollable" allowScrollButtonsMobile sx={{ mb: 2 }}>
         {VISTAS.map((v) => <Tab key={v} value={v} label={t(`traceability.tabs.${v}`)} />)}

@@ -19,6 +19,7 @@ import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import ContactMailIcon from '@mui/icons-material/ContactMail';
 import TimelineIcon from '@mui/icons-material/Timeline';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
+import ApprovalIcon from '@mui/icons-material/Approval';
 import type { SvgIconComponent } from '@mui/icons-material';
 import { UserRole } from '../types/auth';
 import { ADMIN_READER_ROLES, AUDIT_READER_ROLES, IAM_ROLES, INVENTORY_READER_ROLES, INVENTORY_ROLES } from '../utils/roles';
@@ -76,6 +77,13 @@ export const NAVIGATION_ITEMS: NavItem[] = [
     path: '/inventario/tomas',
     icon: FactCheckIcon,
     allowedRoles: INVENTORY_READER_ROLES,
+    group: 'OPERATIONS',
+  },
+  {
+    title: 'menu.approvals',
+    path: '/aprobaciones',
+    icon: ApprovalIcon,
+    allowedRoles: ADMIN_READER_ROLES,
     group: 'OPERATIONS',
   },
   {
@@ -160,35 +168,35 @@ export const NAVIGATION_ITEMS: NavItem[] = [
     title: 'menu.brands',
     path: '/config/marcas',
     icon: CategoryIcon,
-    allowedRoles: ['SUPER_ADMIN', 'ADMIN_TI'],
+    allowedRoles: ['SUPER_ADMIN', 'JEFE_TI', 'ADMIN_TI'],
     group: 'CATALOG',
   },
   {
     title: 'menu.models',
     path: '/config/modelos',
     icon: ViewListIcon,
-    allowedRoles: ['SUPER_ADMIN', 'ADMIN_TI'],
+    allowedRoles: ['SUPER_ADMIN', 'JEFE_TI', 'ADMIN_TI'],
     group: 'CATALOG',
   },
   {
     title: 'menu.types',
     path: '/config/tipos',
     icon: CategoryIcon,
-    allowedRoles: ['SUPER_ADMIN', 'ADMIN_TI'],
+    allowedRoles: ['SUPER_ADMIN', 'JEFE_TI', 'ADMIN_TI'],
     group: 'CATALOG',
   },
   {
     title: 'menu.locations',
     path: '/config/ubicaciones',
     icon: PlaceIcon,
-    allowedRoles: ['SUPER_ADMIN', 'ADMIN_TI'],
+    allowedRoles: ['SUPER_ADMIN', 'JEFE_TI', 'ADMIN_TI'],
     group: 'CATALOG',
   },
   {
     title: 'menu.directory',
     path: '/config/directorio',
     icon: ContactMailIcon,
-    allowedRoles: ['SUPER_ADMIN', 'ADMIN_TI'],
+    allowedRoles: ['SUPER_ADMIN', 'JEFE_TI', 'ADMIN_TI'],
     group: 'ADMIN',
   },
   {

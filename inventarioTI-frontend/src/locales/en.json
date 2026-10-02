@@ -132,7 +132,8 @@
         "directory": "Directory & notifications",
         "audit": "Audit",
         "traceability": "Traceability",
-        "inventory_count": "Inventory count"
+        "inventory_count": "Inventory count",
+        "approvals": "Approvals"
     },
     "audit": {
         "title": "Forensic audit",
@@ -204,7 +205,11 @@
             "INVENTORY_COUNT_CLOSE": "Inventory count closed",
             "INVENTORY_COUNT_CANCEL": "Inventory count cancelled",
             "DATA_FIX": "Data correction",
-            "AD_SYNC": "Active Directory sync"
+            "AD_SYNC": "Active Directory sync",
+            "APPROVAL_REQUEST": "Approval request",
+            "APPROVAL_APPROVE": "Request approved",
+            "APPROVAL_REJECT": "Request rejected",
+            "APPROVAL_CANCEL": "Request cancelled"
         },
         "entities": {
             "INV_ACTIVO": "Asset",
@@ -238,7 +243,8 @@
             "INV_TOMA_INVENTARIO": "Inventory count",
             "INV_TIPO_LICENCIA": "License type",
             "INV_TIPO_MANTENIMIENTO": "Maintenance type",
-            "INV_ESTADO_OPERATIVO": "Operational status"
+            "INV_ESTADO_OPERATIVO": "Operational status",
+            "INV_APROBACION": "Approval request"
         }
     },
     "menu_groups": {
@@ -408,8 +414,7 @@
             "no_host": "No host"
         },
         "messages": {
-            "success_create": "Asset created successfully",
-            "deleted": "Asset decommissioned"
+            "success_create": "Asset created successfully"
         },
         "specs": {
             "dup": "This equipment already has that specification (edit or remove it).",
@@ -450,7 +455,8 @@
             "custodian": "Current custodian",
             "no_custodian": "In storage",
             "history_hint": "Everything that happened to the device, from registration to today.",
-            "decommissioned_info": "Decommissioned: {{reason}} · {{destination}}"
+            "decommissioned_info": "Decommissioned: {{reason}} · {{destination}}",
+            "decommission_pending": "Decommission pending approval"
         },
         "filter_type": "Component type",
         "all_types": "All types",
@@ -764,7 +770,8 @@
             "ADMIN_TI": "IT administrator",
             "TECNICO": "Technician",
             "AUDITOR": "Auditor",
-            "CONSULTA": "Read-only"
+            "CONSULTA": "Read-only",
+            "JEFE_TI": "Head of IT"
         },
         "messages": {
             "created_success": "User created successfully",
@@ -986,13 +993,16 @@
         "adjust_done": "Stock adjusted",
         "quantity_invalid": "Enter a valid quantity.",
         "unit_cost": "Unit cost",
-        "unit_cost_help": "Optional. Values the stock in the purchase currency.",
+        "unit_cost_help": "Optional. Recalculates the weighted average cost (in the consumable's currency).",
         "low_title": "Stock below the minimum",
         "low_message": "“{{name}}” is now at {{stock}} {{unit}} (minimum {{min}}).",
         "low_notify_admin": "The administrators were notified to arrange replenishment.",
         "low_later": "Later",
         "low_create_order": "Create purchase order ({{count}})",
-        "order_created_hint": "Order created. When it is received, the stock will be added automatically."
+        "order_created_hint": "Order created. When it is received, the stock will be added automatically.",
+        "avg_cost": "Average cost",
+        "initial_cost": "Unit cost of the opening balance",
+        "initial_cost_help": "Optional. Values the opening stock; the weighted average cost is used afterwards."
     },
     "maintenance": {
         "sections": {
@@ -1187,7 +1197,11 @@
         "recv_differences_notified": "The administrators were notified.",
         "recv_still_pending": "Still pending",
         "recv_pending_hint": "When it arrives, use “Receive next delivery”; if it will not arrive, “Close with shortage”.",
-        "recv_print_labels": "Print QR labels"
+        "recv_print_labels": "Print QR labels",
+        "recv_surplus_needs_approval": "The surplus requires approval by the Head of IT: the delivery will remain pending until then.",
+        "recv_sent_title": "Delivery sent for approval · {{number}}",
+        "recv_pending_approval": "The delivery includes a surplus and is pending (request #{{id}}). The inventory does not change until the Head of IT approves it.",
+        "recv_nothing_yet": "Nothing has been recorded yet."
     },
     "directory": {
         "title": "Directory & notifications",
@@ -1719,7 +1733,16 @@
         "SSO_EMAIL_NOT_VERIFIED": "Your email is not verified with the provider.",
         "SSO_NOT_ENABLED_FOR_USER": "Your account does not have corporate sign-in enabled.",
         "SSO_PROVIDER_NOT_ALLOWED_FOR_USER": "Your account cannot use this provider.",
-        "SSO_USER_NOT_AUTHORIZED": "Your account is not authorized in the system."
+        "SSO_USER_NOT_AUTHORIZED": "Your account is not authorized in the system.",
+        "USE_DECOMMISSION_REQUEST": "Decommissioning is done through a formal request (reason and destination) approved by the Head of IT.",
+        "DECOMMISSION_ALREADY_REQUESTED": "This asset already has a pending decommission request (#{{p1}}).",
+        "ASSET_HAS_PENDING_DECOMMISSION": "The asset has a decommission pending approval: it does not allow operations until it is resolved.",
+        "CANNOT_APPROVE_OWN_REQUEST": "You cannot approve or reject your own request: another person must do it.",
+        "APPROVAL_ALREADY_RESOLVED": "The request has already been resolved.",
+        "APPROVAL_NOT_FOUND": "The request was not found.",
+        "APPROVAL_REQUIRES_REQUESTER": "The request must have a requester.",
+        "ONLY_REQUESTER_CAN_CANCEL": "Only the person who made the request can cancel it.",
+        "CURRENCY_DIFFERS_FROM_VALUATION": "This consumable is valued in {{p1}}: record the entry in {{p1}} (different currencies are not averaged)."
     },
     "catalog": {
         "states": {
@@ -1957,7 +1980,9 @@
             "LICENCIA_ALTA": "License registered",
             "LICENCIA_ASIGNADA": "License assigned",
             "LICENCIA_RETIRADA": "License removed",
-            "LICENCIA_AJUSTE": "License adjustment"
+            "LICENCIA_AJUSTE": "License adjustment",
+            "CONSUMIBLE_TRASLADO": "Storage transfer",
+            "LICENCIA_BAJA": "License removed"
         },
         "documentos": {
             "RECEPCION": "Receipt",
@@ -2027,6 +2052,22 @@
             "area": "Area",
             "since": "Since",
             "expected_return": "Expected return"
+        },
+        "verify": {
+            "button": "Verify integrity",
+            "title": "Kardex integrity",
+            "ok": "Intact: all {{count}} events keep their seal and none has been altered, deleted or inserted.",
+            "broken_one": "{{count}} problem was detected in the kardex chain.",
+            "broken_other": "{{count}} problems were detected in the kardex chain.",
+            "problems": {
+                "SIN_SELLO": "unsealed event",
+                "EVENTO_ALTERADO": "altered event",
+                "CADENA_ROTA": "broken chain (event removed or reordered)",
+                "EVENTO_FALTANTE": "an event is missing from the sequence"
+            },
+            "last_seal": "Last seal",
+            "sequence": "Event no. {{n}}",
+            "anchor_hint": "Record this hash at each monthly close (outside the system): it proves that the history has not been rewritten."
         }
     },
     "inventory_count": {
@@ -2156,8 +2197,9 @@
         "has_components_one": "The device has {{count}} installed component.",
         "has_components_other": "The device has {{count}} installed components.",
         "remove_components": "Remove them and keep them in storage",
-        "confirm": "Decommission",
-        "done": "{{code}} was decommissioned."
+        "approval_note": "The decommission is sent as a request: the Head of IT (another person) approves it and it is executed at that moment.",
+        "request": "Request decommission",
+        "requested": "Decommission request for {{code}} sent to the Head of IT."
     },
     "components": {
         "tab": "Components",
@@ -2235,7 +2277,55 @@
                 "title_one": "{{count}} missing value in assets",
                 "title_other": "{{count}} missing values in assets",
                 "hint": "{{sin_garantia}} without warranty end and {{sin_costo}} without cost."
+            },
+            "BAJA_CON_CUSTODIA": {
+                "title_one": "{{count}} decommissioned asset still has an open custody",
+                "title_other": "{{count}} decommissioned assets still have an open custody",
+                "hint": "Legacy data: record the return to close the custody."
+            },
+            "APROBACION_PENDIENTE": {
+                "title_one": "{{count}} request is awaiting approval by the Head of IT",
+                "title_other": "{{count}} requests are awaiting approval by the Head of IT",
+                "hint": "Decommissions and purchase surpluses: the inventory does not change until they are approved."
             }
+        }
+    },
+    "approvals": {
+        "title": "Approvals",
+        "subtitle": "Decommissions and purchase surpluses that require approval by the Head of IT.",
+        "only_approver_hint": "Only the Head of IT can approve or reject. You can check the status of your requests and cancel them while they are pending.",
+        "tab_pending": "Pending",
+        "tab_history": "History",
+        "col_type": "Type",
+        "col_summary": "Request",
+        "col_requester": "Requested by",
+        "col_status": "Status",
+        "empty_pending": "There are no requests pending approval.",
+        "approve": "Approve",
+        "reject": "Reject",
+        "cancel_request": "Cancel request",
+        "own_request": "Your own request: someone else approves it.",
+        "approve_title": "Approve request",
+        "reject_title": "Reject request",
+        "comment_optional": "Comment (optional)",
+        "reject_reason": "Reason for rejection",
+        "approved_ok": "Request approved and executed.",
+        "rejected_ok": "Request rejected.",
+        "cancelled_ok": "Request cancelled.",
+        "resolution_note": "Resolution by {{name}}",
+        "types": {
+            "BAJA": "Asset decommission",
+            "RECEPCION_SOBRANTE": "Purchase surplus"
+        },
+        "states": {
+            "PENDIENTE": "Pending",
+            "APROBADA": "Approved",
+            "RECHAZADA": "Rejected",
+            "ANULADA": "Cancelled"
+        },
+        "approve_effect": {
+            "BAJA": "On approval, the device leaves the inventory, its licenses are released and the decommission is recorded in the kardex with your name as approver.",
+            "RECEPCION_SOBRANTE": "On approval, the full delivery (including the surplus) is recorded exactly as it was received."
         }
     }
 }
