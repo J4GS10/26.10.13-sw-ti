@@ -90,32 +90,7 @@ Detalles pendientes vistos en la validación: ~~el campo Costo del activo muestr
 
 ## 4. Pendientes, por prioridad
 
-### 🔴 Críticos
-1. ✅ **Git** (sesión 11): todo subido a `feature/sesiones-4-10`. **Queda:** abrir el PR y fusionar a `main`.
-2. **No hay CI.** Nada ejecuta los tests automáticamente. Crear un pipeline con pytest contra PostgreSQL, `tsc`/`eslint`/`build`, `verify.py` y los flujos Playwright de `herramientas-qa/`.
-3. **Respaldos manuales.** El `pg_dump` está documentado pero no programado, y los adjuntos en MinIO no tienen respaldo. Programar ambos y probar una restauración.
-
-### 🟠 Dependen de infraestructura o del usuario
-4. **Correo (pausado).** Falta la cuenta de servicio y saber si usan Exchange local, M365 (Graph) o Google. El envío por Graph nunca se probó con un tenant real.
-5. **Active Directory.** Hacer la prueba real con LDAPS, el certificado de la CA interna, la OU y el grupo de administradores. Revisar la primera "simulación de sincronización", sobre todo nombres compuestos y dominios `.local`.
-6. **Primer ingreso tras desplegar:** `sa` y los ADMIN_TI sin MFA deberán enrolarlo. Asignar `ADMIN_SEGURIDAD` a quien administre las cuentas.
-
-### 🟡 Decisiones del usuario
-7. ✅ Longitud mínima de contraseña: **10 caracteres** (decidido 2026-09-25; se mantiene).
-8. ✅ Tono: **formal y amable en los 3 idiomas** (decidido 2026-09-25). Aplicado: español en *usted* (127 textos + correos de `app/core/email.py`), italiano en *Lei* (124 textos) e inglés sin contracciones y con "Please" en errores (16 textos). Los botones y etiquetas cortas no cambian (infinitivo en ES; imperativo en IT por convención).
-9. ⏳ Términos en italiano: "bene/beni" y "reparto". Sigue abierto.
-10. ✅ Fechas en los CSV: **ISO** (`2026-09-24`), decidido 2026-09-25; se mantiene.
-
-### 🟢 Mejoras recomendadas
-11. ✅ **Seguridad** (sesión 10): historial y lista de bloqueo de contraseñas, sesiones activas con cierre individual, aviso de dispositivo nuevo, cuentas inactivas, retención y exportación de la auditoría, alcance por sede (RLS) y rol AUDITOR. **Queda:** tras desplegar, restringir cada cuenta a sus sedes (hoy todas globales por compatibilidad); asignar sede a personas creadas por la sincronización de AD (nacen sin sede y solo las ven los globales); Oracle no tiene la capa RLS de base de datos (solo la de aplicación).
-12. **Riesgos de despliegue:**
-    - El `docker-compose.yml` de la raíz publica el backend sin proxy; usar solo `deploy/`.
-    - Los límites de peticiones por IP pueden bloquear a toda la oficina si sale por un único NAT.
-    - Las imágenes `minio:latest` y `mailhog:latest` no tienen versión fija.
-    - Oracle no tiene migraciones incrementales ni CI.
-13. **Rendimiento:** Personas, Usuarios y Movimientos filtran en el navegador. Pasar a paginación en el servidor si crecen a miles de registros.
-14. **UX:** búsqueda global (código, serie o persona desde cualquier pantalla), "deshacer" en acciones rápidas, revisión visual de todos los diálogos (se validaron listados, tablero, configuración, seguridad y un formulario completo).
-15. **Deuda técnica sin impacto funcional:** extender `AsyncQueryBuilder` a 5 repos, `BaseService` en los servicios de soporte y tests unitarios propios de `BaseRepository`/`AsyncQueryBuilder`.
+> **Lista vigente: `ESTADO_Y_PENDIENTES.md`** (corte 2026-10-02). Allí están el avance consolidado, lo imprescindible antes de producción, lo que depende de infraestructura, las mejoras recomendadas y la ruta sugerida para salir a producción. La lista anterior de esta sección quedó resuelta o se trasladó a ese documento.
 
 ---
 

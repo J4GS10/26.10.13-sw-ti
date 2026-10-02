@@ -244,7 +244,7 @@ Todo el trabajo de las sesiones 4–10 subido a la rama `feature/sesiones-4-10` 
 
 ## 3. Pendientes
 
-> **Histórico (sesiones 1–2).** Casi todo lo de esta sección y de la §5 ya se resolvió en sesiones posteriores. Los pendientes vigentes están en **`CONTINUAR.md` §4**.
+> **Histórico (sesiones 1–2).** Casi todo lo de esta sección y de la §5 ya se resolvió en sesiones posteriores. Los pendientes vigentes están en **`ESTADO_Y_PENDIENTES.md`**.
 
 ### 3.1 Bugs pre-existentes (alta prioridad — rompen tests)
 
