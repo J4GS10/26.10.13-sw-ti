@@ -32,6 +32,8 @@ interface Props {
   userToEdit?: UsuarioSistema | null;
   /** Política vigente (resumen de seguridad), para validar la contraseña y avisar del MFA obligatorio. */
   policy?: PoliticaSeguridad | null;
+  /** Alta: persona ya elegida (asistente de ingreso de empleado). */
+  personaInicial?: string;
 }
 
 type AuthMethod = 'password' | 'sso';
@@ -79,7 +81,7 @@ const personLabel = (person: PersonaResumen) => [
   person.PER_Segundo_Apellido,
 ].filter(Boolean).join(' ');
 
-export const UserDialog = ({ open, onClose, userToEdit, policy }: Props) => {
+export const UserDialog = ({ open, onClose, userToEdit, policy, personaInicial }: Props) => {
   const { t } = useTranslation();
   const { enqueueSnackbar } = useSnackbar();
   const { user: currentUser } = useAuth();
@@ -168,9 +170,9 @@ export const UserDialog = ({ open, onClose, userToEdit, policy }: Props) => {
       userService.getPersonasSinUsuario()
         .then(setPersonas)
         .catch(() => enqueueSnackbar(t('common.error_loading'), { variant: 'error' }));
-      reset(empty);
+      reset({ ...empty, PER_Persona: personaInicial ?? '' });
     }
-  }, [open, userToEdit, isEdit, reset, enqueueSnackbar, t]);
+  }, [open, userToEdit, isEdit, reset, enqueueSnackbar, t, personaInicial]);
 
   const generate = () => {
     setValue('USU_Password', generateStrongPassword(16, passwordPolicy), { shouldValidate: true });

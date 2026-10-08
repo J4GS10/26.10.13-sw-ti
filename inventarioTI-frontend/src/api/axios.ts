@@ -2,6 +2,7 @@ import axios, { AxiosError, AxiosRequestConfig, InternalAxiosRequestConfig } fro
 
 import { isSessionRestriction } from '../types/auth';
 
+import { apiCache } from './cache';
 import { refreshAccessToken } from './refresh';
 import { sessionEvents } from './sessionEvents';
 import { tokenStorage } from './tokenStorage';
@@ -32,7 +33,11 @@ client.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 // RESPONSE: refresh transparente + manejo de 401
 // =========================================================================
 client.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Toda escritura invalida las lecturas en caché (catálogos, áreas…).
+    if ((response.config.method ?? 'get').toLowerCase() !== 'get') apiCache.clear();
+    return response;
+  },
   async (error: AxiosError) => {
     const original = error.config as (AxiosRequestConfig & { _retried?: boolean }) | undefined;
 

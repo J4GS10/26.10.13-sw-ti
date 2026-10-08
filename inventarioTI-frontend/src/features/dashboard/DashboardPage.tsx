@@ -15,6 +15,7 @@ import { ensureReadable } from '../../theme/theme';
 import type { PanelProps } from '../../types/ui';
 import { formatMoneyTotals } from '../../utils/currency';
 import { AttentionInbox } from './AttentionInbox';
+import { DataQualityCard } from './DataQualityCard';
 interface DashboardDistributionItem {
     label: string;
     total: number;
@@ -135,6 +136,7 @@ export const DashboardPage = () => {
       />
 
       <AttentionInbox />
+      <DataQualityCard />
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' }, gap: 2, mb: 2 }}>
         <KpiCard title={t('dashboard.kpi.total_assets')} value={stats?.activos_totales ?? 0} icon={ComputerIcon} tone="primary"/>

@@ -3,7 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../../components/ui';
 import { useSnackbar } from 'notistack';
-import { Box, Button, Chip, CircularProgress, Divider, Paper, Stack, TextField, Typography } from '@mui/material';
+import { Box, Button, Chip, CircularProgress, Divider, FormControlLabel, Paper, Stack, Switch, TextField, Typography } from '@mui/material';
+import AssignmentIndIcon from '@mui/icons-material/AssignmentInd';
+import AssignmentReturnIcon from '@mui/icons-material/AssignmentReturn';
+import QrCode2Icon from '@mui/icons-material/QrCode2';
+import { useWorkspace } from '../../context/workspace-context';
+import { guardarArchivo } from '../../api/productividadService';
+import { normalizeLanguage } from '../../types/language';
+import type { EstadoOperativo } from '../../types/inventory';
 import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import SearchIcon from '@mui/icons-material/Search';
 import HistoryIcon from '@mui/icons-material/History';
@@ -47,8 +54,21 @@ function parseScannedCode(rawValue: string): string {
     }
 }
 export const ScannerPage = () => {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const { canOperate } = usePermissions();
+    const { abrirEntrega, abrirDevolucion, agregarReciente } = useWorkspace();
+    // Modo lote: cada lectura se suma a una lista para operar todo junto.
+    const [modoLote, setModoLote] = useState(() => {
+        try { return window.localStorage.getItem('scanner-lote') === 'true'; } catch { return false; }
+    });
+    const [lote, setLote] = useState<Activo[]>([]);
+    const [estados, setEstados] = useState<EstadoOperativo[]>([]);
+    const modoLoteRef = useRef(modoLote);
+    useEffect(() => {
+        modoLoteRef.current = modoLote;
+        try { window.localStorage.setItem('scanner-lote', String(modoLote)); } catch { /* sin storage */ }
+    }, [modoLote]);
+    useEffect(() => { assetService.getEstados().then(setEstados).catch(() => setEstados([])); }, []);
     const { enqueueSnackbar } = useSnackbar();
     const navigate = useNavigate();
     const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -83,9 +103,22 @@ export const ScannerPage = () => {
         setLoading(true);
         try {
             const found = await assetService.getActivoByCode(code);
+            if (modoLoteRef.current) {
+                setLote((prev) => {
+                    if (prev.some((a) => a.ACT_Activo === found.ACT_Activo)) {
+                        enqueueSnackbar(t('scanner.batch.already', { code: found.ACT_Codigo_Interno }), { variant: 'info' });
+                        return prev;
+                    }
+                    enqueueSnackbar(t('scanner.batch.added', { code: found.ACT_Codigo_Interno }), { variant: 'success', autoHideDuration: 1500 });
+                    return [...prev, found];
+                });
+                setManualCode('');
+                return;
+            }
             setAsset(found);
             setManualCode(found.ACT_Codigo_Interno);
             setDetailOpen(true);
+            agregarReciente({ tipo: 'activo', id: found.ACT_Activo, titulo: found.ACT_Codigo_Interno, subtitulo: found.ACT_Serie_Fabricante, ruta: `/activos/${encodeURIComponent(found.ACT_Codigo_Interno)}` });
             enqueueSnackbar(t('scanner.found'), { variant: 'success' });
         }
         catch (error: unknown) {
@@ -97,7 +130,7 @@ export const ScannerPage = () => {
         finally {
             setLoading(false);
         }
-    }, [enqueueSnackbar, t]);
+    }, [enqueueSnackbar, t, agregarReciente]);
     const scanLoop = useCallback((detector: BarcodeDetectorInstance) => {
         const tick = async () => {
             if (!scanningRef.current || !videoRef.current)
@@ -150,6 +183,21 @@ export const ScannerPage = () => {
         lastCodeRef.current = "";
         await resolveCode(manualCode);
     };
+    const esAsignado = (a: Activo) => estados.find((e) => e.EOP_Estado_Operativo === a.EOP_Estado_Operativo)?.EOP_Nombre === 'Asignado';
+    const limpiarLote = () => { setLote([]); lastCodeRef.current = ''; };
+    const etiquetasLote = async () => {
+        try {
+            const blob = await assetService.downloadLabels({ activos_ids: lote.map((a) => a.ACT_Activo) }, normalizeLanguage(i18n.resolvedLanguage));
+            guardarArchivo(blob, `etiquetas-${lote.length}.pdf`);
+        } catch (err) {
+            enqueueSnackbar(getApiErrorMessage(err, t('common.error_generic')), { variant: 'error' });
+        }
+    };
+    const devolverLote = () => {
+        const asignados = lote.filter(esAsignado);
+        if (!asignados.length) { enqueueSnackbar(t('bulk.none_assigned'), { variant: 'info' }); return; }
+        abrirDevolucion({ activos: asignados, onDone: limpiarLote });
+    };
     return (<Box>
       <PageHeader
         title={t('scanner.title')}
@@ -193,14 +241,38 @@ export const ScannerPage = () => {
 
         <Paper variant="outlined" sx={{ p: 2, width: { xs: '100%', lg: 380 }, borderRadius: 2 }}>
           <Stack spacing={2}>
-            <TextField label={t('scanner.manual_code')} value={manualCode} onChange={(event) => setManualCode(event.target.value)} size="small" fullWidth/>
+            <FormControlLabel control={<Switch checked={modoLote} onChange={(e) => { setModoLote(e.target.checked); setAsset(null); }} />}
+              label={t('scanner.batch.toggle')} />
+            <Typography variant="caption" color="text.secondary" sx={{ mt: '-8px !important' }}>
+              {modoLote ? t('scanner.batch.help') : t('scanner.usb_help')}
+            </Typography>
+            <TextField label={t('scanner.manual_code')} value={manualCode} onChange={(event) => setManualCode(event.target.value)} size="small" fullWidth autoFocus
+              onKeyDown={(e) => { if (e.key === 'Enter' && manualCode.trim()) { e.preventDefault(); void handleManualSearch(); } }}/>
             <Button startIcon={loading ? <CircularProgress size={16}/> : <SearchIcon />} variant="contained" disabled={loading || !manualCode.trim()} onClick={handleManualSearch}>
               {t('common.search')}
             </Button>
 
             <Divider />
 
-            {asset ? (<Stack spacing={1.5}>
+            {modoLote ? (<Stack spacing={1.5}>
+                <Stack direction="row" alignItems="center">
+                  <Typography variant="subtitle2" sx={{ flex: 1 }}>{t('scanner.batch.count', { count: lote.length })}</Typography>
+                  {lote.length > 0 && <Button size="small" onClick={limpiarLote}>{t('scanner.batch.clear')}</Button>}
+                </Stack>
+                {lote.length === 0 ? (<EmptyState compact title={t('scanner.batch.empty')}/>) : (
+                  <Stack direction="row" useFlexGap flexWrap="wrap" gap={0.5}>
+                    {lote.map((a) => <Chip key={a.ACT_Activo} size="small" label={a.ACT_Codigo_Interno} color={esAsignado(a) ? 'warning' : 'default'}
+                      onDelete={() => setLote((l) => l.filter((x) => x.ACT_Activo !== a.ACT_Activo))}/>)}
+                  </Stack>
+                )}
+                {canOperate && lote.length > 0 && (<Stack spacing={1}>
+                    <Button variant="contained" startIcon={<AssignmentIndIcon />} onClick={() => abrirEntrega({ activos: lote, onDone: limpiarLote })}>
+                      {t('bulk.handover', { count: lote.length })}
+                    </Button>
+                    <Button variant="outlined" startIcon={<AssignmentReturnIcon />} onClick={devolverLote}>{t('bulk.return')}</Button>
+                    <Button variant="outlined" startIcon={<QrCode2Icon />} onClick={etiquetasLote}>{t('bulk.labels')}</Button>
+                  </Stack>)}
+              </Stack>) : asset ? (<Stack spacing={1.5}>
                 <Stack direction="row" spacing={1} alignItems="center">
                   <Typography variant="h6" sx={{ fontWeight: 700, flex: 1 }}>
                     {asset.ACT_Codigo_Interno}
@@ -214,10 +286,10 @@ export const ScannerPage = () => {
                   <Button startIcon={<HistoryIcon />} variant="outlined" onClick={() => setDetailOpen(true)}>
                     {t('common.view')}
                   </Button>
-                  {canOperate && (<Button startIcon={<SwapHorizIcon />} variant="outlined" onClick={() => navigate('/operaciones/movimientos')}>
+                  {canOperate && (<Button startIcon={<SwapHorizIcon />} variant="outlined" onClick={() => abrirEntrega({ activos: [asset] })}>
                     {t('scanner.assign')}
                   </Button>)}
-                  {canOperate && (<Button startIcon={<BuildIcon />} variant="outlined" onClick={() => navigate('/mantenimiento')}>
+                  {canOperate && (<Button startIcon={<BuildIcon />} variant="outlined" onClick={() => navigate(`/mantenimiento?nuevo=${asset.ACT_Activo}`)}>
                     {t('scanner.repair')}
                   </Button>)}
                 </Stack>

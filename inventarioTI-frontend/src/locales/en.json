@@ -133,7 +133,9 @@
         "audit": "Audit",
         "traceability": "Traceability",
         "inventory_count": "Inventory count",
-        "approvals": "Approvals"
+        "approvals": "Approvals",
+        "onboarding": "Employee onboarding",
+        "import": "Import assets"
     },
     "audit": {
         "title": "Forensic audit",
@@ -248,12 +250,11 @@
         }
     },
     "menu_groups": {
-        "OPERATIONS": "Operations",
-        "PROCUREMENT": "Procurement",
-        "ORGANIZATION": "Organization",
-        "CATALOG": "Catalogs",
-        "ADMIN": "System",
-        "SECURITY": "Security"
+        "PROCUREMENT": "Purchasing and licenses",
+        "ORGANIZATION": "People and access",
+        "DAILY": "Daily work",
+        "CONTROL": "Control",
+        "SETTINGS": "Catalogs and system"
     },
     "departments": {
         "sections": {
@@ -463,11 +464,9 @@
         "filter_state": "Status",
         "all_states": "All statuses",
         "labels": {
-            "download_selected": "Print labels",
             "select_visible": "Select visible assets",
             "select_asset": "Select asset {{code}}",
             "clear_selection": "Clear selection",
-            "select_required": "Select at least one asset",
             "too_many_selected": "Select 200 assets or fewer",
             "downloaded": "Labels generated successfully",
             "selected_count_one": "{{count}} asset selected",
@@ -1201,7 +1200,8 @@
         "recv_surplus_needs_approval": "The surplus requires approval by the Head of IT: the delivery will remain pending until then.",
         "recv_sent_title": "Delivery sent for approval · {{number}}",
         "recv_pending_approval": "The delivery includes a surplus and is pending (request #{{id}}). The inventory does not change until the Head of IT approves it.",
-        "recv_nothing_yet": "Nothing has been recorded yet."
+        "recv_nothing_yet": "Nothing has been recorded yet.",
+        "recv_handover": "Hand over to a person"
     },
     "directory": {
         "title": "Directory & notifications",
@@ -1478,7 +1478,18 @@
         "repair": "Record maintenance",
         "empty": "Scan or search for an asset to see its details.",
         "found": "Asset found",
-        "not_found": "No asset found with that code"
+        "not_found": "No asset found with that code",
+        "usb_help": "With a USB reader: the code is looked up as soon as it is read (Enter).",
+        "batch": {
+            "toggle": "Batch mode",
+            "help": "Each code read is added to the list so you can hand over, return or label the items together.",
+            "added": "{{code}} added",
+            "already": "{{code}} is already on the list",
+            "count_one": "{{count}} item on the list",
+            "count_other": "{{count}} items on the list",
+            "clear": "Clear",
+            "empty": "Scan or type codes to build the list."
+        }
     },
     "api_errors": {
         "VALIDATION_ERROR": "The request did not pass the system validations. Check the data you entered.",
@@ -1742,7 +1753,17 @@
         "APPROVAL_NOT_FOUND": "The request was not found.",
         "APPROVAL_REQUIRES_REQUESTER": "The request must have a requester.",
         "ONLY_REQUESTER_CAN_CANCEL": "Only the person who made the request can cancel it.",
-        "CURRENCY_DIFFERS_FROM_VALUATION": "This consumable is valued in {{p1}}: record the entry in {{p1}} (different currencies are not averaged)."
+        "CURRENCY_DIFFERS_FROM_VALUATION": "This consumable is valued in {{p1}}: record the entry in {{p1}} (different currencies are not averaged).",
+        "BATCH_ITEM_FAILED": "No changes were applied. {{item}}: {{reason}}",
+        "IMPORT_ROW_FAILED": "Nothing was imported. Row {{item}}: {{reason}}",
+        "ASSET_ALREADY_WITH_PERSON": "The person already has this item.",
+        "IMPORT_INVALID_FILE": "The file is not a valid Excel (.xlsx) file.",
+        "IMPORT_HEADERS_NOT_FOUND": "The headers (Category, Brand, Model…) were not found. Please use the template.",
+        "IMPORT_EMPTY": "The file has no rows with data.",
+        "IMPORT_TOO_MANY_ROWS": "The file exceeds the maximum of {{p1}} rows.",
+        "IMPORT_HAS_ERRORS": "Some rows have errors: correct them or choose to skip them.",
+        "IMPORT_NOTHING_TO_IMPORT": "There are no valid rows to import.",
+        "SYSTEM_CONFIG_ERROR_MISSING_MOVEMENT_TYPE": "A movement type is missing from the system configuration."
     },
     "catalog": {
         "states": {
@@ -2199,7 +2220,13 @@
         "remove_components": "Remove them and keep them in storage",
         "approval_note": "The decommission is sent as a request: the Head of IT (another person) approves it and it is executed at that moment.",
         "request": "Request decommission",
-        "requested": "Decommission request for {{code}} sent to the Head of IT."
+        "requested": "Decommission request for {{code}} sent to the Head of IT.",
+        "title_batch_one": "Request decommission of {{count}} item",
+        "title_batch_other": "Request decommission of {{count}} items",
+        "requested_batch_one": "Decommission was requested for {{count}} item; it is pending approval.",
+        "requested_batch_other": "Decommission was requested for {{count}} items; they are pending approval.",
+        "failed_batch": "Decommission could not be requested for: {{list}}.",
+        "remove_components_batch": "Remove installed components, if any"
     },
     "components": {
         "tab": "Components",
@@ -2326,6 +2353,269 @@
         "approve_effect": {
             "BAJA": "On approval, the device leaves the inventory, its licenses are released and the decommission is recorded in the kardex with your name as approver.",
             "RECEPCION_SOBRANTE": "On approval, the full delivery (including the surplus) is recorded exactly as it was received."
+        }
+    },
+    "workspace": {
+        "search": "Search or run…",
+        "favorites": "Favorites",
+        "pin": "Add “{{page}}” to favorites",
+        "unpin": "Remove “{{page}}” from favorites",
+        "breadcrumbs": "Breadcrumb"
+    },
+    "palette": {
+        "title": "Search or run",
+        "placeholder": "Search for an asset, serial number, person or action…",
+        "hint": "Type at least two characters to search the whole inventory.",
+        "no_results": "No results for “{{q}}”.",
+        "custody": "In custody of {{name}}",
+        "groups": {
+            "actions": "Quick actions",
+            "assets": "Assets",
+            "people": "People",
+            "orders": "Purchase orders",
+            "recent": "Recent",
+            "navigation": "Go to"
+        },
+        "actions": {
+            "handover": "Workstation handover",
+            "handover_help": "Several items to one person, with a single handover record",
+            "new_asset": "New asset",
+            "onboarding": "Employee onboarding",
+            "onboarding_help": "Person, equipment and access in a single flow",
+            "scan": "Scan codes",
+            "import": "Import assets from Excel",
+            "shortcuts": "Keyboard shortcuts"
+        },
+        "footer": {
+            "move": "move",
+            "open": "open"
+        }
+    },
+    "shortcuts": {
+        "title": "Keyboard shortcuts",
+        "subtitle": "They work on any screen, except while you are typing in a field.",
+        "palette": "Search or run an action",
+        "search": "Open search",
+        "new": "New record on the current page",
+        "handover": "Workstation handover",
+        "help": "Show this help",
+        "close": "Close a dialog",
+        "hint_new": "Shortcut: N",
+        "go": {
+            "d": "Go to the dashboard",
+            "a": "Go to Assets",
+            "m": "Go to Movements",
+            "s": "Go to the scanner",
+            "e": "Go to Employees",
+            "t": "Go to Traceability",
+            "c": "Go to Consumables",
+            "o": "Go to Purchase orders",
+            "r": "Go to Maintenance"
+        }
+    },
+    "views": {
+        "button": "Views",
+        "presets": "Presets",
+        "saved": "Saved",
+        "clear": "Clear filters",
+        "save_current": "Save current view…",
+        "save_title": "Save view",
+        "name": "View name",
+        "delete": "Delete view “{{name}}”"
+    },
+    "bulk": {
+        "handover_one": "Hand over {{count}} item",
+        "handover_other": "Hand over {{count}} items",
+        "return": "Return to storage",
+        "labels": "Labels",
+        "export": "Export selection",
+        "decommission": "Request decommission",
+        "none_assigned": "None of the selected items is assigned.",
+        "no_matches": "No assets match the filters."
+    },
+    "handover": {
+        "title": "Workstation handover",
+        "button": "Workstation handover",
+        "default_reason": "Workstation handover",
+        "sections": {
+            "recipient": "Recipient",
+            "equipment_one": "Equipment ({{count}})",
+            "equipment_other": "Equipment ({{count}})",
+            "record": "Record"
+        },
+        "person": "Receiving person",
+        "area": "Destination area",
+        "kit_department_one": "Usual kit in {{department}} (based on {{count}} person)",
+        "kit_department_other": "Usual kit in {{department}} (based on {{count}} people)",
+        "kit_general": "Usual kit across the company",
+        "kit_chip_one": "{{type}} · {{count}} available",
+        "kit_chip_other": "{{type}} · {{count}} available",
+        "add_equipment": "Add equipment",
+        "add_placeholder": "Code, serial number, hostname or model",
+        "scanner_help": "With a barcode reader: scan and the item is added automatically.",
+        "filtered_by": "Showing: {{type}}. Select the type again to remove the filter.",
+        "code_not_found": "Code {{code}} was not found.",
+        "current_status": "Current status",
+        "already_with_person": "This person already has it",
+        "will_transfer": "Will be transferred from {{name}}",
+        "remove": "Remove from list",
+        "empty_list": "Add items by scanning, searching or from the suggested kit.",
+        "remove_owned": "Remove the items this person already has.",
+        "reason": "Reason",
+        "ticket": "Ticket",
+        "submit_one": "Hand over {{count}} item",
+        "submit_other": "Hand over {{count}} items",
+        "done_one": "{{count}} item was handed over to {{person}}.",
+        "done_other": "{{count}} items were handed over to {{person}}.",
+        "download_acta": "Download handover record (PDF)",
+        "download_discharge": "Download return record (PDF)",
+        "print_labels_one": "Print {{count}} label",
+        "print_labels_other": "Print {{count}} labels",
+        "acta_file": "Handover_record",
+        "discharge_file": "Return_record",
+        "view_person": "View person profile",
+        "another": "New handover"
+    },
+    "returns_batch": {
+        "title_one": "Return {{count}} item to storage",
+        "title_other": "Return {{count}} items to storage",
+        "submit_one": "Return {{count}} item",
+        "submit_other": "Return {{count}} items",
+        "done_one": "{{count}} item was returned.",
+        "done_other": "{{count}} items were returned.",
+        "all_or_nothing": "Either all items are returned or none: if one cannot be returned, you will be told which one."
+    },
+    "onboarding": {
+        "title": "Employee onboarding",
+        "subtitle": "Register the person and hand over their workstation and access in a single flow.",
+        "steps": {
+            "person": "Person",
+            "equipment": "Workstation equipment",
+            "access": "System access",
+            "done": "Summary"
+        },
+        "person_help": "Choose the person if already registered, or register them now.",
+        "existing_person": "Registered person",
+        "register_person": "Register a new person",
+        "continue": "Continue",
+        "skip_equipment": "Continue without handing over equipment",
+        "equipment_summary_one": "{{count}} item handed over",
+        "equipment_summary_other": "{{count}} items handed over",
+        "access_exists": "The person already has system access (user {{user}}).",
+        "access_help": "If the person will use the system, create their account; the username and role are suggested.",
+        "create_user": "Create user",
+        "access_by_security": "Access accounts are created by the security administrator. The person already appears on their list.",
+        "back": "Back",
+        "finish": "Finish",
+        "done_title": "Onboarding of {{name}} completed",
+        "no_equipment": "No equipment was handed over in this onboarding.",
+        "another": "New onboarding"
+    },
+    "import": {
+        "title": "Import assets",
+        "subtitle": "Load assets from Excel and review every row before saving.",
+        "template": "Download template",
+        "step_upload": "File",
+        "choose": "Choose .xlsx file",
+        "formats": "Excel (.xlsx), up to 1000 rows and 5 MB.",
+        "columns_help": "The template headers and those of the INVENTARIO sheet are recognized: Code, Category, Description, Brand, Model, Serial number, Hostname, Location, Purchase date, Invoice, Cost, Currency and Notes. Assets are created as available; assignments are made afterwards with the workstation handover.",
+        "how_title": "How it works",
+        "how": {
+            "1": "Download the template: it includes the existing categories, locations and brands.",
+            "2": "Fill in one row per asset. Without a code, one is generated with the category prefix; without a serial number, the code is used.",
+            "3": "Upload the file and review the result row by row. Nothing is saved yet.",
+            "4": "Confirm: everything is created in a single operation, recorded in the kardex."
+        },
+        "kpi": {
+            "rows": "Rows",
+            "valid": "Ready to import",
+            "errors": "With errors",
+            "new_catalog": "New brands / models"
+        },
+        "col": {
+            "row": "Row",
+            "area": "Location",
+            "result": "Result"
+        },
+        "no_problems": "All rows are correct.",
+        "only_problems": "Only rows with remarks",
+        "skip_errors_one": "Skip {{count}} row with errors",
+        "skip_errors_other": "Skip {{count}} rows with errors",
+        "confirm_one": "Import {{count}} asset",
+        "confirm_other": "Import {{count}} assets",
+        "auto": "Automatic",
+        "no_serial": "Will use the code",
+        "status": {
+            "ok": "Correct"
+        },
+        "done_one": "{{count}} asset was imported.",
+        "done_other": "{{count}} assets were imported.",
+        "done_skipped_one": "{{count}} row with errors was skipped.",
+        "done_skipped_other": "{{count}} rows with errors were skipped.",
+        "view_assets": "View assets",
+        "msg": {
+            "MISSING_TYPE": "Category missing",
+            "TYPE_NOT_FOUND": "Unknown category",
+            "MISSING_BRAND": "Brand missing",
+            "MISSING_MODEL": "Model or description missing",
+            "NEW_BRAND": "New brand",
+            "NEW_MODEL": "New model",
+            "CODE_EXISTS": "Code already exists",
+            "CODE_DUPLICATED_IN_FILE": "Code repeated in the file",
+            "CODE_PREFIX_MISMATCH": "The code does not use the category prefix",
+            "TYPE_WITHOUT_PREFIX": "The category has no prefix: enter the code",
+            "AUTO_CODE": "Automatic code",
+            "NO_SERIAL_USES_CODE": "No serial number: the code will be used",
+            "SERIAL_EXISTS": "Serial number already exists",
+            "SERIAL_DUPLICATED_IN_FILE": "Serial number repeated in the file",
+            "SERIAL_TOO_SHORT": "Serial number too short",
+            "AREA_NOT_FOUND": "Unknown location",
+            "MISSING_AREA": "Location missing",
+            "INVALID_DATE": "Invalid date",
+            "NO_DATE_USES_TODAY": "No date: today will be used",
+            "INVALID_COST": "Invalid cost",
+            "INVALID_CURRENCY": "Invalid currency",
+            "TYPE_FROM_CODE": "Category inferred from the code prefix"
+        },
+        "choose_another": "Choose another file"
+    },
+    "quality": {
+        "title": "Data quality",
+        "subtitle": "Records to complete or that do not add up. Select each item to see and open the records.",
+        "all_good": "All in order: no pending data.",
+        "pending_one": "{{count}} pending",
+        "pending_other": "{{count}} pending",
+        "more_one": "and {{count}} more",
+        "more_other": "and {{count}} more",
+        "checks": {
+            "custodia_persona_inactiva": {
+                "title": "Items held by inactive people",
+                "help": "Return or transfer them: the person no longer works here."
+            },
+            "estado_inconsistente": {
+                "title": "Status that does not match custody",
+                "help": "Review the item: its status and its assignment do not match."
+            },
+            "personas_por_clasificar": {
+                "title": "People without a defined department",
+                "help": "Assign their actual department from Employees."
+            },
+            "correos_provisionales": {
+                "title": "Placeholder email addresses",
+                "help": "Replace them with the actual corporate email or synchronize with Active Directory."
+            },
+            "activos_sin_serie": {
+                "title": "Assets without a manufacturer serial number",
+                "help": "They use the internal code as serial number; enter the actual one if it exists."
+            },
+            "activos_sin_costo": {
+                "title": "Assets without a recorded cost",
+                "help": "Without a cost, the inventory cannot be valued."
+            },
+            "modelos_sin_tipo": {
+                "title": "Models without an asset type",
+                "help": "Assign the type so that new assets suggest the category."
+            }
         }
     }
 }

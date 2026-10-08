@@ -21,6 +21,7 @@ from app.schemas.traceability import (
     TipoMovimientoUpdate,
     TransferenciaCreate,
 )
+from app.schemas.productividad import DevolucionLoteCreate, EntregaLoteCreate
 from app.services.traceability import TraceabilityService
 
 router = APIRouter()
@@ -243,3 +244,30 @@ async def descargar_acta_multiple(
     batch = {"es": "Lote", "en": "Batch", "it": "Lotto"}.get(lang, "Lote")
     filename = f"{acta_filename(tipo, lang)}_{batch}_{datetime.now().strftime('%Y%m%d_%H%M')}"
     return _acta_response(buffer, filename, formato)
+
+
+# ================= OPERACIONES EN LOTE =================
+@router.post("/entrega-lote", status_code=201, dependencies=OPERATIVO)
+@limiter.limit("20/minute")
+async def entrega_lote(
+    schema: EntregaLoteCreate, request: Request, current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Entrega de puesto: asigna (o transfiere, si ya tienen custodio) varios
+    equipos a una persona en una sola transacción. Si uno falla, no se entrega
+    ninguno y el error indica qué equipo lo impidió (BATCH_ITEM_FAILED:código:motivo).
+    """
+    from app.services.productividad import ProductividadService
+    return await ProductividadService(db).entrega_lote(schema, **_ctx(request, current_user))
+
+
+@router.post("/devolucion-lote", status_code=200, dependencies=OPERATIVO)
+@limiter.limit("20/minute")
+async def devolucion_lote(
+    schema: DevolucionLoteCreate, request: Request, current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """Devuelve varios equipos a bodega en una sola transacción (todo o nada)."""
+    from app.services.productividad import ProductividadService
+    return await ProductividadService(db).devolucion_lote(schema, **_ctx(request, current_user))

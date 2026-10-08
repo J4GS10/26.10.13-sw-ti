@@ -3,6 +3,7 @@
 > Actualizado: 2026-10-02 (sesión 13). Documento de traspaso entre sesiones de trabajo.
 > **Sesión 12:** se ejecutaron las fases 0 a 6 de `INFORME_EJECUTIVO_Y_PLAN.md` (kardex, recepción controlada, componentes, bajas, licencias, toma de inventario, bandeja «Requiere su atención»). Estado y pendientes en su §8.
 > **Sesión 13:** control interno profesional (rol JEFE_TI con aprobación de bajas y sobrantes, costo promedio ponderado, kardex completo y verificable con sello encadenado). Detalle en `INFORME_EJECUTIVO_Y_PLAN.md` §9. Cuenta de revisión del Jefe de TI: `python herramientas-qa/crear_jefe_ti.py` (credenciales en `herramientas-qa/salidas/credenciales_jefe.json`).
+> **Sesión 14 (2026-10-07/08):** base formal reiniciada y cargada solo con el Excel «Inventario GT»; fases 1–3 de productividad (entrega de puesto, Ctrl+K, fichas con URL, importación Excel, calidad de datos). **Siguiente trabajo aprobado: `PLAN_CONTROL_LICENCIAS_CATALOGOS.md`** (licencias con activación variable, catálogos estandarizados, control del usuario). Cambios aún sin commit.
 > El historial detallado de cada sesión está en `PROGRESS.md`, y el despliegue en `inventarioTI-backend/DEPLOYMENT.md`.
 
 ---

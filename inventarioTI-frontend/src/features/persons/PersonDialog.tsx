@@ -26,6 +26,8 @@ interface Props {
     open: boolean;
     persona?: PersonaResumen | null;
     onClose: (refresh?: boolean) => void;
+    /** Alta: recibe la persona creada (p. ej. para seguir con el asistente de ingreso). */
+    onCreated?: (persona: PersonaResumen) => void;
 }
 interface FormValues {
     PER_Primer_Nombre: string;
@@ -64,7 +66,7 @@ const empty: FormValues = {
     PER_Jefe: '',
     SED_Sede: '',
 };
-export const PersonDialog = ({ open, persona, onClose }: Props) => {
+export const PersonDialog = ({ open, persona, onClose, onCreated }: Props) => {
     const { t } = useTranslation();
     const { enqueueSnackbar } = useSnackbar();
     const isEdit = !!persona;
@@ -168,8 +170,9 @@ export const PersonDialog = ({ open, persona, onClose }: Props) => {
                 enqueueSnackbar(t('common.success_update'), { variant: 'success' });
             }
             else {
-                await personService.create(payload as PersonaCreate);
+                const creada = await personService.create(payload as PersonaCreate);
                 enqueueSnackbar(t('common.success_create'), { variant: 'success' });
+                onCreated?.(creada);
             }
             onClose(true);
         }

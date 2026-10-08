@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'rea
 import { ThemeProvider, CssBaseline, Box, Toolbar, CircularProgress, IconButton, AppBar, Typography, useMediaQuery, useTheme } from '@mui/material';
 import { SnackbarProvider } from 'notistack';
 import MenuIcon from '@mui/icons-material/Menu';
+import SearchIcon from '@mui/icons-material/Search';
 import { useTranslation } from 'react-i18next';
 import { createAppTheme } from './theme/theme';
 import { AuthProvider } from './context/AuthContext';
@@ -13,7 +14,9 @@ import { ConfirmProvider } from './components/ConfirmDialog';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Sidebar } from './components/Sidebar';
 import { ProtectedRoute } from './router/ProtectedRoute';
-import { ADMIN_READER_ROLES, AUDIT_READER_ROLES, IAM_ROLES, INVENTORY_READER_ROLES } from './utils/roles';
+import { WorkspaceProvider } from './context/WorkspaceContext';
+import { useWorkspace } from './context/workspace-context';
+import { ADMIN_READER_ROLES, AUDIT_READER_ROLES, IAM_ROLES, INVENTORY_ADMIN_ROLES, INVENTORY_READER_ROLES } from './utils/roles';
 // Páginas
 const LoginPage = lazy(() => import('./features/auth/LoginPage').then((m) => ({ default: m.LoginPage })));
 const ResetPasswordPage = lazy(() => import('./features/auth/ResetPasswordPage').then((m) => ({ default: m.ResetPasswordPage })));
@@ -42,6 +45,8 @@ const TrazabilidadPage = lazy(() => import('./features/traceability/Trazabilidad
 const TomasPage = lazy(() => import('./features/inventory-count/TomasPage').then((m) => ({ default: m.TomasPage })));
 const AprobacionesPage = lazy(() => import('./features/approvals/AprobacionesPage').then((m) => ({ default: m.AprobacionesPage })));
 const AuditPage = lazy(() => import('./features/audit/AuditPage').then((m) => ({ default: m.AuditPage })));
+const OnboardingPage = lazy(() => import('./features/onboarding/OnboardingPage').then((m) => ({ default: m.OnboardingPage })));
+const ImportAssetsPage = lazy(() => import('./features/import/ImportAssetsPage').then((m) => ({ default: m.ImportAssetsPage })));
 const PageFallback = () => (<Box role="status" aria-live="polite" sx={{
         display: 'flex',
         alignItems: 'center',
@@ -104,9 +109,26 @@ const DashboardLayout = () => {
     // Paso de seguridad pendiente: pantalla completa en lugar del sistema.
     if (restriction)
         return <SecurityGate restriction={restriction}/>;
+    return (<WorkspaceProvider>
+      <LayoutShell isDesktop={isDesktop} collapsed={collapsed} onToggleCollapse={() => setCollapsed((c) => !c)}
+        mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} companyName={config.SYS_Nombre_Empresa} showNavLabel={t('common.show_navigation')}/>
+    </WorkspaceProvider>);
+};
+interface LayoutShellProps {
+    isDesktop: boolean;
+    collapsed: boolean;
+    onToggleCollapse: () => void;
+    mobileOpen: boolean;
+    setMobileOpen: (v: boolean) => void;
+    companyName: string;
+    showNavLabel: string;
+}
+const LayoutShell = ({ isDesktop, collapsed, onToggleCollapse, mobileOpen, setMobileOpen, companyName, showNavLabel }: LayoutShellProps) => {
+    const { t } = useTranslation();
+    const { abrirPaleta } = useWorkspace();
     return (<Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
       {isDesktop
-            ? <Sidebar variant="permanent" collapsed={collapsed} onToggleCollapse={() => setCollapsed((c) => !c)}/>
+            ? <Sidebar variant="permanent" collapsed={collapsed} onToggleCollapse={onToggleCollapse}/>
             : <Sidebar variant="temporary" open={mobileOpen} onClose={() => setMobileOpen(false)}/>}
 
       {/* Barra superior solo en móvil/tablet: en escritorio la navegación es la barra lateral. */}
@@ -114,12 +136,15 @@ const DashboardLayout = () => {
                 bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider',
             }}>
           <Toolbar variant="dense" sx={{ gap: 1, minHeight: 56 }}>
-            <IconButton edge="start" onClick={() => setMobileOpen(true)} aria-label={t('common.show_navigation')}>
+            <IconButton edge="start" onClick={() => setMobileOpen(true)} aria-label={showNavLabel}>
               <MenuIcon />
             </IconButton>
-            <Typography variant="subtitle1" sx={{ fontWeight: 800, color: 'primary.main' }} noWrap>
-              {config.SYS_Nombre_Empresa}
+            <Typography variant="subtitle1" sx={{ fontWeight: 800, color: 'primary.main', flex: 1 }} noWrap>
+              {companyName}
             </Typography>
+            <IconButton onClick={abrirPaleta} aria-label={t('workspace.search')}>
+              <SearchIcon />
+            </IconButton>
           </Toolbar>
         </AppBar>)}
 
@@ -172,6 +197,7 @@ const ThemedApp = () => {
                   {/* Lectura del inventario: operadores y auditor (las acciones se ocultan por rol). */}
                   <Route element={<ProtectedRoute allowedRoles={INVENTORY_READER_ROLES}/>}>
                     <Route path="/activos" element={<AssetsPage />}/>
+                    <Route path="/activos/:codigo" element={<AssetsPage />}/>
                     <Route path="/scanner" element={<ScannerPage />}/>
                     <Route path="/operaciones/guia" element={<Navigate to="/operaciones/movimientos" replace/>}/>
                     <Route path="/operaciones/flujo" element={<Navigate to="/operaciones/movimientos" replace/>}/>
@@ -185,6 +211,7 @@ const ThemedApp = () => {
                   <Route element={<ProtectedRoute allowedRoles={ADMIN_READER_ROLES}/>}>
                     <Route path="/departamentos" element={<DepartmentsPage />}/>
                     <Route path="/empleados" element={<PersonsPage />}/>
+                    <Route path="/empleados/:personaId" element={<PersonsPage />}/>
                     <Route path="/software" element={<SoftwarePage />}/>
                     <Route path="/compras/proveedores" element={<ProvidersPage />}/>
                     <Route path="/compras/ordenes" element={<PurchaseOrdersPage />}/>
@@ -192,7 +219,9 @@ const ThemedApp = () => {
                     <Route path="/aprobaciones" element={<AprobacionesPage />}/>
                   </Route>
 
-                  <Route element={<ProtectedRoute allowedRoles={['SUPER_ADMIN', 'JEFE_TI', 'ADMIN_TI']}/>}>
+                  <Route element={<ProtectedRoute allowedRoles={INVENTORY_ADMIN_ROLES}/>}>
+                    <Route path="/operaciones/alta-empleado" element={<OnboardingPage />}/>
+                    <Route path="/config/importar" element={<ImportAssetsPage />}/>
                     <Route path="/config/marcas" element={<BrandsPage />}/>
                     <Route path="/config/ubicaciones" element={<LocationsPage />}/>
                     <Route path="/config/tipos" element={<AssetTypesPage />}/>

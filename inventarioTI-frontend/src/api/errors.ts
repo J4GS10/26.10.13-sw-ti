@@ -56,6 +56,13 @@ export function getApiErrorMessage(error: unknown, fallback: string): string {
       .map((rule) => i18n.t(`password_violations.${rule}`));
     return [i18n.t(key), ...reasons].join(' ');
   }
+  // Operación en lote: `BATCH_ITEM_FAILED:<código del activo>:<motivo>` (nada se aplicó).
+  if (code === 'BATCH_ITEM_FAILED' || code === 'IMPORT_ROW_FAILED') {
+    const [item, ...rest] = params;
+    const reasonCode = rest.join(':').split(':')[0];
+    const reason = i18n.exists(`api_errors.${reasonCode}`) ? i18n.t(`api_errors.${reasonCode}`) : fallback;
+    return i18n.t(`api_errors.${code}`, { item, reason });
+  }
   if (code === 'PASSWORD_REUSED' && i18n.exists(key)) {
     return i18n.t(key, { count: Number(params[0]) || 5 });
   }

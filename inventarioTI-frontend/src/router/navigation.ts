@@ -20,190 +20,63 @@ import ContactMailIcon from '@mui/icons-material/ContactMail';
 import TimelineIcon from '@mui/icons-material/Timeline';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
 import ApprovalIcon from '@mui/icons-material/Approval';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import type { SvgIconComponent } from '@mui/icons-material';
 import { UserRole } from '../types/auth';
-import { ADMIN_READER_ROLES, AUDIT_READER_ROLES, IAM_ROLES, INVENTORY_READER_ROLES, INVENTORY_ROLES } from '../utils/roles';
+import { ADMIN_READER_ROLES, AUDIT_READER_ROLES, IAM_ROLES, INVENTORY_ADMIN_ROLES, INVENTORY_READER_ROLES, INVENTORY_ROLES } from '../utils/roles';
 
 export interface NavItem {
   title: string;
   path: string;
   icon: SvgIconComponent;
   allowedRoles: UserRole[];
-  /** Etiqueta de grupo para ordenar el sidebar. */
-  group?: 'OPERATIONS' | 'PROCUREMENT' | 'ORGANIZATION' | 'CATALOG' | 'SECURITY' | 'ADMIN';
+  /** Grupo por tarea: el día a día, el control, compras, personas y la configuración. */
+  group: 'DAILY' | 'CONTROL' | 'PROCUREMENT' | 'ORGANIZATION' | 'SETTINGS';
 }
 
 export const NAVIGATION_ITEMS: NavItem[] = [
-  // ---------- Tablero ----------
-  {
-    title: 'menu.dashboard',
-    path: '/',
-    icon: DashboardIcon,
-    allowedRoles: INVENTORY_ROLES,
-    group: 'OPERATIONS',
-  },
+  // ---------- Día a día ----------
+  { title: 'menu.dashboard', path: '/', icon: DashboardIcon, allowedRoles: INVENTORY_ROLES, group: 'DAILY' },
+  { title: 'menu.assets', path: '/activos', icon: ComputerIcon, allowedRoles: INVENTORY_READER_ROLES, group: 'DAILY' },
+  { title: 'menu.scanner', path: '/scanner', icon: QrCodeScannerIcon, allowedRoles: INVENTORY_READER_ROLES, group: 'DAILY' },
+  { title: 'menu.movements', path: '/operaciones/movimientos', icon: SwapHorizIcon, allowedRoles: INVENTORY_READER_ROLES, group: 'DAILY' },
+  { title: 'menu.onboarding', path: '/operaciones/alta-empleado', icon: PersonAddIcon, allowedRoles: INVENTORY_ADMIN_ROLES, group: 'DAILY' },
+  { title: 'menu.maintenance', path: '/mantenimiento', icon: BuildIcon, allowedRoles: INVENTORY_READER_ROLES, group: 'DAILY' },
+  { title: 'menu.consumables', path: '/consumibles', icon: Inventory2Icon, allowedRoles: INVENTORY_READER_ROLES, group: 'DAILY' },
 
-  // ---------- Operación diaria ----------
-  {
-    title: 'menu.assets',
-    path: '/activos',
-    icon: ComputerIcon,
-    allowedRoles: INVENTORY_READER_ROLES,
-    group: 'OPERATIONS',
-  },
-  {
-    title: 'menu.scanner',
-    path: '/scanner',
-    icon: QrCodeScannerIcon,
-    allowedRoles: INVENTORY_READER_ROLES,
-    group: 'OPERATIONS',
-  },
-  {
-    title: 'menu.movements',
-    path: '/operaciones/movimientos',
-    icon: SwapHorizIcon,
-    allowedRoles: INVENTORY_READER_ROLES,
-    group: 'OPERATIONS',
-  },
-  {
-    title: 'menu.traceability',
-    path: '/trazabilidad',
-    icon: TimelineIcon,
-    allowedRoles: INVENTORY_READER_ROLES,
-    group: 'OPERATIONS',
-  },
-  {
-    title: 'menu.inventory_count',
-    path: '/inventario/tomas',
-    icon: FactCheckIcon,
-    allowedRoles: INVENTORY_READER_ROLES,
-    group: 'OPERATIONS',
-  },
-  {
-    title: 'menu.approvals',
-    path: '/aprobaciones',
-    icon: ApprovalIcon,
-    allowedRoles: ADMIN_READER_ROLES,
-    group: 'OPERATIONS',
-  },
-  {
-    title: 'menu.maintenance',
-    path: '/mantenimiento',
-    icon: BuildIcon,
-    allowedRoles: INVENTORY_READER_ROLES,
-    group: 'OPERATIONS',
-  },
-  {
-    title: 'menu.software',
-    path: '/software',
-    icon: AppsIcon,
-    allowedRoles: ADMIN_READER_ROLES,
-    group: 'OPERATIONS',
-  },
-  {
-    title: 'menu.consumables',
-    path: '/consumibles',
-    icon: Inventory2Icon,
-    allowedRoles: INVENTORY_READER_ROLES,
-    group: 'OPERATIONS',
-  },
+  // ---------- Control ----------
+  { title: 'menu.traceability', path: '/trazabilidad', icon: TimelineIcon, allowedRoles: INVENTORY_READER_ROLES, group: 'CONTROL' },
+  { title: 'menu.inventory_count', path: '/inventario/tomas', icon: FactCheckIcon, allowedRoles: INVENTORY_READER_ROLES, group: 'CONTROL' },
+  { title: 'menu.approvals', path: '/aprobaciones', icon: ApprovalIcon, allowedRoles: ADMIN_READER_ROLES, group: 'CONTROL' },
+  { title: 'menu.audit', path: '/auditoria', icon: PolicyIcon, allowedRoles: AUDIT_READER_ROLES, group: 'CONTROL' },
 
-  // ---------- Compras y garantías ----------
-  {
-    title: 'menu.providers',
-    path: '/compras/proveedores',
-    icon: StorefrontIcon,
-    allowedRoles: ADMIN_READER_ROLES,
-    group: 'PROCUREMENT',
-  },
-  {
-    title: 'menu.purchase_orders',
-    path: '/compras/ordenes',
-    icon: ReceiptLongIcon,
-    allowedRoles: ADMIN_READER_ROLES,
-    group: 'PROCUREMENT',
-  },
-  {
-    title: 'menu.warranties',
-    path: '/compras/garantias',
-    icon: VerifiedUserIcon,
-    allowedRoles: ADMIN_READER_ROLES,
-    group: 'PROCUREMENT',
-  },
+  // ---------- Compras y licencias ----------
+  { title: 'menu.purchase_orders', path: '/compras/ordenes', icon: ReceiptLongIcon, allowedRoles: ADMIN_READER_ROLES, group: 'PROCUREMENT' },
+  { title: 'menu.providers', path: '/compras/proveedores', icon: StorefrontIcon, allowedRoles: ADMIN_READER_ROLES, group: 'PROCUREMENT' },
+  { title: 'menu.warranties', path: '/compras/garantias', icon: VerifiedUserIcon, allowedRoles: ADMIN_READER_ROLES, group: 'PROCUREMENT' },
+  { title: 'menu.software', path: '/software', icon: AppsIcon, allowedRoles: ADMIN_READER_ROLES, group: 'PROCUREMENT' },
 
-  // ---------- Organización ----------
-  {
-    title: 'menu.departments',
-    path: '/departamentos',
-    icon: BusinessIcon,
-    allowedRoles: ADMIN_READER_ROLES,
-    group: 'ORGANIZATION',
-  },
-  {
-    title: 'menu.persons',
-    path: '/empleados',
-    icon: BadgeIcon,
-    allowedRoles: ADMIN_READER_ROLES,
-    group: 'ORGANIZATION',
-  },
+  // ---------- Personas y accesos (sin inventario para ADMIN_SEGURIDAD) ----------
+  { title: 'menu.persons', path: '/empleados', icon: BadgeIcon, allowedRoles: ADMIN_READER_ROLES, group: 'ORGANIZATION' },
+  { title: 'menu.departments', path: '/departamentos', icon: BusinessIcon, allowedRoles: ADMIN_READER_ROLES, group: 'ORGANIZATION' },
+  { title: 'menu.users', path: '/usuarios', icon: ManageAccountsIcon, allowedRoles: IAM_ROLES, group: 'ORGANIZATION' },
 
-  // ---------- Seguridad: identidades y accesos (sin inventario para ADMIN_SEGURIDAD) ----------
-  {
-    title: 'menu.users',
-    path: '/usuarios',
-    icon: ManageAccountsIcon,
-    allowedRoles: IAM_ROLES,
-    group: 'SECURITY',
-  },
-  {
-    title: 'menu.audit',
-    path: '/auditoria',
-    icon: PolicyIcon,
-    allowedRoles: AUDIT_READER_ROLES,
-    group: 'SECURITY',
-  },
-
-  // ---------- Catálogos / Configuración ----------
-  {
-    title: 'menu.brands',
-    path: '/config/marcas',
-    icon: CategoryIcon,
-    allowedRoles: ['SUPER_ADMIN', 'JEFE_TI', 'ADMIN_TI'],
-    group: 'CATALOG',
-  },
-  {
-    title: 'menu.models',
-    path: '/config/modelos',
-    icon: ViewListIcon,
-    allowedRoles: ['SUPER_ADMIN', 'JEFE_TI', 'ADMIN_TI'],
-    group: 'CATALOG',
-  },
-  {
-    title: 'menu.types',
-    path: '/config/tipos',
-    icon: CategoryIcon,
-    allowedRoles: ['SUPER_ADMIN', 'JEFE_TI', 'ADMIN_TI'],
-    group: 'CATALOG',
-  },
-  {
-    title: 'menu.locations',
-    path: '/config/ubicaciones',
-    icon: PlaceIcon,
-    allowedRoles: ['SUPER_ADMIN', 'JEFE_TI', 'ADMIN_TI'],
-    group: 'CATALOG',
-  },
-  {
-    title: 'menu.directory',
-    path: '/config/directorio',
-    icon: ContactMailIcon,
-    allowedRoles: ['SUPER_ADMIN', 'JEFE_TI', 'ADMIN_TI'],
-    group: 'ADMIN',
-  },
-  {
-    title: 'menu.config',
-    path: '/config',
-    icon: SettingsIcon,
-    allowedRoles: ['SUPER_ADMIN'],
-    group: 'ADMIN',
-  },
+  // ---------- Configuración (catálogos e importación) ----------
+  { title: 'menu.import', path: '/config/importar', icon: UploadFileIcon, allowedRoles: INVENTORY_ADMIN_ROLES, group: 'SETTINGS' },
+  { title: 'menu.brands', path: '/config/marcas', icon: CategoryIcon, allowedRoles: INVENTORY_ADMIN_ROLES, group: 'SETTINGS' },
+  { title: 'menu.models', path: '/config/modelos', icon: ViewListIcon, allowedRoles: INVENTORY_ADMIN_ROLES, group: 'SETTINGS' },
+  { title: 'menu.types', path: '/config/tipos', icon: CategoryIcon, allowedRoles: INVENTORY_ADMIN_ROLES, group: 'SETTINGS' },
+  { title: 'menu.locations', path: '/config/ubicaciones', icon: PlaceIcon, allowedRoles: INVENTORY_ADMIN_ROLES, group: 'SETTINGS' },
+  { title: 'menu.directory', path: '/config/directorio', icon: ContactMailIcon, allowedRoles: INVENTORY_ADMIN_ROLES, group: 'SETTINGS' },
+  { title: 'menu.config', path: '/config', icon: SettingsIcon, allowedRoles: ['SUPER_ADMIN'], group: 'SETTINGS' },
 ];
+
+/** Página de navegación que corresponde a una ruta (también a sus fichas: /activos/LAP-00001). */
+export function navItemFor(pathname: string): NavItem | undefined {
+  const exacta = NAVIGATION_ITEMS.find((n) => n.path === pathname);
+  if (exacta) return exacta;
+  return [...NAVIGATION_ITEMS]
+    .filter((n) => n.path !== '/' && pathname.startsWith(`${n.path}/`))
+    .sort((a, b) => b.path.length - a.path.length)[0];
+}

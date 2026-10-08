@@ -40,6 +40,8 @@ aiosmtplib>=3.0.0
 # Active Directory (LDAP) — directorio de personas y grupos de notificación
 ldap3>=2.9.1
 jinja2>=3.1.0
+# Importación de activos desde Excel (.xlsx)
+openpyxl>=3.1.2
 
 # =========================================================================
 # Observability / Logging

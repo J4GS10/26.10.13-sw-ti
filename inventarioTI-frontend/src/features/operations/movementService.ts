@@ -1,4 +1,5 @@
 import client from '../../api/axios';
+import { apiCache } from '../../api/cache';
 import { Movimiento, MovimientoCreate, TransferenciaCreate, TipoMovimiento } from '../../types/traceability';
 import { Activo } from '../../types/inventory';
 import { PersonaResumen } from '../../types/users';
@@ -12,10 +13,8 @@ export const movementService = {
     return response.data;
   },
 
-  getTiposMovimiento: async (): Promise<TipoMovimiento[]> => {
-    const response = await client.get<TipoMovimiento[]>('/trazabilidad/tipos');
-    return response.data;
-  },
+  getTiposMovimiento: (): Promise<TipoMovimiento[]> => apiCache.get('/trazabilidad/tipos', async () =>
+    (await client.get<TipoMovimiento[]>('/trazabilidad/tipos')).data),
 
   // --- ESCRITURA ---
   createMovement: async (data: MovimientoCreate): Promise<Movimiento> => {
@@ -67,20 +66,13 @@ export const movementService = {
     return response.data;
   },
 
-  getPersonasLookup: async (): Promise<PersonaResumen[]> => {
-    const response = await client.get<PersonaResumen[]>('/org/personas'); 
-    return response.data;
-  },
+  getPersonasLookup: (): Promise<PersonaResumen[]> => apiCache.get('/org/personas', async () =>
+    (await client.get<PersonaResumen[]>('/org/personas')).data, 30_000),
 
-  getAreasLookup: async (): Promise<Array<Area & { ruta: string }>> => {
-    const response = await client.get<Array<Area & { ruta: string }>>('/geo/areas/all');
-    return response.data;
-  },
+  getAreasLookup: (): Promise<Array<Area & { ruta: string }>> => movementService.getAreas(),
 
-  getAreas: async (): Promise<Array<Area & { ruta: string }>> => {
-    const response = await client.get<Array<Area & { ruta: string }>>('/geo/areas/all');
-    return response.data;
-  },
+  getAreas: (): Promise<Array<Area & { ruta: string }>> => apiCache.get('/geo/areas/all', async () =>
+    (await client.get<Array<Area & { ruta: string }>>('/geo/areas/all')).data),
 
   // Paginación de movimientos
   getMovementsPaged: async (skip = 0, limit = 50): Promise<Movimiento[]> => {

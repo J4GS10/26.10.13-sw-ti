@@ -133,7 +133,9 @@
         "audit": "Audit",
         "traceability": "Tracciabilità",
         "inventory_count": "Inventario fisico",
-        "approvals": "Approvazioni"
+        "approvals": "Approvazioni",
+        "onboarding": "Inserimento dipendente",
+        "import": "Importa beni"
     },
     "audit": {
         "title": "Audit forense",
@@ -248,12 +250,11 @@
         }
     },
     "menu_groups": {
-        "OPERATIONS": "Operazioni",
-        "PROCUREMENT": "Acquisti",
-        "ORGANIZATION": "Organizzazione",
-        "CATALOG": "Cataloghi",
-        "ADMIN": "Sistema",
-        "SECURITY": "Sicurezza"
+        "PROCUREMENT": "Acquisti e licenze",
+        "ORGANIZATION": "Persone e accessi",
+        "DAILY": "Operatività quotidiana",
+        "CONTROL": "Controllo",
+        "SETTINGS": "Cataloghi e sistema"
     },
     "departments": {
         "sections": {
@@ -463,11 +464,9 @@
         "filter_state": "Stato",
         "all_states": "Tutti gli stati",
         "labels": {
-            "download_selected": "Stampa etichette",
             "select_visible": "Seleziona i beni visibili",
             "select_asset": "Seleziona il bene {{code}}",
             "clear_selection": "Cancella selezione",
-            "select_required": "Selezioni almeno un bene",
             "too_many_selected": "Selezioni al massimo 200 beni",
             "downloaded": "Etichette generate correttamente",
             "selected_count_one": "{{count}} bene selezionato",
@@ -1201,7 +1200,8 @@
         "recv_surplus_needs_approval": "L'eccedenza richiede l'approvazione del Responsabile IT: la consegna resterà in sospeso fino ad allora.",
         "recv_sent_title": "Consegna inviata per l'approvazione · {{number}}",
         "recv_pending_approval": "La consegna include un'eccedenza ed è in sospeso (richiesta #{{id}}). L'inventario non cambia finché il Responsabile IT non la approva.",
-        "recv_nothing_yet": "Non è stato ancora registrato nulla."
+        "recv_nothing_yet": "Non è stato ancora registrato nulla.",
+        "recv_handover": "Consegna a una persona"
     },
     "directory": {
         "title": "Directory e notifiche",
@@ -1478,7 +1478,18 @@
         "repair": "Registra manutenzione",
         "empty": "Scansioni o cerchi un bene per visualizzarne i dati.",
         "found": "Bene trovato",
-        "not_found": "Nessun bene trovato con questo codice"
+        "not_found": "Nessun bene trovato con questo codice",
+        "usb_help": "Con un lettore USB: il codice viene cercato appena letto (Invio).",
+        "batch": {
+            "toggle": "Modalità lotto",
+            "help": "Ogni codice letto viene aggiunto all'elenco per consegnare, restituire o etichettare i dispositivi insieme.",
+            "added": "{{code}} aggiunto",
+            "already": "{{code}} è già nell'elenco",
+            "count_one": "{{count}} dispositivo nell'elenco",
+            "count_other": "{{count}} dispositivi nell'elenco",
+            "clear": "Svuota",
+            "empty": "Scansioni o digiti i codici per comporre l'elenco."
+        }
     },
     "api_errors": {
         "VALIDATION_ERROR": "La richiesta non ha superato le convalide del sistema. Controlli i dati inseriti.",
@@ -1742,7 +1753,17 @@
         "APPROVAL_NOT_FOUND": "La richiesta non è stata trovata.",
         "APPROVAL_REQUIRES_REQUESTER": "La richiesta deve avere un richiedente.",
         "ONLY_REQUESTER_CAN_CANCEL": "Solo chi ha fatto la richiesta può annullarla.",
-        "CURRENCY_DIFFERS_FROM_VALUATION": "Questo materiale di consumo è valorizzato in {{p1}}: registri l'entrata in {{p1}} (non si fa la media di valute diverse)."
+        "CURRENCY_DIFFERS_FROM_VALUATION": "Questo materiale di consumo è valorizzato in {{p1}}: registri l'entrata in {{p1}} (non si fa la media di valute diverse).",
+        "BATCH_ITEM_FAILED": "Nessuna modifica è stata applicata. {{item}}: {{reason}}",
+        "IMPORT_ROW_FAILED": "Non è stato importato nulla. Riga {{item}}: {{reason}}",
+        "ASSET_ALREADY_WITH_PERSON": "La persona ha già questo dispositivo.",
+        "IMPORT_INVALID_FILE": "Il file non è un Excel (.xlsx) valido.",
+        "IMPORT_HEADERS_NOT_FOUND": "Non sono state trovate le intestazioni (Categoria, Marca, Modello…). Usi il modello.",
+        "IMPORT_EMPTY": "Il file non contiene righe con dati.",
+        "IMPORT_TOO_MANY_ROWS": "Il file supera il massimo di {{p1}} righe.",
+        "IMPORT_HAS_ERRORS": "Alcune righe hanno errori: le corregga o scelga di ometterle.",
+        "IMPORT_NOTHING_TO_IMPORT": "Non ci sono righe valide da importare.",
+        "SYSTEM_CONFIG_ERROR_MISSING_MOVEMENT_TYPE": "Nella configurazione del sistema manca un tipo di movimento."
     },
     "catalog": {
         "states": {
@@ -2199,7 +2220,13 @@
         "remove_components": "Rimuoverli e lasciarli in magazzino",
         "approval_note": "La dismissione viene inviata come richiesta: il Responsabile IT (un'altra persona) la approva e viene eseguita in quel momento.",
         "request": "Richiedi la dismissione",
-        "requested": "Richiesta di dismissione di {{code}} inviata al Responsabile IT."
+        "requested": "Richiesta di dismissione di {{code}} inviata al Responsabile IT.",
+        "title_batch_one": "Richiedi la dismissione di {{count}} dispositivo",
+        "title_batch_other": "Richiedi la dismissione di {{count}} dispositivi",
+        "requested_batch_one": "È stata richiesta la dismissione di {{count}} dispositivo; è in attesa di approvazione.",
+        "requested_batch_other": "È stata richiesta la dismissione di {{count}} dispositivi; sono in attesa di approvazione.",
+        "failed_batch": "Non è stato possibile richiedere la dismissione di: {{list}}.",
+        "remove_components_batch": "Rimuovere i componenti installati, se presenti"
     },
     "components": {
         "tab": "Componenti",
@@ -2326,6 +2353,269 @@
         "approve_effect": {
             "BAJA": "Con l'approvazione, il dispositivo esce dall'inventario, le sue licenze vengono liberate e la dismissione resta nel kardex con il Suo nome come approvatore.",
             "RECEPCION_SOBRANTE": "Con l'approvazione, viene registrata la consegna completa (eccedenza inclusa) così come è stata ricevuta."
+        }
+    },
+    "workspace": {
+        "search": "Cerca o esegui…",
+        "favorites": "Preferiti",
+        "pin": "Aggiungi «{{page}}» ai preferiti",
+        "unpin": "Rimuovi «{{page}}» dai preferiti",
+        "breadcrumbs": "Percorso di navigazione"
+    },
+    "palette": {
+        "title": "Cerca o esegui",
+        "placeholder": "Cerchi un bene, un numero di serie, una persona o un'azione…",
+        "hint": "Digiti almeno due caratteri per cercare in tutto l'inventario.",
+        "no_results": "Nessun risultato per «{{q}}».",
+        "custody": "In custodia a {{name}}",
+        "groups": {
+            "actions": "Azioni rapide",
+            "assets": "Beni",
+            "people": "Persone",
+            "orders": "Ordini di acquisto",
+            "recent": "Recenti",
+            "navigation": "Vai a"
+        },
+        "actions": {
+            "handover": "Consegna postazione",
+            "handover_help": "Più dispositivi a una persona, con un unico verbale",
+            "new_asset": "Nuovo bene",
+            "onboarding": "Inserimento dipendente",
+            "onboarding_help": "Persona, dotazione e accesso in un unico percorso",
+            "scan": "Scansiona codici",
+            "import": "Importa beni da Excel",
+            "shortcuts": "Scorciatoie da tastiera"
+        },
+        "footer": {
+            "move": "spostarsi",
+            "open": "aprire"
+        }
+    },
+    "shortcuts": {
+        "title": "Scorciatoie da tastiera",
+        "subtitle": "Funzionano in qualsiasi schermata, tranne mentre scrive in un campo.",
+        "palette": "Cercare o eseguire un'azione",
+        "search": "Aprire la ricerca",
+        "new": "Nuovo record nella pagina corrente",
+        "handover": "Consegna postazione",
+        "help": "Mostrare questo aiuto",
+        "close": "Chiudere una finestra",
+        "hint_new": "Scorciatoia: N",
+        "go": {
+            "d": "Vai alla dashboard",
+            "a": "Vai a Beni",
+            "m": "Vai a Movimenti",
+            "s": "Vai allo scanner",
+            "e": "Vai a Dipendenti",
+            "t": "Vai a Tracciabilità",
+            "c": "Vai a Materiali di consumo",
+            "o": "Vai a Ordini di acquisto",
+            "r": "Vai a Manutenzione"
+        }
+    },
+    "views": {
+        "button": "Viste",
+        "presets": "Predefinite",
+        "saved": "Salvate",
+        "clear": "Rimuovi filtri",
+        "save_current": "Salva la vista corrente…",
+        "save_title": "Salva vista",
+        "name": "Nome della vista",
+        "delete": "Elimina la vista «{{name}}»"
+    },
+    "bulk": {
+        "handover_one": "Consegna {{count}} dispositivo",
+        "handover_other": "Consegna {{count}} dispositivi",
+        "return": "Restituisci al magazzino",
+        "labels": "Etichette",
+        "export": "Esporta selezione",
+        "decommission": "Richiedi dismissione",
+        "none_assigned": "Nessuno dei dispositivi selezionati è assegnato.",
+        "no_matches": "Nessun bene corrisponde ai filtri."
+    },
+    "handover": {
+        "title": "Consegna postazione",
+        "button": "Consegna postazione",
+        "default_reason": "Consegna postazione",
+        "sections": {
+            "recipient": "Destinatario",
+            "equipment_one": "Dispositivi ({{count}})",
+            "equipment_other": "Dispositivi ({{count}})",
+            "record": "Registrazione"
+        },
+        "person": "Persona che riceve",
+        "area": "Area di destinazione",
+        "kit_department_one": "Dotazione abituale in {{department}} (in base a {{count}} persona)",
+        "kit_department_other": "Dotazione abituale in {{department}} (in base a {{count}} persone)",
+        "kit_general": "Dotazione abituale in azienda",
+        "kit_chip_one": "{{type}} · {{count}} disponibile",
+        "kit_chip_other": "{{type}} · {{count}} disponibili",
+        "add_equipment": "Aggiungi dispositivo",
+        "add_placeholder": "Codice, numero di serie, hostname o modello",
+        "scanner_help": "Con un lettore di codici: scansioni e il dispositivo viene aggiunto automaticamente.",
+        "filtered_by": "Visualizzazione: {{type}}. Selezioni di nuovo il tipo per rimuovere il filtro.",
+        "code_not_found": "Il codice {{code}} non è stato trovato.",
+        "current_status": "Situazione attuale",
+        "already_with_person": "Questa persona lo ha già",
+        "will_transfer": "Sarà trasferito da {{name}}",
+        "remove": "Rimuovi dall'elenco",
+        "empty_list": "Aggiunga i dispositivi scansionandoli, cercandoli o dalla dotazione suggerita.",
+        "remove_owned": "Rimuova dall'elenco i dispositivi che questa persona ha già.",
+        "reason": "Motivo",
+        "ticket": "Ticket",
+        "submit_one": "Consegna {{count}} dispositivo",
+        "submit_other": "Consegna {{count}} dispositivi",
+        "done_one": "È stato consegnato {{count}} dispositivo a {{person}}.",
+        "done_other": "Sono stati consegnati {{count}} dispositivi a {{person}}.",
+        "download_acta": "Scarica verbale di consegna (PDF)",
+        "download_discharge": "Scarica verbale di restituzione (PDF)",
+        "print_labels_one": "Stampa {{count}} etichetta",
+        "print_labels_other": "Stampa {{count}} etichette",
+        "acta_file": "Verbale_di_consegna",
+        "discharge_file": "Verbale_di_restituzione",
+        "view_person": "Vedi scheda della persona",
+        "another": "Nuova consegna"
+    },
+    "returns_batch": {
+        "title_one": "Restituisci {{count}} dispositivo al magazzino",
+        "title_other": "Restituisci {{count}} dispositivi al magazzino",
+        "submit_one": "Restituisci {{count}} dispositivo",
+        "submit_other": "Restituisci {{count}} dispositivi",
+        "done_one": "È stato restituito {{count}} dispositivo.",
+        "done_other": "Sono stati restituiti {{count}} dispositivi.",
+        "all_or_nothing": "Si restituiscono tutti o nessuno: se un dispositivo non può essere restituito, Le verrà indicato quale."
+    },
+    "onboarding": {
+        "title": "Inserimento dipendente",
+        "subtitle": "Registri la persona e consegni la postazione e l'accesso in un unico percorso.",
+        "steps": {
+            "person": "Persona",
+            "equipment": "Dotazione della postazione",
+            "access": "Accesso al sistema",
+            "done": "Riepilogo"
+        },
+        "person_help": "Scelga la persona se è già registrata oppure la registri ora.",
+        "existing_person": "Persona registrata",
+        "register_person": "Registra una nuova persona",
+        "continue": "Continua",
+        "skip_equipment": "Continua senza consegnare dispositivi",
+        "equipment_summary_one": "{{count}} dispositivo consegnato",
+        "equipment_summary_other": "{{count}} dispositivi consegnati",
+        "access_exists": "La persona ha già accesso al sistema (utente {{user}}).",
+        "access_help": "Se la persona userà il sistema, crei il suo account; verranno suggeriti utente e ruolo.",
+        "create_user": "Crea utente",
+        "access_by_security": "Gli account di accesso vengono creati dall'amministratore della sicurezza. La persona compare già nel suo elenco.",
+        "back": "Indietro",
+        "finish": "Termina",
+        "done_title": "Inserimento di {{name}} completato",
+        "no_equipment": "In questo inserimento non sono stati consegnati dispositivi.",
+        "another": "Nuovo inserimento"
+    },
+    "import": {
+        "title": "Importa beni",
+        "subtitle": "Carichi i beni da Excel e controlli ogni riga prima di salvare.",
+        "template": "Scarica modello",
+        "step_upload": "File",
+        "choose": "Scegli file .xlsx",
+        "formats": "Excel (.xlsx), fino a 1000 righe e 5 MB.",
+        "columns_help": "Vengono riconosciute le intestazioni del modello e quelle del foglio INVENTARIO: Codice, Categoria, Descrizione, Marca, Modello, Numero di serie, Hostname, Ubicazione, Data di acquisto, Fattura, Costo, Valuta e Note. I beni vengono creati come disponibili; le assegnazioni si fanno poi con la consegna postazione.",
+        "how_title": "Come funziona",
+        "how": {
+            "1": "Scarichi il modello: include le categorie, le ubicazioni e le marche esistenti.",
+            "2": "Compili una riga per bene. Senza codice, viene generato con il prefisso della categoria; senza numero di serie, si usa il codice.",
+            "3": "Carichi il file e controlli l'esito riga per riga. Non viene ancora salvato nulla.",
+            "4": "Confermi: tutto viene creato in un'unica operazione, registrata nel kardex."
+        },
+        "kpi": {
+            "rows": "Righe",
+            "valid": "Pronte per l'importazione",
+            "errors": "Con errori",
+            "new_catalog": "Nuove marche / modelli"
+        },
+        "col": {
+            "row": "Riga",
+            "area": "Ubicazione",
+            "result": "Esito"
+        },
+        "no_problems": "Tutte le righe sono corrette.",
+        "only_problems": "Solo righe con osservazioni",
+        "skip_errors_one": "Ometti {{count}} riga con errori",
+        "skip_errors_other": "Ometti {{count}} righe con errori",
+        "confirm_one": "Importa {{count}} bene",
+        "confirm_other": "Importa {{count}} beni",
+        "auto": "Automatico",
+        "no_serial": "Userà il codice",
+        "status": {
+            "ok": "Corretta"
+        },
+        "done_one": "È stato importato {{count}} bene.",
+        "done_other": "Sono stati importati {{count}} beni.",
+        "done_skipped_one": "È stata omessa {{count}} riga con errori.",
+        "done_skipped_other": "Sono state omesse {{count}} righe con errori.",
+        "view_assets": "Vedi beni",
+        "msg": {
+            "MISSING_TYPE": "Categoria mancante",
+            "TYPE_NOT_FOUND": "Categoria inesistente",
+            "MISSING_BRAND": "Marca mancante",
+            "MISSING_MODEL": "Modello o descrizione mancante",
+            "NEW_BRAND": "Nuova marca",
+            "NEW_MODEL": "Nuovo modello",
+            "CODE_EXISTS": "Il codice esiste già",
+            "CODE_DUPLICATED_IN_FILE": "Codice ripetuto nel file",
+            "CODE_PREFIX_MISMATCH": "Il codice non usa il prefisso della categoria",
+            "TYPE_WITHOUT_PREFIX": "La categoria non ha prefisso: indichi il codice",
+            "AUTO_CODE": "Codice automatico",
+            "NO_SERIAL_USES_CODE": "Senza numero di serie: si userà il codice",
+            "SERIAL_EXISTS": "Il numero di serie esiste già",
+            "SERIAL_DUPLICATED_IN_FILE": "Numero di serie ripetuto nel file",
+            "SERIAL_TOO_SHORT": "Numero di serie troppo corto",
+            "AREA_NOT_FOUND": "Ubicazione inesistente",
+            "MISSING_AREA": "Ubicazione mancante",
+            "INVALID_DATE": "Data non valida",
+            "NO_DATE_USES_TODAY": "Senza data: si userà quella di oggi",
+            "INVALID_COST": "Costo non valido",
+            "INVALID_CURRENCY": "Valuta non valida",
+            "TYPE_FROM_CODE": "Categoria dedotta dal prefisso del codice"
+        },
+        "choose_another": "Scegli un altro file"
+    },
+    "quality": {
+        "title": "Qualità dei dati",
+        "subtitle": "Record da completare o incoerenti. Selezioni ogni voce per vedere e aprire i record.",
+        "all_good": "Tutto in ordine: nessun dato in sospeso.",
+        "pending_one": "{{count}} in sospeso",
+        "pending_other": "{{count}} in sospeso",
+        "more_one": "e {{count}} altro",
+        "more_other": "e altri {{count}}",
+        "checks": {
+            "custodia_persona_inactiva": {
+                "title": "Dispositivi in mano a persone non attive",
+                "help": "Li restituisca o li trasferisca: la persona non lavora più qui."
+            },
+            "estado_inconsistente": {
+                "title": "Stato non coerente con la custodia",
+                "help": "Controlli il dispositivo: stato e assegnazione non coincidono."
+            },
+            "personas_por_clasificar": {
+                "title": "Persone senza reparto definito",
+                "help": "Assegni il reparto effettivo da Dipendenti."
+            },
+            "correos_provisionales": {
+                "title": "Indirizzi email provvisori",
+                "help": "Li sostituisca con l'email aziendale effettiva o sincronizzi con Active Directory."
+            },
+            "activos_sin_serie": {
+                "title": "Beni senza numero di serie del produttore",
+                "help": "Usano il codice interno come numero di serie; inserisca quello reale se esiste."
+            },
+            "activos_sin_costo": {
+                "title": "Beni senza costo registrato",
+                "help": "Senza costo non è possibile valorizzare l'inventario."
+            },
+            "modelos_sin_tipo": {
+                "title": "Modelli senza tipo di bene",
+                "help": "Assegni il tipo affinché la registrazione suggerisca la categoria."
+            }
         }
     }
 }

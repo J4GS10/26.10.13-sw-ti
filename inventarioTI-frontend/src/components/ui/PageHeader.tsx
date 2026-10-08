@@ -1,19 +1,48 @@
-import { Box, Chip, Stack, Typography } from '@mui/material';
+import { Box, Breadcrumbs, Chip, Link, Stack, Typography } from '@mui/material';
+import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import type { ReactNode } from 'react';
+import { Link as RouterLink, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { navItemFor } from '../../router/navigation';
 
 interface PageHeaderProps {
   title: string;
   subtitle?: string;
   badge?: string | number;
   actions?: ReactNode;
+  /** Registro abierto (p. ej. el código del activo): se agrega a las migas de pan. */
+  crumb?: string;
 }
+
+/** Migas de pan: grupo › página › registro. Siempre se sabe dónde se está. */
+const Migas = ({ crumb }: { crumb?: string }) => {
+  const { t } = useTranslation();
+  const { pathname } = useLocation();
+  const item = navItemFor(pathname);
+  if (!item || item.path === '/') return null;
+  const enFicha = !!crumb;
+  return (
+    <Breadcrumbs separator={<NavigateNextIcon sx={{ fontSize: 14 }} />} aria-label={t('workspace.breadcrumbs')}
+      sx={{ mb: 0.5, '& .MuiBreadcrumbs-li': { fontSize: '0.75rem' } }}>
+      <Typography variant="caption" color="text.secondary">{t(`menu_groups.${item.group}`)}</Typography>
+      {enFicha ? (
+        <Link component={RouterLink} to={item.path} underline="hover" variant="caption" color="text.secondary">
+          {t(item.title)}
+        </Link>
+      ) : (
+        <Typography variant="caption" color="text.primary" fontWeight={600}>{t(item.title)}</Typography>
+      )}
+      {enFicha && <Typography variant="caption" color="text.primary" fontWeight={600}>{crumb}</Typography>}
+    </Breadcrumbs>
+  );
+};
 
 /**
  * Encabezado estándar de página: título, subtítulo opcional, badge de conteo y acciones.
  * Las acciones hacen wrap y en pantallas angostas pasan debajo del título, así
  * nunca se salen de la pantalla ni se sobreponen.
  */
-export const PageHeader = ({ title, subtitle, badge, actions }: PageHeaderProps) => (
+export const PageHeader = ({ title, subtitle, badge, actions, crumb }: PageHeaderProps) => (
   <Box
     sx={{
       display: 'flex',
@@ -26,6 +55,7 @@ export const PageHeader = ({ title, subtitle, badge, actions }: PageHeaderProps)
     }}
   >
     <Box sx={{ minWidth: 0, flex: '1 1 280px' }}>
+      <Migas crumb={crumb} />
       <Stack direction="row" alignItems="center" spacing={1.25}>
         <Typography variant="h5" component="h1" noWrap>
           {title}

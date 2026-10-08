@@ -5,6 +5,10 @@ import EditIcon from '@mui/icons-material/Edit';
 import LogoutIcon from '@mui/icons-material/Logout';
 import HowToRegIcon from '@mui/icons-material/HowToReg';
 import AddIcon from '@mui/icons-material/Add';
+import AssignmentIndIcon from '@mui/icons-material/AssignmentInd';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useAccionPagina, useWorkspace } from '../../context/workspace-context';
 import { useTranslation } from 'react-i18next';
 import { useSnackbar } from 'notistack';
 import { getApiErrorMessage } from '../../api/errors';
@@ -19,11 +23,21 @@ import { OffboardingDialog } from './OffboardingDialog';
 import { usePermissions } from '../../hooks/usePermissions';
 export const PersonsPage = () => {
     const { t } = useTranslation();
-    const { canAdminInventory } = usePermissions();
+    const { canAdminInventory, canOperate } = usePermissions();
     const { enqueueSnackbar } = useSnackbar();
+    const { abrirEntrega, agregarReciente } = useWorkspace();
+    const navigate = useNavigate();
+    const location = useLocation();
+    const { personaId } = useParams<{ personaId?: string }>();
+    const [params, setParams] = useSearchParams();
     const [personas, setPersonas] = useState<PersonaResumen[]>([]);
     const [loading, setLoading] = useState(true);
-    const [search, setSearch] = useState('');
+    const search = params.get('q') ?? '';
+    const setSearch = useCallback((v: string) => setParams((prev) => {
+        const next = new URLSearchParams(prev);
+        if (v) next.set('q', v); else next.delete('q');
+        return next;
+    }, { replace: true }), [setParams]);
     const [selected, setSelected] = useState<PersonaResumen | null>(null);
     const [detailOpen, setDetailOpen] = useState(false);
     const [offboardOpen, setOffboardOpen] = useState(false);
@@ -44,6 +58,19 @@ export const PersonsPage = () => {
     useEffect(() => {
         load();
     }, [load]);
+    // Ficha con dirección propia: /empleados/<id>
+    useEffect(() => {
+        if (!personaId) { setDetailOpen(false); return; }
+        const p = personas.find((x) => x.PER_Persona === personaId);
+        if (!p) return;
+        setSelected(p);
+        setDetailOpen(true);
+        agregarReciente({ tipo: 'persona', id: p.PER_Persona, titulo: `${p.PER_Primer_Nombre} ${p.PER_Primer_Apellido}`, subtitulo: p.PER_Email_Corporativo, ruta: `/empleados/${p.PER_Persona}` });
+    }, [personaId, personas, agregarReciente]);
+    const verPersona = (p: PersonaResumen) => navigate({ pathname: `/empleados/${p.PER_Persona}`, search: location.search });
+    const cerrarFicha = () => { setDetailOpen(false); navigate({ pathname: '/empleados', search: location.search }); };
+    const nuevaPersona = useCallback(() => { setSelected(null); setEditOpen(true); }, []);
+    useAccionPagina('nuevo', canAdminInventory ? nuevaPersona : null);
     const handleReactivate = async (p: PersonaResumen) => {
         try {
             await personService.update(p.PER_Persona, { PER_Estado: true });
@@ -71,7 +98,11 @@ export const PersonsPage = () => {
         title={t('persons.title')}
         subtitle={t('persons.subtitle')}
         badge={filtered.length}
-        actions={canAdminInventory ? <Button variant="contained" startIcon={<AddIcon />} onClick={() => { setSelected(null); setEditOpen(true); }}>{t('persons.new')}</Button> : undefined}
+        crumb={detailOpen && selected ? `${selected.PER_Primer_Nombre} ${selected.PER_Primer_Apellido}` : undefined}
+        actions={canAdminInventory ? <>
+            <Button variant="outlined" startIcon={<PersonAddIcon />} onClick={() => navigate('/operaciones/alta-empleado')}>{t('menu.onboarding')}</Button>
+            <Button variant="contained" startIcon={<AddIcon />} onClick={nuevaPersona}>{t('persons.new')}</Button>
+          </> : undefined}
       />
 
       <CollapsibleToolbar storageKey="persons" search={<SearchInput value={search} onChange={setSearch} placeholder={t('persons.search')}/>}/>
@@ -106,8 +137,13 @@ export const PersonsPage = () => {
                     : t('persons.inactive')} size="small" color={p.PER_Estado ? 'success' : 'default'}/>
                   </TableCell>
                   <TableCell align="right">
+                    {canOperate && p.PER_Estado && (<Tooltip title={t('handover.button') as string}>
+                      <IconButton size="small" color="primary" aria-label={t('handover.button')} onClick={() => abrirEntrega({ persona: p })}>
+                        <AssignmentIndIcon fontSize="small"/>
+                      </IconButton>
+                    </Tooltip>)}
                     <Tooltip title={t('persons.view_detail') as string}>
-                      <IconButton size="small" onClick={() => { setSelected(p); setDetailOpen(true); }}>
+                      <IconButton size="small" aria-label={t('persons.view_detail')} onClick={() => verPersona(p)}>
                         <VisibilityIcon fontSize="small"/>
                       </IconButton>
                     </Tooltip>
@@ -129,7 +165,9 @@ export const PersonsPage = () => {
                 </TableRow>)}
       />
 
-      <PersonDetailDialog open={detailOpen} persona={selected} onClose={() => setDetailOpen(false)} onOffboard={() => { setDetailOpen(false); setOffboardOpen(true); }}/>
+      <PersonDetailDialog open={detailOpen} persona={selected} onClose={cerrarFicha}
+        onHandover={canOperate && selected ? () => abrirEntrega({ persona: selected }) : undefined}
+        onOffboard={canAdminInventory ? () => { cerrarFicha(); setOffboardOpen(true); } : undefined}/>
       <OffboardingDialog open={offboardOpen} persona={selected} onClose={() => setOffboardOpen(false)} onCompleted={load}/>
       <PersonDialog open={editOpen} persona={selected} onClose={(refresh) => { setEditOpen(false); setSelected(null); if (refresh)
         load(); }}/>

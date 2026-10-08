@@ -1,3 +1,4 @@
+import AssignmentIndIcon from '@mui/icons-material/AssignmentInd';
 import { useCallback, useEffect, useState } from 'react';
 import { Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, List, ListItem, ListItemText, Stack, Tooltip, Typography, } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
@@ -14,8 +15,10 @@ interface Props {
     persona: PersonaResumen | null;
     onClose: () => void;
     onOffboard?: () => void;
+    /** Abre la entrega de puesto para esta persona. */
+    onHandover?: () => void;
 }
-export const PersonDetailDialog = ({ open, persona, onClose, onOffboard }: Props) => {
+export const PersonDetailDialog = ({ open, persona, onClose, onOffboard, onHandover }: Props) => {
     const { t } = useTranslation();
     const [activos, setActivos] = useState<ActivoVigente[]>([]);
     const [loading, setLoading] = useState(true);
@@ -115,13 +118,16 @@ export const PersonDetailDialog = ({ open, persona, onClose, onOffboard }: Props
           </SectionCard>
         </Stack>
       </DialogContent>
-      {persona.PER_Estado && onOffboard && (<DialogActions sx={{ px: 3, py: 2 }}>
-          <Typography variant="caption" color="text.secondary" sx={{ mr: 'auto' }}>
+      {persona.PER_Estado && (onOffboard || onHandover) && (<DialogActions sx={{ px: 3, py: 2, flexWrap: 'wrap', gap: 1 }}>
+          {onOffboard && (<Typography variant="caption" color="text.secondary" sx={{ mr: 'auto' }}>
             {t('persons.offboarding.hint')}
-          </Typography>
-          <Button variant="contained" color="warning" startIcon={<LogoutIcon />} onClick={onOffboard}>
+          </Typography>)}
+          {onHandover && (<Button variant="contained" startIcon={<AssignmentIndIcon />} onClick={onHandover}>
+            {t('handover.button')}
+          </Button>)}
+          {onOffboard && (<Button variant="outlined" color="warning" startIcon={<LogoutIcon />} onClick={onOffboard}>
             {t('persons.offboarding.from_detail')}
-          </Button>
+          </Button>)}
         </DialogActions>)}
     </Dialog>);
 };

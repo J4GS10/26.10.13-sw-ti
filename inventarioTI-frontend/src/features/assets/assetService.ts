@@ -1,5 +1,6 @@
 import { hoyLocal } from '../../utils/dates';
 import client from '../../api/axios';
+import { apiCache } from '../../api/cache';
 import { Activo, ActivoCreate, Marca, Modelo, ModeloFlat, TipoActivo, EstadoOperativo } from '../../types/inventory';
 import type { Movimiento } from '../../types/traceability';
 
@@ -153,7 +154,7 @@ export const assetService = {
   },
 
   // CATÁLOGOS para los combos
-  getMarcas: async (): Promise<Marca[]> => (await client.get<Marca[]>('/cat/marcas')).data,
+  getMarcas: (): Promise<Marca[]> => apiCache.get('/cat/marcas', async () => (await client.get<Marca[]>('/cat/marcas')).data),
   getModelos: async (marcaId?: number, tipoId?: number): Promise<Modelo[]> => {
     let url = marcaId ? `/cat/modelos?marca_id=${marcaId}` : '/cat/modelos';
     // Cascada Marca + Tipo: pre-filtra en el backend para no abrumar el select.
@@ -161,8 +162,8 @@ export const assetService = {
     return (await client.get<Modelo[]>(url)).data;
   },
   /** Todos los modelos con su marca, en una sola consulta. */
-  getModelosFlat: async (): Promise<ModeloFlat[]> =>
-    (await client.get<ModeloFlat[]>('/cat/modelos-flat', { params: { limit: 1000 } })).data,
-  getTipos: async (): Promise<TipoActivo[]> => (await client.get<TipoActivo[]>('/cat/tipos-activo')).data,
-  getEstados: async (): Promise<EstadoOperativo[]> => (await client.get<EstadoOperativo[]>('/cat/estados-operativos')).data,
+  getModelosFlat: (): Promise<ModeloFlat[]> => apiCache.get('/cat/modelos-flat', async () =>
+    (await client.get<ModeloFlat[]>('/cat/modelos-flat', { params: { limit: 1000 } })).data),
+  getTipos: (): Promise<TipoActivo[]> => apiCache.get('/cat/tipos-activo', async () => (await client.get<TipoActivo[]>('/cat/tipos-activo')).data),
+  getEstados: (): Promise<EstadoOperativo[]> => apiCache.get('/cat/estados-operativos', async () => (await client.get<EstadoOperativo[]>('/cat/estados-operativos')).data),
 };

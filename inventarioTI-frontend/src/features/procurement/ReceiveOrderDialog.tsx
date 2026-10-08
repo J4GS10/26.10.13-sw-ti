@@ -1,3 +1,6 @@
+import AssignmentIndIcon from '@mui/icons-material/AssignmentInd';
+import { useWorkspace } from '../../context/workspace-context';
+import { usePermissions } from '../../hooks/usePermissions';
 import { useEffect, useMemo, useState } from 'react';
 import {
     Alert, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
@@ -75,6 +78,8 @@ const splitLines = (value?: string) => (value ?? '').split(/\r?\n/).map((line) =
 export const ReceiveOrderDialog = ({ open, orden, onClose }: Props) => {
     const { t, i18n } = useTranslation();
     const { enqueueSnackbar } = useSnackbar();
+    const { abrirEntrega } = useWorkspace();
+    const { canOperate } = usePermissions();
     const [consumibles, setConsumibles] = useState<Consumible[]>([]);
     const [tipos, setTipos] = useState<TipoActivo[]>([]);
     const [modelos, setModelos] = useState<ModeloFlat[]>([]);
@@ -253,6 +258,19 @@ export const ReceiveOrderDialog = ({ open, orden, onClose }: Props) => {
         }
     };
 
+    // Recepción → etiquetas → entrega: lo recibido se entrega sin buscarlo de nuevo.
+    const entregarRecibidos = async () => {
+        if (!resultado) return;
+        try {
+            const activos = await Promise.all(resultado.activos_codigos.map((c) => assetService.getActivoByCode(c)));
+            onClose(true);
+            abrirEntrega({ activos });
+        }
+        catch (err) {
+            enqueueSnackbar(getApiErrorMessage(err, t('common.error_generic')), { variant: 'error' });
+        }
+    };
+
     if (!orden)
         return null;
 
@@ -303,6 +321,9 @@ export const ReceiveOrderDialog = ({ open, orden, onClose }: Props) => {
           <DialogActions>
             {resultado.activos_codigos.length > 0 && (<Button startIcon={<QrCode2Icon />} onClick={imprimirEtiquetas}>
                 {t('procurement.recv_print_labels')}
+              </Button>)}
+            {canOperate && resultado.activos_codigos.length > 0 && (<Button startIcon={<AssignmentIndIcon />} onClick={entregarRecibidos}>
+                {t('procurement.recv_handover')}
               </Button>)}
             <Button variant="contained" onClick={() => onClose(true)}>{t('common.close')}</Button>
           </DialogActions>

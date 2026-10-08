@@ -133,7 +133,9 @@
         "audit": "Auditoría",
         "traceability": "Trazabilidad",
         "inventory_count": "Toma de inventario",
-        "approvals": "Aprobaciones"
+        "approvals": "Aprobaciones",
+        "onboarding": "Alta de empleado",
+        "import": "Importar activos"
     },
     "audit": {
         "title": "Auditoría forense",
@@ -248,12 +250,11 @@
         }
     },
     "menu_groups": {
-        "OPERATIONS": "Operación",
-        "PROCUREMENT": "Compras",
-        "ORGANIZATION": "Organización",
-        "CATALOG": "Catálogos",
-        "ADMIN": "Sistema",
-        "SECURITY": "Seguridad"
+        "PROCUREMENT": "Compras y licencias",
+        "ORGANIZATION": "Personas y accesos",
+        "DAILY": "Día a día",
+        "CONTROL": "Control",
+        "SETTINGS": "Catálogos y sistema"
     },
     "departments": {
         "sections": {
@@ -463,11 +464,9 @@
         "filter_state": "Estado",
         "all_states": "Todos los estados",
         "labels": {
-            "download_selected": "Imprimir etiquetas",
             "select_visible": "Seleccionar activos visibles",
             "select_asset": "Seleccionar activo {{code}}",
             "clear_selection": "Quitar selección",
-            "select_required": "Seleccione al menos un activo",
             "too_many_selected": "Seleccione 200 activos o menos",
             "downloaded": "Etiquetas generadas correctamente",
             "selected_count_one": "{{count}} activo seleccionado",
@@ -1201,7 +1200,8 @@
         "recv_surplus_needs_approval": "El sobrante requiere la aprobación del Jefe de TI: la entrega quedará pendiente hasta entonces.",
         "recv_sent_title": "Entrega enviada a aprobación · {{number}}",
         "recv_pending_approval": "La entrega trae un sobrante y quedó pendiente (solicitud #{{id}}). El inventario no cambia hasta que el Jefe de TI la apruebe.",
-        "recv_nothing_yet": "Todavía no se registró nada."
+        "recv_nothing_yet": "Todavía no se registró nada.",
+        "recv_handover": "Entregar a una persona"
     },
     "directory": {
         "title": "Directorio y notificaciones",
@@ -1478,7 +1478,18 @@
         "repair": "Registrar mantenimiento",
         "empty": "Escanee o busque un activo para ver sus datos.",
         "found": "Activo encontrado",
-        "not_found": "No se encontró ningún activo con ese código"
+        "not_found": "No se encontró ningún activo con ese código",
+        "usb_help": "Con lector USB: el código se busca al leerlo (Enter).",
+        "batch": {
+            "toggle": "Modo lote",
+            "help": "Cada código leído se suma a la lista para entregarlos, devolverlos o etiquetarlos juntos.",
+            "added": "{{code}} agregado",
+            "already": "{{code}} ya está en la lista",
+            "count_one": "{{count}} equipo en la lista",
+            "count_other": "{{count}} equipos en la lista",
+            "clear": "Vaciar",
+            "empty": "Escanee o escriba códigos para armar la lista."
+        }
     },
     "api_errors": {
         "VALIDATION_ERROR": "La solicitud no cumple las validaciones del sistema. Revise los datos ingresados.",
@@ -1742,7 +1753,17 @@
         "APPROVAL_NOT_FOUND": "No se encontró la solicitud.",
         "APPROVAL_REQUIRES_REQUESTER": "La solicitud debe tener un solicitante.",
         "ONLY_REQUESTER_CAN_CANCEL": "Solo quien hizo la solicitud puede anularla.",
-        "CURRENCY_DIFFERS_FROM_VALUATION": "Este consumible se valora en {{p1}}: registre la entrada en {{p1}} (no se promedian monedas distintas)."
+        "CURRENCY_DIFFERS_FROM_VALUATION": "Este consumible se valora en {{p1}}: registre la entrada en {{p1}} (no se promedian monedas distintas).",
+        "BATCH_ITEM_FAILED": "No se aplicó ningún cambio. {{item}}: {{reason}}",
+        "IMPORT_ROW_FAILED": "No se importó nada. Fila {{item}}: {{reason}}",
+        "ASSET_ALREADY_WITH_PERSON": "La persona ya tiene este equipo.",
+        "IMPORT_INVALID_FILE": "El archivo no es un Excel (.xlsx) válido.",
+        "IMPORT_HEADERS_NOT_FOUND": "No se encontraron los encabezados (Categoría, Marca, Modelo…). Use la plantilla.",
+        "IMPORT_EMPTY": "El archivo no tiene filas con datos.",
+        "IMPORT_TOO_MANY_ROWS": "El archivo supera el máximo de {{p1}} filas.",
+        "IMPORT_HAS_ERRORS": "Hay filas con error: corríjalas o elija omitirlas.",
+        "IMPORT_NOTHING_TO_IMPORT": "No hay filas válidas para importar.",
+        "SYSTEM_CONFIG_ERROR_MISSING_MOVEMENT_TYPE": "Falta un tipo de movimiento en la configuración del sistema."
     },
     "catalog": {
         "states": {
@@ -2199,7 +2220,13 @@
         "remove_components": "Retirarlos y dejarlos en bodega",
         "approval_note": "La baja se envía como solicitud: el Jefe de TI (otra persona) la aprueba y en ese momento se ejecuta.",
         "request": "Solicitar baja",
-        "requested": "Solicitud de baja de {{code}} enviada al Jefe de TI."
+        "requested": "Solicitud de baja de {{code}} enviada al Jefe de TI.",
+        "title_batch_one": "Solicitar baja de {{count}} equipo",
+        "title_batch_other": "Solicitar baja de {{count}} equipos",
+        "requested_batch_one": "Se solicitó la baja de {{count}} equipo; queda pendiente de aprobación.",
+        "requested_batch_other": "Se solicitó la baja de {{count}} equipos; quedan pendientes de aprobación.",
+        "failed_batch": "No se pudo solicitar la baja de: {{list}}.",
+        "remove_components_batch": "Retirar los componentes instalados, si los tienen"
     },
     "components": {
         "tab": "Componentes",
@@ -2326,6 +2353,269 @@
         "approve_effect": {
             "BAJA": "Al aprobar, el equipo sale del inventario, se liberan sus licencias y la baja queda en el kardex con su nombre como aprobador.",
             "RECEPCION_SOBRANTE": "Al aprobar, se registra la entrega completa (incluido el sobrante) tal como se recibió."
+        }
+    },
+    "workspace": {
+        "search": "Buscar o ejecutar…",
+        "favorites": "Favoritos",
+        "pin": "Agregar «{{page}}» a favoritos",
+        "unpin": "Quitar «{{page}}» de favoritos",
+        "breadcrumbs": "Ruta de navegación"
+    },
+    "palette": {
+        "title": "Buscar o ejecutar",
+        "placeholder": "Busque un activo, una serie, una persona o una acción…",
+        "hint": "Escriba al menos dos caracteres para buscar en todo el inventario.",
+        "no_results": "Sin resultados para «{{q}}».",
+        "custody": "En custodia de {{name}}",
+        "groups": {
+            "actions": "Acciones rápidas",
+            "assets": "Activos",
+            "people": "Personas",
+            "orders": "Órdenes de compra",
+            "recent": "Recientes",
+            "navigation": "Ir a"
+        },
+        "actions": {
+            "handover": "Entrega de puesto",
+            "handover_help": "Varios equipos a una persona, con una sola acta",
+            "new_asset": "Nuevo activo",
+            "onboarding": "Alta de empleado",
+            "onboarding_help": "Persona, equipos y acceso en un solo recorrido",
+            "scan": "Escanear códigos",
+            "import": "Importar activos desde Excel",
+            "shortcuts": "Atajos de teclado"
+        },
+        "footer": {
+            "move": "moverse",
+            "open": "abrir"
+        }
+    },
+    "shortcuts": {
+        "title": "Atajos de teclado",
+        "subtitle": "Funcionan en cualquier pantalla, salvo mientras escribe en un campo.",
+        "palette": "Buscar o ejecutar una acción",
+        "search": "Abrir la búsqueda",
+        "new": "Nuevo registro en la página actual",
+        "handover": "Entrega de puesto",
+        "help": "Ver esta ayuda",
+        "close": "Cerrar un diálogo",
+        "hint_new": "Atajo: N",
+        "go": {
+            "d": "Ir al tablero",
+            "a": "Ir a Activos",
+            "m": "Ir a Movimientos",
+            "s": "Ir al escáner",
+            "e": "Ir a Empleados",
+            "t": "Ir a Trazabilidad",
+            "c": "Ir a Consumibles",
+            "o": "Ir a Órdenes de compra",
+            "r": "Ir a Mantenimiento"
+        }
+    },
+    "views": {
+        "button": "Vistas",
+        "presets": "Predefinidas",
+        "saved": "Guardadas",
+        "clear": "Quitar filtros",
+        "save_current": "Guardar la vista actual…",
+        "save_title": "Guardar vista",
+        "name": "Nombre de la vista",
+        "delete": "Eliminar la vista «{{name}}»"
+    },
+    "bulk": {
+        "handover_one": "Entregar {{count}} equipo",
+        "handover_other": "Entregar {{count}} equipos",
+        "return": "Devolver a bodega",
+        "labels": "Etiquetas",
+        "export": "Exportar selección",
+        "decommission": "Solicitar baja",
+        "none_assigned": "Ninguno de los equipos seleccionados está asignado.",
+        "no_matches": "Ningún activo coincide con los filtros."
+    },
+    "handover": {
+        "title": "Entrega de puesto",
+        "button": "Entrega de puesto",
+        "default_reason": "Entrega de puesto",
+        "sections": {
+            "recipient": "Quién recibe",
+            "equipment_one": "Equipos ({{count}})",
+            "equipment_other": "Equipos ({{count}})",
+            "record": "Registro"
+        },
+        "person": "Persona que recibe",
+        "area": "Área de destino",
+        "kit_department_one": "Kit habitual en {{department}} (según {{count}} persona)",
+        "kit_department_other": "Kit habitual en {{department}} (según {{count}} personas)",
+        "kit_general": "Kit habitual en la empresa",
+        "kit_chip_one": "{{type}} · {{count}} disponible",
+        "kit_chip_other": "{{type}} · {{count}} disponibles",
+        "add_equipment": "Agregar equipo",
+        "add_placeholder": "Código, serie, hostname o modelo",
+        "scanner_help": "Con lector de códigos: escanee y el equipo se agrega solo.",
+        "filtered_by": "Mostrando: {{type}}. Pulse de nuevo el tipo para quitar el filtro.",
+        "code_not_found": "No se encontró el código {{code}}.",
+        "current_status": "Situación actual",
+        "already_with_person": "Ya lo tiene esta persona",
+        "will_transfer": "Se transferirá desde {{name}}",
+        "remove": "Quitar de la lista",
+        "empty_list": "Agregue los equipos escaneándolos, buscándolos o desde el kit sugerido.",
+        "remove_owned": "Quite de la lista los equipos que esta persona ya tiene.",
+        "reason": "Motivo",
+        "ticket": "Ticket",
+        "submit_one": "Entregar {{count}} equipo",
+        "submit_other": "Entregar {{count}} equipos",
+        "done_one": "Se entregó {{count}} equipo a {{person}}.",
+        "done_other": "Se entregaron {{count}} equipos a {{person}}.",
+        "download_acta": "Descargar acta de entrega (PDF)",
+        "download_discharge": "Descargar hoja de descargo (PDF)",
+        "print_labels_one": "Imprimir {{count}} etiqueta",
+        "print_labels_other": "Imprimir {{count}} etiquetas",
+        "acta_file": "Acta_de_entrega",
+        "discharge_file": "Hoja_de_descargo",
+        "view_person": "Ver ficha de la persona",
+        "another": "Nueva entrega"
+    },
+    "returns_batch": {
+        "title_one": "Devolver {{count}} equipo a bodega",
+        "title_other": "Devolver {{count}} equipos a bodega",
+        "submit_one": "Devolver {{count}} equipo",
+        "submit_other": "Devolver {{count}} equipos",
+        "done_one": "Se devolvió {{count}} equipo.",
+        "done_other": "Se devolvieron {{count}} equipos.",
+        "all_or_nothing": "Se devuelven todos o ninguno: si un equipo no se puede devolver, se le indicará cuál."
+    },
+    "onboarding": {
+        "title": "Alta de empleado",
+        "subtitle": "Registre a la persona y entregue su puesto y su acceso en un solo recorrido.",
+        "steps": {
+            "person": "Persona",
+            "equipment": "Equipos del puesto",
+            "access": "Acceso al sistema",
+            "done": "Resumen"
+        },
+        "person_help": "Elija a la persona si ya está registrada o regístrela ahora.",
+        "existing_person": "Persona registrada",
+        "register_person": "Registrar persona nueva",
+        "continue": "Continuar",
+        "skip_equipment": "Continuar sin entregar equipos",
+        "equipment_summary_one": "{{count}} equipo entregado",
+        "equipment_summary_other": "{{count}} equipos entregados",
+        "access_exists": "La persona ya tiene acceso al sistema (usuario {{user}}).",
+        "access_help": "Si la persona usará el sistema, cree su cuenta; se le sugerirán el usuario y el rol.",
+        "create_user": "Crear usuario",
+        "access_by_security": "Las cuentas de acceso las crea el administrador de seguridad. La persona ya aparece en su lista.",
+        "back": "Atrás",
+        "finish": "Finalizar",
+        "done_title": "Ingreso de {{name}} completado",
+        "no_equipment": "No se entregaron equipos en este ingreso.",
+        "another": "Nuevo ingreso"
+    },
+    "import": {
+        "title": "Importar activos",
+        "subtitle": "Cargue activos desde Excel y revise cada fila antes de guardar.",
+        "template": "Descargar plantilla",
+        "step_upload": "Archivo",
+        "choose": "Elegir archivo .xlsx",
+        "formats": "Excel (.xlsx), hasta 1000 filas y 5 MB.",
+        "columns_help": "Se reconocen los encabezados de la plantilla y los de la hoja INVENTARIO: Código, Categoría, Descripción, Marca, Modelo, Serie, Hostname, Ubicación, Fecha de compra, Factura, Costo, Moneda y Observaciones. Los activos entran disponibles; las asignaciones se hacen después con la entrega de puesto.",
+        "how_title": "Cómo funciona",
+        "how": {
+            "1": "Descargue la plantilla: incluye las categorías, ubicaciones y marcas existentes.",
+            "2": "Complete una fila por activo. Sin código, se genera con el prefijo de la categoría; sin serie, se usa el código.",
+            "3": "Suba el archivo y revise el resultado fila por fila. Todavía no se guarda nada.",
+            "4": "Confirme: todo se crea en una sola operación, con su registro en el kardex."
+        },
+        "kpi": {
+            "rows": "Filas",
+            "valid": "Listas para importar",
+            "errors": "Con error",
+            "new_catalog": "Marcas / modelos nuevos"
+        },
+        "col": {
+            "row": "Fila",
+            "area": "Ubicación",
+            "result": "Resultado"
+        },
+        "no_problems": "Todas las filas están correctas.",
+        "only_problems": "Solo filas con observaciones",
+        "skip_errors_one": "Omitir {{count}} fila con error",
+        "skip_errors_other": "Omitir {{count}} filas con error",
+        "confirm_one": "Importar {{count}} activo",
+        "confirm_other": "Importar {{count}} activos",
+        "auto": "Automático",
+        "no_serial": "Usará el código",
+        "status": {
+            "ok": "Correcta"
+        },
+        "done_one": "Se importó {{count}} activo.",
+        "done_other": "Se importaron {{count}} activos.",
+        "done_skipped_one": "Se omitió {{count}} fila con error.",
+        "done_skipped_other": "Se omitieron {{count}} filas con error.",
+        "view_assets": "Ver activos",
+        "msg": {
+            "MISSING_TYPE": "Falta la categoría",
+            "TYPE_NOT_FOUND": "Categoría inexistente",
+            "MISSING_BRAND": "Falta la marca",
+            "MISSING_MODEL": "Falta el modelo o la descripción",
+            "NEW_BRAND": "Marca nueva",
+            "NEW_MODEL": "Modelo nuevo",
+            "CODE_EXISTS": "El código ya existe",
+            "CODE_DUPLICATED_IN_FILE": "Código repetido en el archivo",
+            "CODE_PREFIX_MISMATCH": "El código no usa el prefijo de la categoría",
+            "TYPE_WITHOUT_PREFIX": "La categoría no tiene prefijo: indique el código",
+            "AUTO_CODE": "Código automático",
+            "NO_SERIAL_USES_CODE": "Sin serie: se usará el código",
+            "SERIAL_EXISTS": "La serie ya existe",
+            "SERIAL_DUPLICATED_IN_FILE": "Serie repetida en el archivo",
+            "SERIAL_TOO_SHORT": "Serie demasiado corta",
+            "AREA_NOT_FOUND": "Ubicación inexistente",
+            "MISSING_AREA": "Falta la ubicación",
+            "INVALID_DATE": "Fecha no válida",
+            "NO_DATE_USES_TODAY": "Sin fecha: se usará la de hoy",
+            "INVALID_COST": "Costo no válido",
+            "INVALID_CURRENCY": "Moneda no válida",
+            "TYPE_FROM_CODE": "Categoría deducida del prefijo del código"
+        },
+        "choose_another": "Elegir otro archivo"
+    },
+    "quality": {
+        "title": "Calidad de datos",
+        "subtitle": "Registros por completar o que no cuadran. Pulse cada punto para ver y abrir los registros.",
+        "all_good": "Todo en orden: no hay datos pendientes.",
+        "pending_one": "{{count}} pendiente",
+        "pending_other": "{{count}} pendientes",
+        "more_one": "y {{count}} más",
+        "more_other": "y {{count}} más",
+        "checks": {
+            "custodia_persona_inactiva": {
+                "title": "Equipos en manos de personas inactivas",
+                "help": "Devuélvalos o transfiéralos: la persona ya no trabaja aquí."
+            },
+            "estado_inconsistente": {
+                "title": "Estado que no coincide con la custodia",
+                "help": "Revise el equipo: su estado y su asignación no concuerdan."
+            },
+            "personas_por_clasificar": {
+                "title": "Personas sin departamento definido",
+                "help": "Asigne su departamento real desde Empleados."
+            },
+            "correos_provisionales": {
+                "title": "Correos provisionales",
+                "help": "Reemplácelos por el correo corporativo real o sincronice con Active Directory."
+            },
+            "activos_sin_serie": {
+                "title": "Activos sin serie del fabricante",
+                "help": "Usan el código interno como serie; complete la serie real si existe."
+            },
+            "activos_sin_costo": {
+                "title": "Activos sin costo registrado",
+                "help": "Sin costo no se puede valorar el inventario."
+            },
+            "modelos_sin_tipo": {
+                "title": "Modelos sin tipo de activo",
+                "help": "Asigne el tipo para que el alta sugiera la categoría."
+            }
         }
     }
 }

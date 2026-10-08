@@ -2,17 +2,22 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Box, Typography, TableCell, TableRow, Chip, IconButton, CircularProgress, Button, Tooltip, Select, MenuItem, FormControl, InputLabel, Checkbox,
 } from '@mui/material';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { PageHeader, StatusChip, DataTableShell } from '../../components/ui';
 import EditIcon from '@mui/icons-material/Edit';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import AddIcon from '@mui/icons-material/Add';
 import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
+import AssignmentIndIcon from '@mui/icons-material/AssignmentInd';
+import AssignmentReturnIcon from '@mui/icons-material/AssignmentReturn';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import { useTranslation } from 'react-i18next';
 import { stateLabel, stateVariant } from '../../utils/catalogLabels';
 import { useSnackbar } from 'notistack';
 import { getApiErrorMessage } from '../../api/errors';
 import { downloadCsv } from '../../api/downloadCsv';
+import { guardarArchivo } from '../../api/productividadService';
 import { AssetDialog } from './AssetDialog';
 import { BajaDialog } from './BajaDialog';
 import { AssetDetailDialog } from './AssetDetailDialog';
@@ -20,15 +25,25 @@ import { assetService } from './assetService';
 import { catalogService } from '../catalogs/catalogService';
 import { Activo, EstadoOperativo, Marca, Modelo, TipoActivo } from '../../types/inventory';
 import { ExportMenuButton } from '../../components/ExportMenuButton';
+import { SavedViewsMenu } from '../../components/SavedViewsMenu';
 import { usePermissions } from '../../hooks/usePermissions';
 import { SearchInput } from '../../components/SearchInput';
 import { normalizeLanguage } from '../../types/language';
 import { CollapsibleToolbar } from '../../components/CollapsibleToolbar';
+import { useAccionPagina, useWorkspace } from '../../context/workspace-context';
+
+/** Parámetros de la URL que forman una vista (la página no cuenta). */
+const CLAVES_VISTA = ['q', 'tipo', 'estado'];
 
 export const AssetsPage = () => {
     const { t, i18n } = useTranslation();
     const { canOperate, canAdminInventory, canExport } = usePermissions();
     const { enqueueSnackbar } = useSnackbar();
+    const { abrirEntrega, abrirDevolucion, agregarReciente } = useWorkspace();
+    const navigate = useNavigate();
+    const location = useLocation();
+    const { codigo } = useParams<{ codigo?: string }>();
+    const [params, setParams] = useSearchParams();
 
     // ── Catálogos (para dropdowns) ──────────────────────────────────────────
     const [marcas, setMarcas] = useState<Marca[]>([]);
@@ -41,106 +56,147 @@ export const AssetsPage = () => {
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(true);
 
-    // ── Filtros ─────────────────────────────────────────────────────────────
-    const [searchTerm, setSearchTerm] = useState('');
-    const [debouncedSearch, setDebouncedSearch] = useState('');
-    const [estadoFilter, setEstadoFilter] = useState<number | 'all'>('all');
-    const [tipoFilter, setTipoFilter] = useState<number | 'all'>('all');
+    // ── Filtros y paginación: viven en la URL (se comparten y sobreviven a la navegación) ──
+    const q = params.get('q') ?? '';
+    const tipoFilter: number | 'all' = params.get('tipo') ? Number(params.get('tipo')) : 'all';
+    const estadoFilter: number | 'all' = params.get('estado') ? Number(params.get('estado')) : 'all';
+    const page = Math.max(0, Number(params.get('p') ?? 0) || 0);
+    const rowsPerPage = Number(params.get('n') ?? 25) || 25;
+    const [searchTerm, setSearchTerm] = useState(q);
 
-    // ── Paginación ──────────────────────────────────────────────────────────
-    const [page, setPage] = useState(0);               // MUI: 0-indexed
-    const [rowsPerPage, setRowsPerPage] = useState(25);
+    const setFiltros = useCallback((cambios: Record<string, string | number | null>, reiniciarPagina = true) => {
+        setParams((prev) => {
+            const next = new URLSearchParams(prev);
+            Object.entries(cambios).forEach(([k, v]) => {
+                if (v === null || v === '' || v === 'all') next.delete(k);
+                else next.set(k, String(v));
+            });
+            if (reiniciarPagina) next.delete('p');
+            return next;
+        }, { replace: true });
+    }, [setParams]);
 
-    // ── Selección para etiquetas ────────────────────────────────────────────
-    const [selectedAssetIds, setSelectedAssetIds] = useState<Set<string>>(new Set());
+    const consultaVista = useMemo(() => {
+        const v = new URLSearchParams();
+        CLAVES_VISTA.forEach((k) => { const val = params.get(k); if (val) v.set(k, val); });
+        return v.toString();
+    }, [params]);
+
+    // Texto: debounce hacia la URL, y sincronía si la URL cambia (vista aplicada, atrás/adelante).
+    useEffect(() => { setSearchTerm(q); }, [q]);
+    useEffect(() => {
+        if (searchTerm === q) return undefined;
+        const timer = setTimeout(() => setFiltros({ q: searchTerm.trim() || null }), 400);
+        return () => clearTimeout(timer);
+    }, [searchTerm, q, setFiltros]);
+
+    // ── Selección (persiste entre páginas) ──────────────────────────────────
+    const [seleccion, setSeleccion] = useState<Map<string, Activo>>(new Map());
     const [downloadingLabels, setDownloadingLabels] = useState(false);
+    const [bajaLote, setBajaLote] = useState<Activo[] | null>(null);
 
     // ── Diálogos ────────────────────────────────────────────────────────────
     const [editOpen, setEditOpen] = useState(false);
     const [detailOpen, setDetailOpen] = useState(false);
     const [selected, setSelected] = useState<Activo | null>(null);
+    const [bajaTarget, setBajaTarget] = useState<Activo | null>(null);
 
-
-    // ── Debounce de búsqueda (400ms) ────────────────────────────────────────
+    // ── Cargar catálogos (en caché: navegar de vuelta es inmediato) ─────────
     useEffect(() => {
-        const timer = setTimeout(() => {
-            setDebouncedSearch(searchTerm);
-            setPage(0);
-        }, 400);
-        return () => clearTimeout(timer);
-    }, [searchTerm]);
-
-    // ── Sincronizar idioma de exportación ───────────────────────────────────
-
-    // ── Cargar catálogos (una sola vez al montar) ───────────────────────────
-    const loadCatalogs = useCallback(async () => {
-        try {
-            const [marcasData, tiposData, estadosData, modelosFlat] = await Promise.all([
-                assetService.getMarcas().catch((e) => { console.error('getMarcas', e); return [] as Marca[]; }),
-                assetService.getTipos().catch((e) => { console.error('getTipos', e); return [] as TipoActivo[]; }),
-                assetService.getEstados().catch((e) => { console.error('getEstados', e); return [] as EstadoOperativo[]; }),
-                catalogService.getModelosFlat().catch((e) => { console.error('getModelosFlat', e); return [] as Modelo[]; }),
-            ]);
+        Promise.all([
+            assetService.getMarcas().catch(() => [] as Marca[]),
+            assetService.getTipos().catch(() => [] as TipoActivo[]),
+            assetService.getEstados().catch(() => [] as EstadoOperativo[]),
+            catalogService.getModelosFlat().catch(() => [] as Modelo[]),
+        ]).then(([marcasData, tiposData, estadosData, modelosFlat]) => {
             setMarcas(marcasData);
             setTipos(tiposData);
             setEstados(estadosData);
             setModelos(modelosFlat);
-        } catch (err) {
-            console.error('loadCatalogs error', err);
-        }
+        });
     }, []);
-
-    useEffect(() => { loadCatalogs(); }, [loadCatalogs]);
 
     // ── Cargar página de activos (server-side) ──────────────────────────────
     const loadActivos = useCallback(async () => {
         setLoading(true);
         try {
             const result = await assetService.searchActivos({
-                q: debouncedSearch.trim() || undefined,
-                tipo_activo_id: tipoFilter !== 'all' ? (tipoFilter as number) : undefined,
-                estado_operativo_id: estadoFilter !== 'all' ? (estadoFilter as number) : undefined,
-                page: page + 1,          // MUI 0-indexed → server 1-indexed
+                q: q.trim() || undefined,
+                tipo_activo_id: tipoFilter !== 'all' ? tipoFilter : undefined,
+                estado_operativo_id: estadoFilter !== 'all' ? estadoFilter : undefined,
+                page: page + 1,
                 per_page: rowsPerPage,
             });
             setActivos(result.items);
             setTotal(result.total);
-        } catch (err) {
-            console.error('loadActivos error', err);
+        } catch {
             enqueueSnackbar(t('common.error_loading'), { variant: 'error' });
         } finally {
             setLoading(false);
         }
-    }, [debouncedSearch, tipoFilter, estadoFilter, page, rowsPerPage, enqueueSnackbar, t]);
+    }, [q, tipoFilter, estadoFilter, page, rowsPerPage, enqueueSnackbar, t]);
 
     useEffect(() => { loadActivos(); }, [loadActivos]);
 
-    // ── Limpiar selección si cambia la página/filtros ───────────────────────
+    // ── Ficha con dirección propia: /activos/LAP-00001 ──────────────────────
     useEffect(() => {
-        setSelectedAssetIds((prev) => {
-            if (prev.size === 0) return prev;
-            const existingIds = new Set(activos.map((a) => a.ACT_Activo));
-            const next = new Set([...prev].filter((id) => existingIds.has(id)));
-            return next.size === prev.size ? prev : next;
+        if (!codigo) { setDetailOpen(false); return undefined; }
+        let vivo = true;
+        assetService.getActivoByCode(codigo).then((a) => {
+            if (!vivo) return;
+            setSelected(a);
+            setDetailOpen(true);
+            agregarReciente({ tipo: 'activo', id: a.ACT_Activo, titulo: a.ACT_Codigo_Interno, subtitulo: a.ACT_Serie_Fabricante, ruta: `/activos/${encodeURIComponent(a.ACT_Codigo_Interno)}` });
+        }).catch(() => {
+            if (!vivo) return;
+            enqueueSnackbar(t('scanner.not_found'), { variant: 'warning' });
+            navigate({ pathname: '/activos', search: location.search }, { replace: true });
         });
-    }, [activos]);
+        return () => { vivo = false; };
+        // location.search solo se usa para volver; no debe recargar la ficha.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [codigo, agregarReciente, enqueueSnackbar, navigate, t]);
+
+    // «?nuevo=1» (paleta de comandos o atajo) abre el alta.
+    useEffect(() => {
+        if (params.get('nuevo') && canOperate) {
+            setSelected(null);
+            setEditOpen(true);
+            setFiltros({ nuevo: null }, false);
+        }
+    }, [params, canOperate, setFiltros]);
+
+    const handleNew = useCallback(() => { setSelected(null); setEditOpen(true); }, []);
+    useAccionPagina('nuevo', canOperate ? handleNew : null);
 
     // ── Métricas de filtros activos ─────────────────────────────────────────
-    const activeFilters = [
-        searchTerm.trim(),
-        estadoFilter !== 'all',
-        tipoFilter !== 'all',
-    ].filter(Boolean).length;
+    const activeFilters = [q.trim(), estadoFilter !== 'all', tipoFilter !== 'all'].filter(Boolean).length;
 
-    // ── IDs de la página actual (para checkbox header) ──────────────────────
-    const pagedAssetIds = useMemo(() => activos.map((a) => a.ACT_Activo), [activos]);
-    const selectedCount = selectedAssetIds.size;
-    const selectedVisibleCount = pagedAssetIds.filter((id) => selectedAssetIds.has(id)).length;
-    const allVisibleSelected = pagedAssetIds.length > 0 && selectedVisibleCount === pagedAssetIds.length;
-    const someVisibleSelected = selectedVisibleCount > 0 && selectedVisibleCount < pagedAssetIds.length;
+    // ── Selección ───────────────────────────────────────────────────────────
+    const selectedCount = seleccion.size;
+    const selectedVisibleCount = activos.filter((a) => seleccion.has(a.ACT_Activo)).length;
+    const allVisibleSelected = activos.length > 0 && selectedVisibleCount === activos.length;
+    const someVisibleSelected = selectedVisibleCount > 0 && selectedVisibleCount < activos.length;
+    const handleToggleVisibleSelection = () => {
+        setSeleccion((prev) => {
+            const next = new Map(prev);
+            if (allVisibleSelected) activos.forEach((a) => next.delete(a.ACT_Activo));
+            else activos.forEach((a) => next.set(a.ACT_Activo, a));
+            return next;
+        });
+    };
+    const handleToggleAssetSelection = (asset: Activo) => {
+        setSeleccion((prev) => {
+            const next = new Map(prev);
+            if (next.has(asset.ACT_Activo)) next.delete(asset.ACT_Activo); else next.set(asset.ACT_Activo, asset);
+            return next;
+        });
+    };
+    const limpiarSeleccion = () => setSeleccion(new Map());
+    const tras = () => { limpiarSeleccion(); loadActivos(); };
 
     // ── Resolución de nombres desde catálogos ───────────────────────────────
-    const getTipoName = (id: number) => tipos.find((t) => t.TAC_Tipo_Activo === id)?.TAC_Nombre ?? '—';
+    const getTipoName = (id: number) => tipos.find((tp) => tp.TAC_Tipo_Activo === id)?.TAC_Nombre ?? '—';
     const getEstadoInfo = (id: number) => estados.find((e) => e.EOP_Estado_Operativo === id);
     const getModelo = (id: number) => modelos.find((m) => m.MOD_Modelo === id);
     const getMarcaName = (modeloId: number) => {
@@ -152,51 +208,19 @@ export const AssetsPage = () => {
 
     // ── Handlers ────────────────────────────────────────────────────────────
     const handleEdit = (asset: Activo) => { setSelected(asset); setEditOpen(true); };
-    const handleView = (asset: Activo) => { setSelected(asset); setDetailOpen(true); };
-    const handleNew = () => { setSelected(null); setEditOpen(true); };
-
-    const handleToggleVisibleSelection = () => {
-        setSelectedAssetIds((prev) => {
-            const next = new Set(prev);
-            if (allVisibleSelected) {
-                pagedAssetIds.forEach((id) => next.delete(id));
-            } else {
-                pagedAssetIds.forEach((id) => next.add(id));
-            }
-            return next;
-        });
-    };
-
-    const handleToggleAssetSelection = (assetId: string) => {
-        setSelectedAssetIds((prev) => {
-            const next = new Set(prev);
-            if (next.has(assetId)) next.delete(assetId); else next.add(assetId);
-            return next;
-        });
-    };
-
-
-    const handleClearSelection = () => setSelectedAssetIds(new Set());
+    const handleView = (asset: Activo) => navigate({ pathname: `/activos/${encodeURIComponent(asset.ACT_Codigo_Interno)}`, search: location.search });
+    const cerrarFicha = () => { setDetailOpen(false); setSelected(null); navigate({ pathname: '/activos', search: location.search }); };
 
     const handleDownloadLabels = async () => {
-        const activosIds = [...selectedAssetIds];
-        if (activosIds.length === 0) {
-            enqueueSnackbar(t('assets.labels.select_required'), { variant: 'info' });
-            return;
-        }
-        if (activosIds.length > 200) {
+        const ids = [...seleccion.keys()];
+        if (ids.length > 200) {
             enqueueSnackbar(t('assets.labels.too_many_selected'), { variant: 'warning' });
             return;
         }
         setDownloadingLabels(true);
         try {
-            const blob = await assetService.downloadLabels({ activos_ids: activosIds }, normalizeLanguage(i18n.resolvedLanguage));
-            const url = window.URL.createObjectURL(blob);
-            const anchor = document.createElement('a');
-            anchor.href = url;
-            anchor.download = `etiquetas-activos-${activosIds.length}.pdf`;
-            anchor.click();
-            window.URL.revokeObjectURL(url);
+            const blob = await assetService.downloadLabels({ activos_ids: ids }, normalizeLanguage(i18n.resolvedLanguage));
+            guardarArchivo(blob, `etiquetas-activos-${ids.length}.pdf`);
             enqueueSnackbar(t('assets.labels.downloaded'), { variant: 'success' });
         } catch (error: unknown) {
             enqueueSnackbar(getApiErrorMessage(error, t('common.error_generic')), { variant: 'error' });
@@ -205,21 +229,56 @@ export const AssetsPage = () => {
         }
     };
 
-    // Baja: siempre como solicitud formal (motivo, destino) que aprueba el Jefe de TI.
-    const [bajaTarget, setBajaTarget] = useState<Activo | null>(null);
+    const esAsignado = (a: Activo) => getEstadoInfo(a.EOP_Estado_Operativo)?.EOP_Nombre === 'Asignado';
+    const devolverSeleccion = () => {
+        const asignados = [...seleccion.values()].filter(esAsignado);
+        if (asignados.length === 0) {
+            enqueueSnackbar(t('bulk.none_assigned'), { variant: 'info' });
+            return;
+        }
+        abrirDevolucion({ activos: asignados, onDone: tras });
+    };
+
+    const exportarSeleccion = () => {
+        const celda = (v: string | null | undefined) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+        const filas = [
+            [t('assets.table.code'), t('assets.table.type'), t('assets.dialog.brand'), t('assets.dialog.model'),
+                t('assets.table.serial'), t('assets.table.host'), t('assets.table.status')],
+            ...[...seleccion.values()].map((a) => [a.ACT_Codigo_Interno, getTipoName(a.TAC_Tipo_Activo), getMarcaName(a.MOD_Modelo),
+                getModeloName(a.MOD_Modelo), a.ACT_Serie_Fabricante, a.ACT_Hostname ?? '',
+                stateLabel(t, getEstadoInfo(a.EOP_Estado_Operativo)?.EOP_Nombre)]),
+        ];
+        const csv = '﻿' + filas.map((f) => f.map(celda).join(',')).join('\r\n');
+        guardarArchivo(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `activos-seleccion-${seleccion.size}.csv`);
+    };
+
+    const presets = useMemo(() => ['Disponible', 'Asignado', 'En Reparación']
+        .map((nombre) => estados.find((e) => e.EOP_Nombre === nombre))
+        .filter((e): e is EstadoOperativo => !!e)
+        .map((e) => ({ nombre: stateLabel(t, e.EOP_Nombre), query: `estado=${e.EOP_Estado_Operativo}` })), [estados, t]);
 
     return (
         <Box>
             <PageHeader
                 title={t('assets.title')}
                 badge={total}
+                crumb={detailOpen && selected ? selected.ACT_Codigo_Interno : undefined}
                 actions={(
                     <>
+                        <SavedViewsMenu storageKey="activos" query={consultaVista} presets={presets}
+                            onApply={(query) => setParams(new URLSearchParams(query), { replace: true })} />
                         {canExport && <ExportMenuButton onExport={(lang) => downloadCsv('/export/activos.csv', 'activos.csv', lang)} />}
                         {canOperate && (
-                            <Button variant="contained" startIcon={<AddIcon />} onClick={handleNew}>
-                                {t('assets.new_btn')}
+                            <Button variant="outlined" startIcon={<AssignmentIndIcon />} onClick={() => abrirEntrega({ onDone: loadActivos })}>
+                                {t('handover.button')}
                             </Button>
+                        )}
+                        {canOperate && (
+                            <Tooltip title={t('shortcuts.hint_new')}>
+                                <Button variant="contained" startIcon={<AddIcon />} onClick={handleNew}>
+                                    {t('assets.new_btn')}
+                                </Button>
+                            </Tooltip>
                         )}
                     </>
                 )}
@@ -233,31 +292,21 @@ export const AssetsPage = () => {
                 <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
                     <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 200 } }}>
                         <InputLabel>{t('assets.filter_type')}</InputLabel>
-                        <Select
-                            label={t('assets.filter_type')}
-                            value={tipoFilter}
-                            onChange={(e) => { setTipoFilter(e.target.value as number | 'all'); setPage(0); }}
-                        >
+                        <Select label={t('assets.filter_type')} value={tipos.length ? tipoFilter : 'all'}
+                            onChange={(e) => setFiltros({ tipo: e.target.value as number | 'all' })}>
                             <MenuItem value="all">{t('assets.all_types')}</MenuItem>
                             {tipos.map((tp) => (
-                                <MenuItem key={tp.TAC_Tipo_Activo} value={tp.TAC_Tipo_Activo}>
-                                    {tp.TAC_Nombre}
-                                </MenuItem>
+                                <MenuItem key={tp.TAC_Tipo_Activo} value={tp.TAC_Tipo_Activo}>{tp.TAC_Nombre}</MenuItem>
                             ))}
                         </Select>
                     </FormControl>
                     <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 200 } }}>
                         <InputLabel>{t('assets.filter_state')}</InputLabel>
-                        <Select
-                            label={t('assets.filter_state')}
-                            value={estadoFilter}
-                            onChange={(e) => { setEstadoFilter(e.target.value as number | 'all'); setPage(0); }}
-                        >
+                        <Select label={t('assets.filter_state')} value={estados.length ? estadoFilter : 'all'}
+                            onChange={(e) => setFiltros({ estado: e.target.value as number | 'all' })}>
                             <MenuItem value="all">{t('assets.all_states')}</MenuItem>
                             {estados.map((e) => (
-                                <MenuItem key={e.EOP_Estado_Operativo} value={e.EOP_Estado_Operativo}>
-                                    {stateLabel(t, e.EOP_Nombre)}
-                                </MenuItem>
+                                <MenuItem key={e.EOP_Estado_Operativo} value={e.EOP_Estado_Operativo}>{stateLabel(t, e.EOP_Nombre)}</MenuItem>
                             ))}
                         </Select>
                     </FormControl>
@@ -266,8 +315,8 @@ export const AssetsPage = () => {
 
             <AssetDialog
                 open={editOpen}
-                assetToEdit={selected}
-                onClose={(refresh) => { setEditOpen(false); setSelected(null); if (refresh) loadActivos(); }}
+                assetToEdit={selected && !detailOpen ? selected : null}
+                onClose={(refresh) => { setEditOpen(false); if (!detailOpen) setSelected(null); if (refresh) loadActivos(); }}
             />
             <AssetDetailDialog
                 open={detailOpen}
@@ -276,7 +325,7 @@ export const AssetsPage = () => {
                 modelos={modelos}
                 tipos={tipos}
                 estados={estados}
-                onClose={() => { setDetailOpen(false); setSelected(null); }}
+                onClose={cerrarFicha}
                 onChanged={loadActivos}
             />
 
@@ -286,13 +335,8 @@ export const AssetsPage = () => {
                         key: 'select',
                         padding: 'checkbox',
                         label: (
-                            <Checkbox
-                                color="primary"
-                                indeterminate={someVisibleSelected}
-                                checked={allVisibleSelected}
-                                onChange={handleToggleVisibleSelection}
-                                inputProps={{ 'aria-label': t('assets.labels.select_visible') }}
-                            />
+                            <Checkbox color="primary" indeterminate={someVisibleSelected} checked={allVisibleSelected}
+                                onChange={handleToggleVisibleSelection} inputProps={{ 'aria-label': t('assets.labels.select_visible') }} />
                         ),
                     },
                     { key: 'code', label: t('assets.table.code') },
@@ -309,41 +353,53 @@ export const AssetsPage = () => {
                 total={total}
                 page={page}
                 rowsPerPage={rowsPerPage}
-                onPageChange={setPage}
-                onRowsPerPageChange={(n) => { setRowsPerPage(n); setPage(0); }}
-                emptyTitle={t('assets.table.empty')}
+                onPageChange={(p) => setFiltros({ p: p || null }, false)}
+                onRowsPerPageChange={(n) => setFiltros({ n: n === 25 ? null : n })}
+                emptyTitle={activeFilters ? t('bulk.no_matches') : t('assets.table.empty')}
+                emptyAction={activeFilters ? { label: t('views.clear'), onClick: () => setParams(new URLSearchParams(), { replace: true }) } : undefined}
                 toolbar={selectedCount > 0 ? (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                         <Typography variant="body2" sx={{ fontWeight: 700, mr: 'auto' }}>
                             {t('assets.labels.selected_count', { count: selectedCount })}
                         </Typography>
-                        <Button size="small" onClick={handleClearSelection}>
-                            {t('assets.labels.clear_selection')}
-                        </Button>
+                        <Button size="small" onClick={limpiarSeleccion}>{t('assets.labels.clear_selection')}</Button>
                         {canOperate && (
-                            <Button
-                                size="small"
-                                variant="contained"
-                                startIcon={downloadingLabels ? <CircularProgress size={16} color="inherit" /> : <QrCodeScannerIcon />}
-                                onClick={handleDownloadLabels}
-                                disabled={downloadingLabels}
-                            >
-                                {t('assets.labels.download_selected', { count: selectedCount })}
+                            <Button size="small" variant="contained" startIcon={<AssignmentIndIcon />}
+                                onClick={() => abrirEntrega({ activos: [...seleccion.values()], onDone: tras })}>
+                                {t('bulk.handover', { count: selectedCount })}
+                            </Button>
+                        )}
+                        {canOperate && (
+                            <Button size="small" variant="outlined" startIcon={<AssignmentReturnIcon />} onClick={devolverSeleccion}>
+                                {t('bulk.return')}
+                            </Button>
+                        )}
+                        {canOperate && (
+                            <Button size="small" variant="outlined" onClick={handleDownloadLabels} disabled={downloadingLabels}
+                                startIcon={downloadingLabels ? <CircularProgress size={16} color="inherit" /> : <QrCodeScannerIcon />}>
+                                {t('bulk.labels')}
+                            </Button>
+                        )}
+                        {canExport && (
+                            <Button size="small" variant="outlined" startIcon={<FileDownloadIcon />} onClick={exportarSeleccion}>
+                                {t('bulk.export')}
+                            </Button>
+                        )}
+                        {canAdminInventory && (
+                            <Button size="small" color="error" startIcon={<DeleteOutlineIcon />} onClick={() => setBajaLote([...seleccion.values()])}>
+                                {t('bulk.decommission')}
                             </Button>
                         )}
                     </Box>
                 ) : undefined}
                 renderRow={(row) => {
-                    const isSelected = selectedAssetIds.has(row.ACT_Activo);
+                    const isSelected = seleccion.has(row.ACT_Activo);
                     return (
-                        <TableRow key={row.ACT_Activo} hover selected={isSelected}>
+                        <TableRow key={row.ACT_Activo} hover selected={isSelected} sx={{ cursor: 'pointer' }}
+                            onClick={(e) => { if (!(e.target as HTMLElement).closest('button, input')) handleView(row); }}>
                             <TableCell padding="checkbox">
-                                <Checkbox
-                                    color="primary"
-                                    checked={isSelected}
-                                    onChange={() => handleToggleAssetSelection(row.ACT_Activo)}
-                                    inputProps={{ 'aria-label': t('assets.labels.select_asset', { code: row.ACT_Codigo_Interno }) }}
-                                />
+                                <Checkbox color="primary" checked={isSelected} onChange={() => handleToggleAssetSelection(row)}
+                                    inputProps={{ 'aria-label': t('assets.labels.select_asset', { code: row.ACT_Codigo_Interno }) }} />
                             </TableCell>
                             <TableCell sx={{ fontWeight: 'bold' }}>{row.ACT_Codigo_Interno}</TableCell>
                             <TableCell>{getTipoName(row.TAC_Tipo_Activo)}</TableCell>
@@ -356,13 +412,13 @@ export const AssetsPage = () => {
                             </TableCell>
                             <TableCell align="right">
                                 <Tooltip title={t('common.view') as string}>
-                                    <IconButton size="small" onClick={() => handleView(row)}>
+                                    <IconButton size="small" onClick={() => handleView(row)} aria-label={t('common.view')}>
                                         <VisibilityIcon fontSize="small" />
                                     </IconButton>
                                 </Tooltip>
                                 {canOperate && (
                                     <Tooltip title={t('common.edit') as string}>
-                                        <IconButton size="small" color="primary" onClick={() => handleEdit(row)}>
+                                        <IconButton size="small" color="primary" onClick={() => handleEdit(row)} aria-label={t('common.edit')}>
                                             <EditIcon fontSize="small" />
                                         </IconButton>
                                     </Tooltip>
@@ -380,6 +436,7 @@ export const AssetsPage = () => {
                 }}
             />
             <BajaDialog open={!!bajaTarget} activo={bajaTarget} onClose={(changed) => { setBajaTarget(null); if (changed) loadActivos(); }} />
+            <BajaDialog open={!!bajaLote} activo={null} activos={bajaLote ?? []} onClose={(changed) => { setBajaLote(null); if (changed) tras(); }} />
         </Box>
     );
 };

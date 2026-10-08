@@ -18,6 +18,7 @@ from app.api.v1.endpoints import (
     directory,
     inventario,
     aprobaciones,
+    productividad,
 )
 from app.api import deps
 
@@ -91,6 +92,12 @@ api_router.include_router(
 api_router.include_router(
     stats.router, prefix="/stats", tags=["Dashboard y Métricas"],
     dependencies=_business
+)
+
+# Productividad: búsqueda global, kit sugerido, calidad de datos e importación
+api_router.include_router(
+    productividad.router, prefix="/productividad", tags=["Productividad"],
+    dependencies=_business,
 )
 
 # Exportes CSV

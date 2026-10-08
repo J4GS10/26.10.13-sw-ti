@@ -1,8 +1,13 @@
 import React, { useState } from 'react';
 import {
-  Avatar, Box, ButtonBase, Divider, Drawer, IconButton, List, ListItem, ListItemButton,
+  Avatar, Box, ButtonBase, Collapse, Divider, Drawer, IconButton, List, ListItem, ListItemButton,
   ListItemIcon, ListItemText, ListSubheader, Menu, MenuItem, Tooltip, Typography, alpha, useTheme,
 } from '@mui/material';
+import SearchIcon from '@mui/icons-material/Search';
+import StarIcon from '@mui/icons-material/Star';
+import StarBorderIcon from '@mui/icons-material/StarBorder';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import KeyboardIcon from '@mui/icons-material/Keyboard';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import CheckIcon from '@mui/icons-material/Check';
@@ -14,7 +19,8 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import SecurityIcon from '@mui/icons-material/Security';
 import { useAuth } from '../context/auth-context';
 import { useConfig } from '../context/config-context';
-import { NAVIGATION_ITEMS, NavItem } from '../router/navigation';
+import { NAVIGATION_ITEMS, NavItem, navItemFor } from '../router/navigation';
+import { useWorkspace } from '../context/workspace-context';
 import { normalizeLanguage } from '../types/language';
 import { ChangePasswordDialog } from '../features/auth/ChangePasswordDialog';
 import { AccountSecurityDialog } from '../features/auth/AccountSecurityDialog';
@@ -22,8 +28,11 @@ import { AccountSecurityDialog } from '../features/auth/AccountSecurityDialog';
 export const DRAWER_WIDTH = 256;
 export const DRAWER_COLLAPSED_WIDTH = 72;
 
-type GroupKey = NonNullable<NavItem['group']>;
-const GROUP_ORDER: GroupKey[] = ['OPERATIONS', 'PROCUREMENT', 'ORGANIZATION', 'CATALOG', 'SECURITY', 'ADMIN'];
+type GroupKey = NavItem['group'];
+const GROUP_ORDER: GroupKey[] = ['DAILY', 'CONTROL', 'PROCUREMENT', 'ORGANIZATION', 'SETTINGS'];
+/** Grupos que se pliegan (se abren solos si la página actual está dentro). */
+const PLEGABLES: GroupKey[] = ['SETTINGS'];
+const CLAVE_PLEGADOS = 'sidebar-grupos-abiertos';
 const LANGUAGES = [
   { code: 'es', label: 'Español' },
   { code: 'en', label: 'English' },
@@ -50,6 +59,16 @@ export const Sidebar = ({ variant, collapsed = false, onToggleCollapse, open = f
   const [pwdOpen, setPwdOpen] = useState(false);
   const [securityOpen, setSecurityOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
+  const { abrirPaleta, abrirAtajos, favoritos, alternarFavorito } = useWorkspace();
+  const [abiertos, setAbiertos] = useState<string[]>(() => {
+    try { return JSON.parse(window.localStorage.getItem(CLAVE_PLEGADOS) ?? '[]') as string[]; } catch { return []; }
+  });
+  const alternarGrupo = (g: string) => setAbiertos((prev) => {
+    const next = prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g];
+    try { window.localStorage.setItem(CLAVE_PLEGADOS, JSON.stringify(next)); } catch { /* sin storage */ }
+    return next;
+  });
+  const actual = navItemFor(location.pathname);
 
   const rail = variant === 'permanent' && collapsed;
   const width = rail ? DRAWER_COLLAPSED_WIDTH : DRAWER_WIDTH;
@@ -65,9 +84,10 @@ export const Sidebar = ({ variant, collapsed = false, onToggleCollapse, open = f
   };
   const closeMenu = () => setMenuAnchor(null);
 
-  const renderItem = (item: NavItem) => {
-    const isActive = location.pathname === item.path;
+  const renderItem = (item: NavItem, keyPrefix = '') => {
+    const isActive = actual?.path === item.path;
     const label = t(item.title, item.title);
+    const esFavorito = favoritos.includes(item.path);
     const button = (
       <ListItemButton
         onClick={() => go(item.path)}
@@ -100,7 +120,23 @@ export const Sidebar = ({ variant, collapsed = false, onToggleCollapse, open = f
       </ListItemButton>
     );
     return (
-      <ListItem key={item.path} disablePadding sx={{ mb: 0.25 }}>
+      <ListItem
+        key={keyPrefix + item.path}
+        disablePadding
+        sx={{ mb: 0.25, '&:hover .fav-toggle, & .fav-toggle.Mui-focusVisible': { opacity: 1 } }}
+        secondaryAction={rail ? undefined : (
+          <IconButton
+            className="fav-toggle"
+            size="small"
+            edge="end"
+            onClick={() => alternarFavorito(item.path)}
+            aria-label={t(esFavorito ? 'workspace.unpin' : 'workspace.pin', { page: label })}
+            sx={{ opacity: esFavorito ? 0.9 : 0, mr: 0.25, color: esFavorito ? 'warning.main' : 'text.secondary' }}
+          >
+            {esFavorito ? <StarIcon sx={{ fontSize: 16 }} /> : <StarBorderIcon sx={{ fontSize: 16 }} />}
+          </IconButton>
+        )}
+      >
         {rail ? <Tooltip title={label} placement="right">{button}</Tooltip> : button}
       </ListItem>
     );
@@ -140,24 +176,69 @@ export const Sidebar = ({ variant, collapsed = false, onToggleCollapse, open = f
       </Box>
       <Divider />
 
+      {/* Buscar o ejecutar (Ctrl+K) */}
+      <Box sx={{ px: rail ? 1 : 1.5, pt: 1.25 }}>
+        {rail ? (
+          <Tooltip title={`${t('workspace.search')} (Ctrl+K)`} placement="right">
+            <IconButton onClick={abrirPaleta} aria-label={t('workspace.search')} sx={{ width: '100%', borderRadius: 1.5 }}>
+              <SearchIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        ) : (
+          <ButtonBase onClick={abrirPaleta} aria-label={t('workspace.search')} sx={{
+            width: '100%', justifyContent: 'flex-start', gap: 1, px: 1.25, py: 0.9, borderRadius: 1.5,
+            border: 1, borderColor: 'divider', color: 'text.secondary', bgcolor: 'action.hover',
+            '&:hover': { borderColor: 'primary.main', color: 'text.primary' },
+          }}>
+            <SearchIcon fontSize="small" />
+            <Typography variant="body2" sx={{ flex: 1, textAlign: 'left' }} noWrap>{t('workspace.search')}</Typography>
+            <Box component="kbd" sx={{ fontSize: '0.68rem', fontFamily: 'inherit', fontWeight: 700, px: 0.6, borderRadius: 0.75, border: 1, borderColor: 'divider' }}>Ctrl K</Box>
+          </ButtonBase>
+        )}
+      </Box>
+
       {/* Navegación */}
       <List component="nav" dense sx={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', px: rail ? 1 : 1.5, py: 1 }}>
+        {!rail && menuItems.some((m) => favoritos.includes(m.path)) && (
+          <>
+            <ListSubheader disableSticky sx={{
+              bgcolor: 'transparent', lineHeight: 1, px: 1.5, pt: 0.5, pb: 1,
+              typography: 'overline', fontSize: '0.68rem', color: 'text.secondary',
+            }}>
+              {t('workspace.favorites')}
+            </ListSubheader>
+            {menuItems.filter((m) => favoritos.includes(m.path)).map((m) => renderItem(m, 'fav-'))}
+          </>
+        )}
         {GROUP_ORDER.map((g, index) => {
-          const items = menuItems.filter((m) => (m.group ?? 'OPERATIONS') === g);
+          const items = menuItems.filter((m) => m.group === g);
           if (items.length === 0) return null;
+          const plegable = PLEGABLES.includes(g) && !rail;
+          const abierto = !plegable || abiertos.includes(g) || items.some((m) => m.path === actual?.path);
+          const subheaderSx = {
+            bgcolor: 'transparent', lineHeight: 1, px: 1.5, pt: index === 0 ? 0.5 : 2, pb: 1,
+            typography: 'overline', fontSize: '0.68rem', color: 'text.secondary',
+          } as const;
           return (
             <React.Fragment key={g}>
               {rail
                 ? index > 0 && <Divider sx={{ my: 1 }} />
-                : (
-                  <ListSubheader disableSticky sx={{
-                    bgcolor: 'transparent', lineHeight: 1, px: 1.5, pt: index === 0 ? 0.5 : 2, pb: 1,
-                    typography: 'overline', fontSize: '0.68rem', color: 'text.secondary',
-                  }}>
-                    {t(`menu_groups.${g}`, g)}
+                : plegable ? (
+                  <ListSubheader disableSticky sx={{ ...subheaderSx, px: 0, pt: 1.5, pb: 0.5 }}>
+                    <ButtonBase onClick={() => alternarGrupo(g)} aria-expanded={abierto}
+                      sx={{ width: '100%', justifyContent: 'space-between', px: 1.5, py: 0.5, borderRadius: 1, typography: 'overline', fontSize: '0.68rem' }}>
+                      {t(`menu_groups.${g}`)}
+                      <ExpandMoreIcon sx={{ fontSize: 16, transition: 'transform 150ms', transform: abierto ? 'rotate(180deg)' : 'none' }} />
+                    </ButtonBase>
+                  </ListSubheader>
+                ) : (
+                  <ListSubheader disableSticky sx={subheaderSx}>
+                    {t(`menu_groups.${g}`)}
                   </ListSubheader>
                 )}
-              {items.map(renderItem)}
+              <Collapse in={abierto || rail} timeout="auto" unmountOnExit>
+                {items.map((m) => renderItem(m))}
+              </Collapse>
             </React.Fragment>
           );
         })}
@@ -217,6 +298,10 @@ export const Sidebar = ({ variant, collapsed = false, onToggleCollapse, open = f
           </MenuItem>
         ))}
         <Divider />
+        <MenuItem dense onClick={() => { abrirAtajos(); closeMenu(); }}>
+          <ListItemIcon><KeyboardIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>{t('shortcuts.title')}</ListItemText>
+        </MenuItem>
         <MenuItem dense onClick={() => { setSecurityOpen(true); closeMenu(); }}>
           <ListItemIcon><SecurityIcon fontSize="small" /></ListItemIcon>
           <ListItemText>{t('security.account.title')}</ListItemText>

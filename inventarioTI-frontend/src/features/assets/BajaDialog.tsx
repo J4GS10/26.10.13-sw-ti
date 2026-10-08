@@ -10,9 +10,13 @@ import { getApiErrorCode, getApiErrorMessage, getApiErrorParams } from '../../ap
 import { DESTINOS_BAJA, MOTIVOS_BAJA, type BajaPayload } from '../../types/kardex';
 import { hoyLocal } from '../../utils/dates';
 
+type ActivoRef = { ACT_Activo: string; ACT_Codigo_Interno: string };
+
 interface Props {
   open: boolean;
-  activo: { ACT_Activo: string; ACT_Codigo_Interno: string } | null;
+  activo: ActivoRef | null;
+  /** Solicitud de baja para varios equipos con los mismos datos (cada uno queda pendiente de aprobación). */
+  activos?: ActivoRef[];
   onClose: (changed: boolean) => void;
 }
 
@@ -21,7 +25,8 @@ interface Props {
  * del inventario que queda en el kardex; libera las licencias del equipo y,
  * si tiene componentes instalados, pide confirmación para retirarlos.
  */
-export const BajaDialog = ({ open, activo, onClose }: Props) => {
+export const BajaDialog = ({ open, activo, activos, onClose }: Props) => {
+  const lote = activos && activos.length > 0 ? activos : null;
   const { t } = useTranslation();
   const { enqueueSnackbar } = useSnackbar();
   const [motivo, setMotivo] = useState<BajaPayload['motivo'] | ''>('');
@@ -47,7 +52,31 @@ export const BajaDialog = ({ open, activo, onClose }: Props) => {
   const requiereDetalle = motivo === 'OTRO' || destino === 'OTRO';
   const valido = !!motivo && !!destino && (!requiereDetalle || !!observacion.trim()) && (componentes == null || retirar);
 
+  const confirmarLote = async (lista: ActivoRef[]) => {
+    if (!motivo || !destino) return;
+    setEnviando(true);
+    const fallidos: string[] = [];
+    for (const a of lista) {
+      try {
+        await inventarioService.darDeBaja(a.ACT_Activo, {
+          motivo, destino, fecha, documento: documento.trim() || undefined,
+          observacion: observacion.trim() || undefined, retirar_componentes: retirar,
+        });
+      } catch {
+        fallidos.push(a.ACT_Codigo_Interno);
+      }
+    }
+    setEnviando(false);
+    const hechos = lista.length - fallidos.length;
+    if (hechos) enqueueSnackbar(t('decommission.requested_batch', { count: hechos }), { variant: 'success' });
+    if (fallidos.length) {
+      enqueueSnackbar(t('decommission.failed_batch', { list: fallidos.join(', ') }), { variant: 'warning', autoHideDuration: 10000 });
+    }
+    onClose(hechos > 0);
+  };
+
   const confirmar = async () => {
+    if (lote) { await confirmarLote(lote); return; }
     if (!activo || !motivo || !destino) return;
     setEnviando(true);
     try {
@@ -72,7 +101,7 @@ export const BajaDialog = ({ open, activo, onClose }: Props) => {
 
   return (
     <Dialog open={open} onClose={() => onClose(false)} maxWidth="sm" fullWidth>
-      <DialogTitle>{t('decommission.title', { code: activo?.ACT_Codigo_Interno ?? '' })}</DialogTitle>
+      <DialogTitle>{lote ? t('decommission.title_batch', { count: lote.length }) : t('decommission.title', { code: activo?.ACT_Codigo_Interno ?? '' })}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
           <Alert severity="warning">{t('decommission.warning')}</Alert>
@@ -95,6 +124,11 @@ export const BajaDialog = ({ open, activo, onClose }: Props) => {
             multiline minRows={2} inputProps={{ maxLength: 500 }} required={requiereDetalle}
             error={requiereDetalle && !observacion.trim()}
             helperText={requiereDetalle ? t('decommission.note_required') : undefined} />
+          {lote && (
+            <FormControlLabel
+              control={<Checkbox checked={retirar} onChange={(e) => setRetirar(e.target.checked)} />}
+              label={t('decommission.remove_components_batch')} />
+          )}
           {componentes != null && (
             <Alert severity="info">
               {t('decommission.has_components', { count: componentes })}

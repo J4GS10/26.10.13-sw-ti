@@ -1,3 +1,4 @@
+import { apiCache } from './cache';
 /**
  * Almacenamiento centralizado de tokens.
  *
@@ -46,6 +47,7 @@ export const tokenStorage = {
   },
 
   clear(): void {
+    apiCache.clear();
     accessTokenInMemory = null;
     removeBrowserStorageItem('sessionStorage', SESSION_MARKER_KEY);
     removeBrowserStorageItem('sessionStorage', 'rtk');

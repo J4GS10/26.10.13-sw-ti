@@ -23,6 +23,9 @@ import { normalizeLanguage } from '../../types/language';
 import { downloadCsv } from '../../api/downloadCsv';
 import { CollapsibleToolbar } from '../../components/CollapsibleToolbar';
 import { PageHeader, StatusChip, DataTableShell } from '../../components/ui';
+import AssignmentIndIcon from '@mui/icons-material/AssignmentInd';
+import { useSearchParams } from 'react-router-dom';
+import { useAccionPagina, useWorkspace } from '../../context/workspace-context';
 export const MovementsPage = () => {
     const { t, i18n } = useTranslation();
     const { canOperate, canExport } = usePermissions();
@@ -31,9 +34,20 @@ export const MovementsPage = () => {
     const [loading, setLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [devolucion, setDevolucion] = useState<Movimiento | null>(null);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [tipoFiltro, setTipoFiltro] = useState<string>('all');
-    const [estadoFiltro, setEstadoFiltro] = useState<'all' | 'vigente' | 'cerrado'>('all');
+    // Filtros en la URL: se comparten con un enlace y sobreviven a la navegación.
+    const [params, setParams] = useSearchParams();
+    const { abrirEntrega } = useWorkspace();
+    const setParam = useCallback((k: string, v: string) => setParams((prev) => {
+        const next = new URLSearchParams(prev);
+        if (v && v !== 'all') next.set(k, v); else next.delete(k);
+        return next;
+    }, { replace: true }), [setParams]);
+    const searchTerm = params.get('q') ?? '';
+    const setSearchTerm = useCallback((v: string) => setParam('q', v), [setParam]);
+    const tipoFiltro = params.get('tipo') ?? 'all';
+    const setTipoFiltro = (v: string) => setParam('tipo', v);
+    const estadoFiltro = (params.get('estado') ?? 'all') as 'all' | 'vigente' | 'cerrado';
+    const setEstadoFiltro = (v: 'all' | 'vigente' | 'cerrado') => setParam('estado', v);
     // --- ESTADOS DE PRODUCCIÓN (Mantenidos para funcionalidad de Lote) ---
     const [selected, setSelected] = useState<string[]>([]);
     const [downloading, setDownloading] = useState(false);
@@ -61,6 +75,14 @@ export const MovementsPage = () => {
     useEffect(() => {
         loadData();
     }, [loadData]);
+    useAccionPagina('nuevo', canOperate ? () => setIsDialogOpen(true) : null);
+    // «?entrega=1» abre la entrega de puesto (enlace desde otras pantallas).
+    useEffect(() => {
+        if (params.get('entrega') && canOperate) {
+            abrirEntrega({ onDone: loadData });
+            setParam('entrega', '');
+        }
+    }, [params, canOperate, abrirEntrega, loadData, setParam]);
     // Tipos de movimiento presentes (para el filtro de bitácora).
     const tiposPresentes = Array.from(new Set(movimientos.map((m) => m.tipo_movimiento?.TMO_Nombre).filter(Boolean) as string[])).sort();
     // --- LÓGICA DE FILTRADO (búsqueda + tipo + estado del movimiento) ---
@@ -164,8 +186,11 @@ export const MovementsPage = () => {
         badge={filteredMovs.length}
         actions={<>
           {canExport && <ExportMenuButton onExport={(lang) => downloadCsv('/export/movimientos.csv', 'movimientos.csv', lang)}/>}
-          {canOperate && (<Button variant="contained" startIcon={<SwapHorizIcon />} onClick={() => setIsDialogOpen(true)}>
+          {canOperate && (<Button variant="outlined" startIcon={<SwapHorizIcon />} onClick={() => setIsDialogOpen(true)}>
             {t('operations.new_btn')}
+          </Button>)}
+          {canOperate && (<Button variant="contained" startIcon={<AssignmentIndIcon />} onClick={() => abrirEntrega({ onDone: loadData })}>
+            {t('handover.button')}
           </Button>)}
         </>}
       />
