@@ -23,11 +23,14 @@ class TipoMantenimientoResponse(TipoMantenimientoBase):
 
 # --- DETALLE (ITEMS) ---
 class DetalleMantenimientoBase(Esquema):
-    DMA_Accion_Realizada: str = Field(..., min_length=5, max_length=255)
+    DMA_Accion_Realizada: str = Field(..., max_length=255)
     DMA_Costo_Item: Decimal = Field(default=0, ge=0)
+    # Acción del catálogo; DMA_Accion_Realizada queda como el detalle escrito.
+    AMA_Accion: Optional[int] = None
 
 class DetalleCreate(DetalleMantenimientoBase):
-    pass
+    # Con acción del catálogo el detalle es opcional (se usa su nombre).
+    DMA_Accion_Realizada: str = Field("", max_length=255)
 
 class DetalleResponse(DetalleMantenimientoBase):
     DMA_Detalle_Mant: int
@@ -39,6 +42,8 @@ class MantenimientoBase(Esquema):
     PER_Persona_Solicita: uuid.UUID
     TMA_Tipo_Mantenimiento: int
     MAN_Descripcion_Falla: str
+    # Tipo de falla del catálogo; MAN_Descripcion_Falla queda como el detalle.
+    TFA_Tipo_Falla: Optional[int] = None
     MAN_Costo_Total: Decimal = Field(default=0, ge=0)
     # Moneda del ticket (aplica al total y a los detalles).
     MAN_Moneda: CurrencyCode = DEFAULT_CURRENCY
@@ -46,7 +51,7 @@ class MantenimientoBase(Esquema):
 class MantenimientoCreate(MantenimientoBase):
     # Cota de longitud SOLO en la entrada (la base queda laxa para que los
     # Response no fallen ante descripciones legadas largas en BD).
-    MAN_Descripcion_Falla: str = Field(..., max_length=2000)
+    MAN_Descripcion_Falla: str = Field("", max_length=2000)
     # Lista opcional de acciones realizadas
     detalles: List[DetalleCreate] = []
 

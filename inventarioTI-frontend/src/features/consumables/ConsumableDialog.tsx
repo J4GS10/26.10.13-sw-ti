@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, CircularProgress, Stack, } from '@mui/material';
+import { Autocomplete, Chip, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, CircularProgress, Stack, } from '@mui/material';
+import { catalogService } from '../catalogs/catalogService';
+import type { Modelo } from '../../types/catalogs';
 import { useTranslation } from 'react-i18next';
 import { MoneyField, SectionCard, SedeField, SuggestionHint } from '../../components/ui';
 import { DEFAULT_CURRENCY } from '../../utils/currency';
@@ -10,6 +12,8 @@ import { useSnackbar } from 'notistack';
 import { getApiErrorDetail, getApiErrorMessage } from '../../api/errors';
 import { consumableService } from './consumableService';
 import { Consumible, ConsumibleCreate } from '../../types/consumables';
+import { CatalogField } from '../../components/CatalogField';
+import { useCatalogo } from '../../hooks/useCatalogo';
 interface Props {
     open: boolean;
     onClose: (refresh?: boolean) => void;
@@ -18,8 +22,6 @@ interface Props {
 interface ConsumibleFormValues {
     CON_Nombre: string;
     CON_Descripcion: string;
-    CON_Categoria: string;
-    CON_Unidad: string;
     CON_Stock_Minimo: string | number;
     CON_Stock_Actual?: string | number;
 }
@@ -28,12 +30,19 @@ export const ConsumableDialog = ({ open, onClose, toEdit }: Props) => {
     const { enqueueSnackbar } = useSnackbar();
     const isEdit = !!toEdit;
     const { register, handleSubmit, reset, formState: { errors } } = useForm<ConsumibleFormValues>();
+    // Categoría y unidad del catálogo (la unidad por defecto es «Unidad»).
+    const [categoria, setCategoria] = useState<number | null>(null);
+    const [unidad, setUnidad] = useState<number | null>(null);
+    const { items: unidades } = useCatalogo('unidades-medida');
     const [loading, setLoading] = useState(false);
     // Bodega (sede) donde se almacena; con una sola sede se prellena.
     const [sede, setSede] = useState<number | ''>('');
     // Costo del saldo inicial (valoriza el stock desde el primer día).
     const [costoInicial, setCostoInicial] = useState('');
     const [moneda, setMoneda] = useState<string>(DEFAULT_CURRENCY);
+    // Modelos de equipo compatibles (tóner → impresoras): guían la salida a un equipo.
+    const [modelos, setModelos] = useState<Modelo[]>([]);
+    const [compatibles, setCompatibles] = useState<number[]>([]);
     const { sedes, loading: loadingSedes, unica } = useSedes(open);
     const sedeHint = useSuggestion<number | ''>({
         current: sede,
@@ -48,21 +57,29 @@ export const ConsumableDialog = ({ open, onClose, toEdit }: Props) => {
         if (!open)
             return;
         setSede(toEdit?.SED_Sede ?? '');
+        setCategoria(toEdit?.CCO_Categoria ?? null);
+        setUnidad(toEdit?.UME_Unidad ?? null);
+        setCompatibles([]);
+        catalogService.getModelosFlat().then(setModelos).catch(() => setModelos([]));
         if (toEdit) {
+            consumableService.compatibles(toEdit.CON_Consumible).then((c) => setCompatibles(c.map((x) => x.MOD_Modelo)))
+                .catch(() => setCompatibles([]));
             reset({
                 CON_Nombre: toEdit.CON_Nombre,
                 CON_Descripcion: toEdit.CON_Descripcion ?? '',
-                CON_Categoria: toEdit.CON_Categoria ?? '',
-                CON_Unidad: toEdit.CON_Unidad,
                 CON_Stock_Minimo: toEdit.CON_Stock_Minimo,
             });
         }
         else {
-            reset({ CON_Nombre: '', CON_Descripcion: '', CON_Categoria: '', CON_Unidad: 'unidad', CON_Stock_Minimo: 0, CON_Stock_Actual: 0 });
+            reset({ CON_Nombre: '', CON_Descripcion: '', CON_Stock_Minimo: 0, CON_Stock_Actual: 0 });
             setCostoInicial('');
             setMoneda(DEFAULT_CURRENCY);
         }
     }, [open, toEdit, reset]);
+    useEffect(() => {
+        // Alta: la unidad por defecto es «Unidad» (el campo es obligatorio).
+        if (open && !toEdit && unidad === null) setUnidad(unidades.find((u) => u.codigo === 'UNIDAD')?.id ?? null);
+    }, [open, toEdit, unidad, unidades]);
     const onSubmit = async (data: ConsumibleFormValues) => {
         setLoading(true);
         try {
@@ -70,8 +87,15 @@ export const ConsumableDialog = ({ open, onClose, toEdit }: Props) => {
                 enqueueSnackbar(t('scope.sede_required'), { variant: 'warning' });
                 return;
             }
+            if (unidad === null) {
+                enqueueSnackbar(t('consumables.unit_required'), { variant: 'warning' });
+                return;
+            }
             const payload: ConsumibleCreate = {
                 ...data,
+                CCO_Categoria: categoria,
+                UME_Unidad: unidad,
+                CON_Unidad: unidades.find((u) => u.id === unidad)?.nombre.toLowerCase().slice(0, 20) ?? 'unidad',
                 CON_Stock_Minimo: Number(data.CON_Stock_Minimo),
                 CON_Stock_Actual: Number(data.CON_Stock_Actual ?? 0),
                 SED_Sede: sede === '' ? null : Number(sede),
@@ -84,10 +108,12 @@ export const ConsumableDialog = ({ open, onClose, toEdit }: Props) => {
                 const updatePayload: Partial<ConsumibleCreate> = { ...payload };
                 delete updatePayload.CON_Stock_Actual;
                 await consumableService.update(toEdit.CON_Consumible, updatePayload);
+                await consumableService.setCompatibles(toEdit.CON_Consumible, compatibles);
                 enqueueSnackbar(t('common.success_update'), { variant: 'success' });
             }
             else {
-                await consumableService.create(payload);
+                const creado = await consumableService.create(payload);
+                if (compatibles.length) await consumableService.setCompatibles(creado.CON_Consumible, compatibles);
                 enqueueSnackbar(t('consumables.created'), { variant: 'success' });
             }
             onClose(true);
@@ -112,8 +138,10 @@ export const ConsumableDialog = ({ open, onClose, toEdit }: Props) => {
           <TextField autoFocus fullWidth margin="dense" label={t('consumables.field_name')} {...register('CON_Nombre', { required: true, minLength: 2 })} error={!!errors.CON_Nombre} helperText={errors.CON_Nombre ? t('common.required') : ''}/>
           <TextField fullWidth margin="dense" label={t('consumables.field_description')} {...register('CON_Descripcion')}/>
           <Stack direction="row" spacing={2}>
-            <TextField fullWidth margin="dense" label={t('consumables.field_category')} {...register('CON_Categoria')}/>
-            <TextField fullWidth margin="dense" label={t('consumables.field_unit')} {...register('CON_Unidad', { required: true })}/>
+            <CatalogField clave="categorias-consumible" label={t('consumables.field_category')}
+              value={categoria} onChange={(v) => setCategoria(v as number | null)}/>
+            <CatalogField clave="unidades-medida" label={t('consumables.field_unit')} required
+              value={unidad} onChange={(v) => setUnidad(v as number | null)}/>
           </Stack>
           <SedeField margin="dense" required={!isEdit} value={sede} onChange={setSede} sedes={sedes} loading={loadingSedes} label={t('scope.warehouse_sede')} helperText={sedeHint ? undefined : t('scope.consumable_sede_help')}/>
           <SuggestionHint hint={sedeHint}/>
@@ -125,6 +153,14 @@ export const ConsumableDialog = ({ open, onClose, toEdit }: Props) => {
             {!isEdit && (<MoneyField fullWidth margin="dense" label={t('consumables.initial_cost')} helperText={t('consumables.initial_cost_help')}
                 value={costoInicial} onChange={setCostoInicial} currency={moneda} onCurrencyChange={setMoneda}/>)}
           </Stack>
+          </SectionCard>
+          <SectionCard title={t('consumables.compatible_title')} subtitle={t('consumables.compatible_help')}>
+            <Autocomplete multiple options={modelos} value={modelos.filter((m) => compatibles.includes(m.MOD_Modelo))}
+              getOptionLabel={(m) => `${(m as Modelo & { MAR_Nombre?: string }).MAR_Nombre ?? ''} ${m.MOD_Nombre}`.trim()}
+              isOptionEqualToValue={(a, b) => a.MOD_Modelo === b.MOD_Modelo}
+              onChange={(_, v) => setCompatibles(v.map((m) => m.MOD_Modelo))}
+              renderTags={(v, getTagProps) => v.map((m, i) => <Chip {...getTagProps({ index: i })} key={m.MOD_Modelo} size="small" label={m.MOD_Nombre}/>)}
+              renderInput={(params) => <TextField {...params} margin="dense" label={t('consumables.compatible_models')}/>}/>
           </SectionCard>
           </Stack>
         </DialogContent>

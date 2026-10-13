@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
-import { Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Button, IconButton, Collapse, Chip, CircularProgress, Alert, Stack, Tooltip, } from '@mui/material';
+import { Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Button, IconButton, Collapse, Chip, CircularProgress, Stack, Tooltip, } from '@mui/material';
 import { PageHeader, DataTableShell, StatusChip } from '../../components/ui';
 import { alpha } from '@mui/material/styles';
 import type { SxProps, Theme } from '@mui/material/styles';
@@ -9,9 +9,6 @@ import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import AddCardIcon from '@mui/icons-material/AddCard';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import CategoryIcon from '@mui/icons-material/Category';
 import HistoryIcon from '@mui/icons-material/History';
@@ -20,9 +17,11 @@ import { ExportMenuButton } from '../../components/ExportMenuButton';
 import { downloadCsv } from '../../api/downloadCsv';
 import { formatMoney } from '../../utils/currency';
 import { useTranslation } from 'react-i18next';
+import { useCatalogLabel, useCatalogo } from '../../hooks/useCatalogo';
+import { CredentialsPanel } from './CredentialsPanel';
 import { getApiErrorMessage } from '../../api/errors';
 import { softwareService } from './softwareService';
-import type { Software, Licencia, LicenciaClave } from '../../types/software';
+import type { Software, Licencia } from '../../types/software';
 import { SoftwareDialog } from './SoftwareDialog';
 import { LicenseDialog } from './LicenseDialog';
 import { LicenseTypesDialog } from './LicenseTypesDialog';
@@ -31,20 +30,6 @@ import { SearchInput } from '../../components/SearchInput';
 import { CollapsibleToolbar } from '../../components/CollapsibleToolbar';
 import { useConfirm } from '../../components/confirm-context';
 import { usePermissions } from '../../hooks/usePermissions';
-const maskLicenseKey = (value?: string | null) => {
-    if (!value)
-        return '';
-    if (value.length <= 8)
-        return '*'.repeat(value.length);
-    return `${value.slice(0, 4)}-${'*'.repeat(Math.min(12, Math.max(4, value.length - 8)))}-${value.slice(-4)}`;
-};
-const keyStatusColor = (status: LicenciaClave['LCL_Estado']) => {
-    if (status === 'ASIGNADA')
-        return 'warning';
-    if (status === 'RETIRADA')
-        return 'default';
-    return 'success';
-};
 const formatDate = (value?: string | null) => {
     if (!value)
         return '-';
@@ -69,22 +54,6 @@ const keyPanelSx: SxProps<Theme> = (theme) => ({
     borderRadius: 2,
     bgcolor: alpha(theme.palette.primary.main, theme.palette.mode === 'light' ? 0.035 : 0.1),
 });
-const keyValueSx: SxProps<Theme> = (theme) => ({
-    display: 'inline-flex',
-    alignItems: 'center',
-    maxWidth: '100%',
-    px: 1,
-    py: 0.5,
-    border: '1px solid',
-    borderColor: 'divider',
-    borderRadius: 1,
-    bgcolor: alpha(theme.palette.background.paper, theme.palette.mode === 'light' ? 0.9 : 0.72),
-    color: 'text.primary',
-    fontFamily: '"Roboto Mono", "Consolas", monospace',
-    fontSize: '0.82rem',
-    overflowWrap: 'anywhere',
-    wordBreak: 'break-word',
-});
 const Row = ({ row, onAddLicense, onEdit, onDelete, onEditLicense, onDeleteLicense, onHistory, refreshKey }: {
     onHistory: (lic: Licencia, row: Software) => void;
     row: Software;
@@ -99,13 +68,8 @@ const Row = ({ row, onAddLicense, onEdit, onDelete, onEditLicense, onDeleteLicen
     const [licencias, setLicencias] = useState<Licencia[]>([]);
     const [loading, setLoading] = useState(false);
     const [openKeys, setOpenKeys] = useState<Record<number, boolean>>({});
-    const [clavesByLicencia, setClavesByLicencia] = useState<Record<number, LicenciaClave[]>>({});
-    const [loadingKeys, setLoadingKeys] = useState<Record<number, boolean>>({});
-    const [keyErrors, setKeyErrors] = useState<Record<number, string | null>>({});
-    const [visibleKeys, setVisibleKeys] = useState<Record<number, boolean>>({});
     const { t, i18n } = useTranslation();
     const { canAdminInventory } = usePermissions();
-    const { enqueueSnackbar } = useSnackbar();
     // Cargar licencias solo al expandir
     const loadLicencias = useCallback(async () => {
         if (!open)
@@ -124,52 +88,14 @@ const Row = ({ row, onAddLicense, onEdit, onDelete, onEditLicense, onDeleteLicen
     useEffect(() => {
         void Promise.resolve().then(loadLicencias);
     }, [loadLicencias, refreshKey]);
+    const { items: metodos } = useCatalogo('metodos-activacion');
+    const { items: formas } = useCatalogo('formas-conteo');
+    const etiquetaMetodo = useCatalogLabel('metodos-activacion');
+    const etiquetaForma = useCatalogLabel('formas-conteo');
     useEffect(() => {
         setOpenKeys({});
-        setClavesByLicencia({});
-        setLoadingKeys({});
-        setKeyErrors({});
-        setVisibleKeys({});
     }, [refreshKey]);
-    const loadClaves = useCallback(async (licenciaId: number) => {
-        setLoadingKeys((prev) => ({ ...prev, [licenciaId]: true }));
-        setKeyErrors((prev) => ({ ...prev, [licenciaId]: null }));
-        try {
-            const data = await softwareService.getClavesLicencia(licenciaId);
-            setClavesByLicencia((prev) => ({ ...prev, [licenciaId]: data }));
-        }
-        catch (error) {
-            console.error(error);
-            setKeyErrors((prev) => ({
-                ...prev,
-                [licenciaId]: t('software.keys_load_error'),
-            }));
-        }
-        finally {
-            setLoadingKeys((prev) => ({ ...prev, [licenciaId]: false }));
-        }
-    }, [t]);
-    const toggleClaves = useCallback(async (licencia: Licencia) => {
-        const licenciaId = licencia.LIC_Licencia;
-        const willOpen = !openKeys[licenciaId];
-        setOpenKeys((prev) => ({ ...prev, [licenciaId]: willOpen }));
-        if (willOpen && !clavesByLicencia[licenciaId]) {
-            await loadClaves(licenciaId);
-        }
-    }, [clavesByLicencia, loadClaves, openKeys]);
-    const toggleVisibleKey = (claveId: number) => {
-        setVisibleKeys((prev) => ({ ...prev, [claveId]: !prev[claveId] }));
-    };
-    const copyKey = async (clave: string) => {
-        try {
-            await navigator.clipboard.writeText(clave);
-            enqueueSnackbar(t('software.key_copied'), { variant: 'success' });
-        }
-        catch (error) {
-            console.error(error);
-            enqueueSnackbar(t('software.key_copy_error'), { variant: 'error' });
-        }
-    };
+    const toggleClaves = (licenciaId: number) => setOpenKeys((prev) => ({ ...prev, [licenciaId]: !prev[licenciaId] }));
     return (<>
       <TableRow hover sx={{ '& > *': { borderBottom: open ? 0 : undefined } }}>
         <TableCell>
@@ -238,20 +164,21 @@ const Row = ({ row, onAddLicense, onEdit, onDelete, onEditLicense, onDeleteLicen
                 const licenciaId = lic.LIC_Licencia;
                 const hasIndividualKeys = (lic.LIC_Claves_Total ?? 0) > 0;
                 const keysOpen = !!openKeys[licenciaId];
-                const keyRows = clavesByLicencia[licenciaId] ?? [];
+                const metodo = metodos.find((m) => m.id === lic.MAC_Metodo_Activacion);
+                const forma = formas.find((f) => f.id === lic.FCO_Forma_Conteo);
+                const conCredenciales = hasIndividualKeys || (!!metodo && metodo.codigo !== 'SIN_CREDENCIAL');
                 return (<Fragment key={licenciaId}>
                           <TableRow hover>
                             <TableCell sx={{ maxWidth: 340 }}>
-                              {hasIndividualKeys ? (<Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                              <Stack spacing={0.25}>
+                                <Stack direction="row" spacing={1} alignItems="center">
                                   <VpnKeyIcon fontSize="small" color="primary"/>
                                   <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                                    {t('software.protected_license_keys')}
+                                    {metodo ? etiquetaMetodo(metodo.codigo) : t('software.method_unknown')}
                                   </Typography>
-                                </Stack>) : lic.LIC_Clave_Activacion ? (<Box component="span" sx={keyValueSx}>
-                                  {maskLicenseKey(lic.LIC_Clave_Activacion)}
-                                </Box>) : (<Typography variant="body2" color="text.secondary">
-                                  {t('software.digital_license')}
-                                </Typography>)}
+                                </Stack>
+                                {forma && (<Typography variant="caption" color="text.secondary">{etiquetaForma(forma.codigo)}</Typography>)}
+                              </Stack>
                             </TableCell>
                             <TableCell>
                               {lic.LIC_Fecha_Vencimiento ? formatDate(lic.LIC_Fecha_Vencimiento) : t('software.perpetual')}
@@ -272,12 +199,12 @@ const Row = ({ row, onAddLicense, onEdit, onDelete, onEditLicense, onDeleteLicen
                         : t('software.available')} />
                             </TableCell>
                             <TableCell align="right">
-                              {hasIndividualKeys && canAdminInventory && (<Tooltip title={keysOpen
+                              {conCredenciales && canAdminInventory && (<Tooltip title={keysOpen
                             ? t('software.hide_keys')
                             : t('software.view_keys')}>
                                   <IconButton size="small" onClick={(event) => {
                             event.stopPropagation();
-                            void toggleClaves(lic);
+                            toggleClaves(licenciaId);
                         }} aria-label={keysOpen
                             ? t('software.hide_keys')
                             : t('software.view_keys')} sx={{ color: 'info.main' }}>
@@ -307,96 +234,7 @@ const Row = ({ row, onAddLicense, onEdit, onDelete, onEditLicense, onDeleteLicen
                             <TableCell colSpan={5} sx={{ p: 0, borderBottom: keysOpen ? undefined : 0 }}>
                               <Collapse in={keysOpen} timeout="auto" unmountOnExit>
                                 <Box sx={keyPanelSx}>
-                                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between" sx={{ mb: 1 }}>
-                                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                                      {t('software.key_inventory')}
-                                    </Typography>
-                                    <Stack direction="row" spacing={1}>
-                                      <Chip size="small" color="success" variant="outlined" label={t('software.keys_free_count', {
-                        count: lic.LIC_Claves_Disponibles ?? 0,
-                    })}/>
-                                      <Chip size="small" color="warning" variant="outlined" label={t('software.keys_assigned_count', {
-                        count: lic.LIC_Claves_Asignadas ?? 0,
-                    })}/>
-                                    </Stack>
-                                  </Stack>
-
-                                  {loadingKeys[licenciaId] ? (<Box p={2}><CircularProgress size={18}/></Box>) : keyErrors[licenciaId] ? (<Alert severity="error">{keyErrors[licenciaId]}</Alert>) : (<TableContainer component={Box}>
-                                      <Table size="small">
-                                      <TableHead>
-                                        <TableRow>
-                                          <TableCell>{t('software.key_value')}</TableCell>
-                                          <TableCell>{t('software.key_reference')}</TableCell>
-                                          <TableCell>{t('software.key_status')}</TableCell>
-                                          <TableCell>{t('software.key_assignment')}</TableCell>
-                                          <TableCell>{t('software.key_created')}</TableCell>
-                                          <TableCell align="right">{t('common.actions')}</TableCell>
-                                        </TableRow>
-                                      </TableHead>
-                                      <TableBody>
-                                        {keyRows.map((clave) => {
-                            const isVisible = !!visibleKeys[clave.LCL_Licencia_Clave];
-                            const targetType = clave.LCL_Destino_Tipo === 'PERSONA'
-                                ? t('software.assigned_person')
-                                : t('software.assigned_asset');
-                            return (<TableRow key={clave.LCL_Licencia_Clave}>
-                                              <TableCell sx={{ maxWidth: 360 }}>
-                                                <Box component="span" sx={keyValueSx}>
-                                                  {isVisible
-                                    ? clave.LCL_Clave_Activacion
-                                    : maskLicenseKey(clave.LCL_Clave_Activacion)}
-                                                </Box>
-                                              </TableCell>
-                                              <TableCell>{clave.LCL_Referencia || '—'}</TableCell>
-                                              <TableCell>
-                                                <Chip size="small" color={keyStatusColor(clave.LCL_Estado)} variant="outlined" label={t(`software.key_status_${clave.LCL_Estado}`, clave.LCL_Estado)}/>
-                                              </TableCell>
-                                              <TableCell sx={{ minWidth: 220 }}>
-                                                {clave.LCL_Destino_Nombre ? (<Stack spacing={0.25}>
-                                                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                                      {clave.LCL_Destino_Nombre}
-                                                    </Typography>
-                                                    <Typography variant="caption" color="text.secondary">
-                                                      {targetType}{clave.LCL_Destino_Detalle ? ` - ${clave.LCL_Destino_Detalle}` : ''}
-                                                    </Typography>
-                                                    {clave.LCL_Asignada_En && (<Typography variant="caption" color="text.secondary">
-                                                        {t('software.assigned_on')}: {formatDate(clave.LCL_Asignada_En)}
-                                                      </Typography>)}
-                                                  </Stack>) : (<Typography variant="body2" color="text.secondary">
-                                                    {t('software.key_unassigned')}
-                                                  </Typography>)}
-                                              </TableCell>
-                                              <TableCell>
-                                                {clave.LCL_Creado_En
-                                    ? formatDate(clave.LCL_Creado_En)
-                                    : '—'}
-                                              </TableCell>
-                                              <TableCell align="right">
-                                                <Tooltip title={isVisible
-                                    ? t('software.hide_key')
-                                    : t('software.reveal_key')}>
-                                                  <IconButton size="small" onClick={() => toggleVisibleKey(clave.LCL_Licencia_Clave)} aria-label={isVisible
-                                    ? t('software.hide_key')
-                                    : t('software.reveal_key')}>
-                                                    {isVisible ? <VisibilityOffIcon fontSize="small"/> : <VisibilityIcon fontSize="small"/>}
-                                                  </IconButton>
-                                                </Tooltip>
-                                                <Tooltip title={t('software.copy_key')}>
-                                                  <IconButton size="small" onClick={() => void copyKey(clave.LCL_Clave_Activacion)} aria-label={t('software.copy_key')}>
-                                                    <ContentCopyIcon fontSize="small"/>
-                                                  </IconButton>
-                                                </Tooltip>
-                                              </TableCell>
-                                            </TableRow>);
-                        })}
-                                        {keyRows.length === 0 && (<TableRow>
-                                            <TableCell colSpan={6} align="center" sx={{ color: 'text.secondary', py: 2 }}>
-                                              {t('software.no_keys')}
-                                            </TableCell>
-                                          </TableRow>)}
-                                      </TableBody>
-                                      </Table>
-                                    </TableContainer>)}
+                                  <CredentialsPanel licencia={lic} onChanged={() => void loadLicencias()}/>
                                 </Box>
                               </Collapse>
                             </TableCell>
@@ -419,7 +257,7 @@ const Row = ({ row, onAddLicense, onEdit, onDelete, onEditLicense, onDeleteLicen
 };
 export const SoftwarePage = () => {
     const { t } = useTranslation();
-    const { canAdminInventory, canExport } = usePermissions();
+    const { canAdminInventory, canExportFinance: canExport } = usePermissions();
     const [historial, setHistorial] = useState<{ lic: Licencia; titulo: string } | null>(null);
     const confirm = useConfirm();
     const [search, setSearch] = useState('');
@@ -501,7 +339,7 @@ export const SoftwarePage = () => {
             .some((v) => (v ?? '').toLowerCase().includes(q)))
         : softwareList;
     return (<Box>
-      <PageHeader
+      <PageHeader help="software"
         title={t('software.page_title')}
         badge={filtered.length}
         actions={(canAdminInventory || canExport) ? (<>

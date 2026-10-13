@@ -12,25 +12,12 @@ import { AssetDetailDialog } from '../assets/AssetDetailDialog';
 import type { ItemAtencion } from '../../types/kardex';
 import type { Activo } from '../../types/inventory';
 import { formatDate } from '../../utils/dates';
+import { useAuth } from '../../context/auth-context';
+import { DESTINO, pendientesDeRol } from './atencion';
 
 type Fila = Record<string, unknown>;
 const COLOR = { alta: 'error', media: 'warning', baja: 'info' } as const;
 
-/** A dónde lleva cada tipo de pendiente (y si sus elementos son activos). */
-const DESTINO: Record<string, { ruta: string; activos?: boolean }> = {
-  ASIGNADO_SIN_CUSTODIO: { ruta: '/trazabilidad?vista=custodia', activos: true },
-  ALMACEN_CON_CUSTODIO: { ruta: '/trazabilidad?vista=custodia', activos: true },
-  BAJA_CON_CUSTODIA: { ruta: '/trazabilidad?vista=custodia', activos: true },
-  APROBACION_PENDIENTE: { ruta: '/aprobaciones' },
-  PERSONA_INACTIVA_CON_EQUIPOS: { ruta: '/trazabilidad?vista=custodia' },
-  PRESTAMO_VENCIDO: { ruta: '/operaciones/movimientos' },
-  STOCK_BAJO: { ruta: '/consumibles' },
-  ORDEN_PARCIAL: { ruta: '/compras/ordenes' },
-  TICKET_ANTIGUO: { ruta: '/mantenimiento' },
-  GARANTIA_POR_VENCER: { ruta: '/compras/garantias', activos: true },
-  LICENCIA_POR_VENCER: { ruta: '/software' },
-  DATOS_INCOMPLETOS: { ruta: '/activos' },
-};
 
 /**
  * «Requiere su atención»: lo que el sistema detecta que hay que resolver
@@ -41,7 +28,10 @@ export const AttentionInbox = () => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { enqueueSnackbar } = useSnackbar();
-  const [items, setItems] = useState<ItemAtencion[] | null>(null);
+  const { user } = useAuth();
+  const [todos, setItems] = useState<ItemAtencion[] | null>(null);
+  // «Mis pendientes»: lo que corresponde al rol (técnico, jefe de TI, auditor…).
+  const items = todos === null ? null : pendientesDeRol(todos, user?.role);
   const [activo, setActivo] = useState<Activo | null>(null);
 
   const cargar = useCallback(async () => {
@@ -77,6 +67,9 @@ export const AttentionInbox = () => {
       case 'APROBACION_PENDIENTE': return String(f.resumen).slice(0, 60);
       case 'TICKET_ANTIGUO': return `${f.codigo} · ${formatDate(String(f.desde), i18n.language)}`;
       case 'LICENCIA_POR_VENCER': return `${f.nombre} · ${formatDate(String(f.fecha), i18n.language)}`;
+      case 'CUENTA_POR_CAMBIAR':
+      case 'CUENTA_SIN_ROTAR': return `${f.nombre} · ${f.usuario ?? '—'}`;
+      case 'CUPOS_AGOTADOS': return `${f.nombre} (${f.total})`;
       default: return String(f.codigo ?? f.nombre ?? '');
     }
   };
@@ -96,7 +89,7 @@ export const AttentionInbox = () => {
       <CardContent>
         <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
           <NotificationsActiveIcon color="warning" />
-          <Typography variant="h6" sx={{ flex: 1 }}>{t('attention.title')}</Typography>
+          <Typography variant="h6" sx={{ flex: 1 }}>{t('attention.my_title')}</Typography>
           {items && items.length > 0 && <Chip size="small" label={items.reduce((a, i) => a + i.total, 0)} color="warning" />}
         </Stack>
         {items === null ? (<Box display="flex" justifyContent="center" py={2}><CircularProgress size={24} /></Box>)
@@ -114,7 +107,7 @@ export const AttentionInbox = () => {
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Typography variant="subtitle2">{t(`attention.items.${it.clave}.title`, { count: it.total })}</Typography>
                       <Typography variant="caption" color="text.secondary">
-                        {t(`attention.items.${it.clave}.hint`, { sin_garantia: it.sin_garantia ?? 0, sin_costo: it.sin_costo ?? 0 })}
+                        {t(`attention.items.${it.clave}.hint`, { sin_garantia: it.sin_garantia ?? 0, sin_costo: it.sin_costo ?? 0, dias: it.dias ?? 0 })}
                       </Typography>
                     </Box>
                     <Button size="small" onClick={() => navigate(DESTINO[it.clave]?.ruta ?? '/')}>{t('attention.go')}</Button>

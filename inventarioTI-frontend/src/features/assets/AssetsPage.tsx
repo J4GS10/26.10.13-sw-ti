@@ -26,18 +26,31 @@ import { catalogService } from '../catalogs/catalogService';
 import { Activo, EstadoOperativo, Marca, Modelo, TipoActivo } from '../../types/inventory';
 import { ExportMenuButton } from '../../components/ExportMenuButton';
 import { SavedViewsMenu } from '../../components/SavedViewsMenu';
+import PlaceIcon from '@mui/icons-material/Place';
+import { InstalacionAreaDialog } from '../operations/InstalacionAreaDialog';
+import { reglasDe } from '../../utils/clasesActivo';
 import { usePermissions } from '../../hooks/usePermissions';
 import { SearchInput } from '../../components/SearchInput';
 import { normalizeLanguage } from '../../types/language';
 import { CollapsibleToolbar } from '../../components/CollapsibleToolbar';
 import { useAccionPagina, useWorkspace } from '../../context/workspace-context';
+import { RowActionsMenu, type RowAction } from '../../components/RowActionsMenu';
+import { accionesDisponibles, type AccionActivo } from '../../utils/acciones';
+import { BatchEditDialog } from './BatchEditDialog';
+import { TableSettingsMenu } from '../../components/TableSettingsMenu';
+import { useTableConfig } from '../../hooks/useTableConfig';
+import { useAuth } from '../../context/auth-context';
+import BuildIcon from '@mui/icons-material/Build';
+import HistoryIcon from '@mui/icons-material/History';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import EditNoteIcon from '@mui/icons-material/EditNote';
 
 /** Parámetros de la URL que forman una vista (la página no cuenta). */
 const CLAVES_VISTA = ['q', 'tipo', 'estado'];
 
 export const AssetsPage = () => {
     const { t, i18n } = useTranslation();
-    const { canOperate, canAdminInventory, canExport } = usePermissions();
+    const { canOperate, canAdminInventory, canExportFinance: canExport } = usePermissions();
     const { enqueueSnackbar } = useSnackbar();
     const { abrirEntrega, abrirDevolucion, agregarReciente } = useWorkspace();
     const navigate = useNavigate();
@@ -94,12 +107,22 @@ export const AssetsPage = () => {
     const [seleccion, setSeleccion] = useState<Map<string, Activo>>(new Map());
     const [downloadingLabels, setDownloadingLabels] = useState(false);
     const [bajaLote, setBajaLote] = useState<Activo[] | null>(null);
+    const [edicionLote, setEdicionLote] = useState<Activo[] | null>(null);
+    // Columnas visibles y densidad: preferencia del usuario en esta página.
+    const { user } = useAuth();
+    const tabla = useTableConfig('activos', user?.sub);
+    const columnasConfigurables = [
+        { key: 'type', label: t('assets.table.type') }, { key: 'brand', label: t('assets.dialog.brand') },
+        { key: 'model', label: t('assets.dialog.model') }, { key: 'serial', label: t('assets.table.serial') },
+        { key: 'host', label: t('assets.table.host') }, { key: 'status', label: t('assets.table.status') },
+    ];
 
     // ── Diálogos ────────────────────────────────────────────────────────────
     const [editOpen, setEditOpen] = useState(false);
     const [detailOpen, setDetailOpen] = useState(false);
     const [selected, setSelected] = useState<Activo | null>(null);
     const [bajaTarget, setBajaTarget] = useState<Activo | null>(null);
+    const [instalacion, setInstalacion] = useState<{ modo: 'instalar' | 'retirar'; activo: Activo } | null>(null);
 
     // ── Cargar catálogos (en caché: navegar de vuelta es inmediato) ─────────
     useEffect(() => {
@@ -211,6 +234,43 @@ export const AssetsPage = () => {
     const handleView = (asset: Activo) => navigate({ pathname: `/activos/${encodeURIComponent(asset.ACT_Codigo_Interno)}`, search: location.search });
     const cerrarFicha = () => { setDetailOpen(false); setSelected(null); navigate({ pathname: '/activos', search: location.search }); };
 
+    const etiquetaDe = async (row: Activo) => {
+        try {
+            const blob = await assetService.downloadLabels({ activos_ids: [row.ACT_Activo] }, normalizeLanguage(i18n.resolvedLanguage));
+            guardarArchivo(blob, `etiqueta-${row.ACT_Codigo_Interno}.pdf`);
+        } catch (error: unknown) {
+            enqueueSnackbar(getApiErrorMessage(error, t('common.error_generic')), { variant: 'error' });
+        }
+    };
+
+    // Menú «⋯»: solo las acciones válidas para el estado del activo y el rol.
+    const accionesFila = (row: Activo): RowAction[] => {
+        const def: Record<AccionActivo, Omit<RowAction, 'key'>> = {
+            ver: { label: t('common.view'), icon: <VisibilityIcon fontSize="small" />, onClick: () => handleView(row) },
+            editar: { label: t('common.edit'), icon: <EditIcon fontSize="small" />, onClick: () => handleEdit(row) },
+            asignar: { label: t('row_actions.assign'), icon: <AssignmentIndIcon fontSize="small" />,
+                onClick: () => abrirEntrega({ activos: [row], onDone: loadActivos }) },
+            transferir: { label: t('row_actions.transfer'), icon: <SwapHorizIcon fontSize="small" />,
+                onClick: () => abrirEntrega({ activos: [row], onDone: loadActivos }) },
+            devolver: { label: t('row_actions.return'), icon: <AssignmentReturnIcon fontSize="small" />,
+                onClick: () => abrirDevolucion({ activos: [row], onDone: loadActivos }) },
+            mantenimiento: { label: t('row_actions.maintenance'), icon: <BuildIcon fontSize="small" />,
+                onClick: () => navigate(`/mantenimiento?nuevo=${row.ACT_Activo}`) },
+            ver_ticket: { label: t('row_actions.open_ticket'), icon: <BuildIcon fontSize="small" />, onClick: () => navigate('/mantenimiento') },
+            hoja_vida: { label: t('row_actions.history'), icon: <HistoryIcon fontSize="small" />, onClick: () => handleView(row) },
+            etiqueta: { label: t('row_actions.label'), icon: <QrCodeScannerIcon fontSize="small" />, onClick: () => void etiquetaDe(row) },
+            baja: { label: t('assets.actions.decommission'), icon: <DeleteOutlineIcon fontSize="small" />,
+                onClick: () => setBajaTarget(row), danger: true },
+            instalar: { label: t('shared.install'), icon: <PlaceIcon fontSize="small" />, onClick: () => setInstalacion({ modo: 'instalar', activo: row }) },
+            reubicar: { label: t('shared.move'), icon: <PlaceIcon fontSize="small" />, onClick: () => setInstalacion({ modo: 'instalar', activo: row }) },
+            retirar: { label: t('shared.remove'), icon: <AssignmentReturnIcon fontSize="small" />, onClick: () => setInstalacion({ modo: 'retirar', activo: row }) },
+        };
+        const uso = reglasDe(tipos.find((x) => x.TAC_Tipo_Activo === row.TAC_Tipo_Activo)).uso;
+        return accionesDisponibles(getEstadoInfo(row.EOP_Estado_Operativo)?.EOP_Nombre, { canOperate, canAdminInventory }, uso)
+            .filter((a) => a !== 'ver')
+            .map((a) => ({ key: a, ...def[a] }));
+    };
+
     const handleDownloadLabels = async () => {
         const ids = [...seleccion.keys()];
         if (ids.length > 200) {
@@ -252,19 +312,34 @@ export const AssetsPage = () => {
         guardarArchivo(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `activos-seleccion-${seleccion.size}.csv`);
     };
 
+    // ── Ficha como página (/activos/:codigo); el diálogo queda como vista rápida ──
+    const fichaComoPagina = !!codigo && detailOpen && !!selected;
     const presets = useMemo(() => ['Disponible', 'Asignado', 'En Reparación']
         .map((nombre) => estados.find((e) => e.EOP_Nombre === nombre))
         .filter((e): e is EstadoOperativo => !!e)
         .map((e) => ({ nombre: stateLabel(t, e.EOP_Nombre), query: `estado=${e.EOP_Estado_Operativo}` })), [estados, t]);
 
+    if (fichaComoPagina) {
+        return (
+            <>
+                <AssetDetailDialog asPage open asset={selected} marcas={marcas} modelos={modelos} tipos={tipos} estados={estados}
+                    onClose={cerrarFicha} onChanged={loadActivos} />
+                <AssetDialog open={editOpen} onClose={(refresh) => { setEditOpen(false); if (refresh) loadActivos(); }}
+                    assetToEdit={selected} />
+            </>
+        );
+    }
+
     return (
         <Box>
-            <PageHeader
+            <PageHeader help="assets"
                 title={t('assets.title')}
                 badge={total}
                 crumb={detailOpen && selected ? selected.ACT_Codigo_Interno : undefined}
                 actions={(
                     <>
+                        <TableSettingsMenu columnas={columnasConfigurables} ocultas={tabla.ocultas} densidad={tabla.densidad}
+                            onAlternar={tabla.alternarColumna} onDensidad={tabla.cambiarDensidad} onRestablecer={tabla.restablecer} />
                         <SavedViewsMenu storageKey="activos" query={consultaVista} presets={presets}
                             onApply={(query) => setParams(new URLSearchParams(query), { replace: true })} />
                         {canExport && <ExportMenuButton onExport={(lang) => downloadCsv('/export/activos.csv', 'activos.csv', lang)} />}
@@ -350,6 +425,8 @@ export const AssetsPage = () => {
                 ]}
                 rows={activos}
                 loading={loading}
+                hiddenColumns={tabla.ocultas}
+                density={tabla.densidad}
                 total={total}
                 page={page}
                 rowsPerPage={rowsPerPage}
@@ -386,6 +463,11 @@ export const AssetsPage = () => {
                             </Button>
                         )}
                         {canAdminInventory && (
+                            <Button size="small" variant="outlined" startIcon={<EditNoteIcon />} onClick={() => setEdicionLote([...seleccion.values()])}>
+                                {t('bulk.edit')}
+                            </Button>
+                        )}
+                        {canAdminInventory && (
                             <Button size="small" color="error" startIcon={<DeleteOutlineIcon />} onClick={() => setBajaLote([...seleccion.values()])}>
                                 {t('bulk.decommission')}
                             </Button>
@@ -416,26 +498,17 @@ export const AssetsPage = () => {
                                         <VisibilityIcon fontSize="small" />
                                     </IconButton>
                                 </Tooltip>
-                                {canOperate && (
-                                    <Tooltip title={t('common.edit') as string}>
-                                        <IconButton size="small" color="primary" onClick={() => handleEdit(row)} aria-label={t('common.edit')}>
-                                            <EditIcon fontSize="small" />
-                                        </IconButton>
-                                    </Tooltip>
-                                )}
-                                {canAdminInventory && (
-                                    <Tooltip title={t('assets.actions.decommission') as string}>
-                                        <IconButton size="small" color="error" onClick={() => setBajaTarget(row)} aria-label={t('assets.actions.decommission')}>
-                                            <DeleteOutlineIcon fontSize="small" />
-                                        </IconButton>
-                                    </Tooltip>
-                                )}
+                                <RowActionsMenu actions={accionesFila(row)} label={t('row_actions.menu', { code: row.ACT_Codigo_Interno })} />
                             </TableCell>
                         </TableRow>
                     );
                 }}
             />
             <BajaDialog open={!!bajaTarget} activo={bajaTarget} onClose={(changed) => { setBajaTarget(null); if (changed) loadActivos(); }} />
+            <InstalacionAreaDialog modo={instalacion?.modo ?? null} activo={instalacion?.activo ?? null}
+                onClose={(changed) => { setInstalacion(null); if (changed) loadActivos(); }} />
+            <BatchEditDialog open={!!edicionLote} activos={edicionLote ?? []}
+                onClose={(changed) => { setEdicionLote(null); if (changed) loadActivos(); }} />
             <BajaDialog open={!!bajaLote} activo={null} activos={bajaLote ?? []} onClose={(changed) => { setBajaLote(null); if (changed) tras(); }} />
         </Box>
     );

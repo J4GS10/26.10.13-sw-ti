@@ -249,6 +249,86 @@ class ReportesService:
     # ------------------------------------------------------------------
     # Entradas y salidas por periodo
     # ------------------------------------------------------------------
+    async def resumen_motivos(self, *, desde: date | None, hasta: date | None, sede_id: int | None) -> dict:
+        """
+        Agrupado por catálogo en el periodo (plan de catálogos §4.4): movimientos
+        por motivo y tipo, mantenimientos por tipo de falla (con su costo por
+        moneda), acciones de mantenimiento realizadas y bajas por motivo y por
+        destino. Respeta el alcance por sede (RLS). Sin motivo de catálogo
+        (registros anteriores o de texto libre) se agrupan como `codigo: null`.
+        """
+        from app.models.catalogo_estandar import AccionMantenimiento, MotivoMovimiento, TipoFalla
+        from app.models.traceability import DetalleMantenimiento, Mantenimiento
+
+        def rango(col):
+            cond = []
+            if desde:
+                cond.append(col >= datetime.combine(desde, time.min))
+            if hasta:
+                cond.append(col <= datetime.combine(hasta, time.max))
+            return cond
+
+        sede = [Activo.SED_Sede == sede_id] if sede_id else []
+
+        movimientos = [
+            {"codigo": c, "nombre": n, "tipo": tmo, "total": int(t)}
+            for c, n, tmo, t in (await self.db.execute(
+                select(MotivoMovimiento.MMO_Codigo, MotivoMovimiento.MMO_Nombre, TipoMovimiento.TMO_Nombre, func.count())
+                .select_from(Movimiento)
+                .join(Activo, Activo.ACT_Activo == Movimiento.ACT_Activo)
+                .join(TipoMovimiento, TipoMovimiento.TMO_Tipo_Movimiento == Movimiento.TMO_Tipo_Movimiento, isouter=True)
+                .join(MotivoMovimiento, MotivoMovimiento.MMO_Motivo == Movimiento.MMO_Motivo, isouter=True)
+                .where(*rango(Movimiento.MOV_Fecha_Asignacion), *sede)
+                .group_by(MotivoMovimiento.MMO_Codigo, MotivoMovimiento.MMO_Nombre, TipoMovimiento.TMO_Nombre)
+                .order_by(func.count().desc())
+            )).all()
+        ]
+        fallas: dict[tuple, dict] = {}
+        for c, n, moneda, t, costo in (await self.db.execute(
+            select(TipoFalla.TFA_Codigo, TipoFalla.TFA_Nombre, Mantenimiento.MAN_Moneda, func.count(),
+                   func.coalesce(func.sum(Mantenimiento.MAN_Costo_Total), 0))
+            .select_from(Mantenimiento)
+            .join(Activo, Activo.ACT_Activo == Mantenimiento.ACT_Activo)
+            .join(TipoFalla, TipoFalla.TFA_Tipo_Falla == Mantenimiento.TFA_Tipo_Falla, isouter=True)
+            .where(*rango(Mantenimiento.MAN_Fecha_Ingreso), *sede)
+            .group_by(TipoFalla.TFA_Codigo, TipoFalla.TFA_Nombre, Mantenimiento.MAN_Moneda)
+        )).all():
+            f = fallas.setdefault((c, n), {"codigo": c, "nombre": n, "total": 0, "costo_por_moneda": {}})
+            f["total"] += int(t)
+            if costo:
+                f["costo_por_moneda"][moneda or "GTQ"] = str(costo)
+        acciones = [
+            {"codigo": c, "nombre": n, "total": int(t)}
+            for c, n, t in (await self.db.execute(
+                select(AccionMantenimiento.AMA_Codigo, AccionMantenimiento.AMA_Nombre, func.count())
+                .select_from(DetalleMantenimiento)
+                .join(Mantenimiento, Mantenimiento.MAN_Mantenimiento == DetalleMantenimiento.MAN_Mantenimiento)
+                .join(Activo, Activo.ACT_Activo == Mantenimiento.ACT_Activo)
+                .join(AccionMantenimiento, AccionMantenimiento.AMA_Accion == DetalleMantenimiento.AMA_Accion, isouter=True)
+                .where(*rango(Mantenimiento.MAN_Fecha_Ingreso), *sede)
+                .group_by(AccionMantenimiento.AMA_Codigo, AccionMantenimiento.AMA_Nombre)
+                .order_by(func.count().desc())
+            )).all()
+        ]
+
+        def bajas_por(col) -> list[dict]:
+            cond = [Activo.ACT_Baja_Fecha.is_not(None), *sede]
+            if desde:
+                cond.append(Activo.ACT_Baja_Fecha >= desde)
+            if hasta:
+                cond.append(Activo.ACT_Baja_Fecha <= hasta)
+            return select(col, func.count()).where(*cond).group_by(col).order_by(func.count().desc())
+
+        bajas_motivo = [{"codigo": c, "total": int(t)} for c, t in (await self.db.execute(bajas_por(Activo.ACT_Baja_Motivo))).all()]
+        bajas_destino = [{"codigo": c, "total": int(t)} for c, t in (await self.db.execute(bajas_por(Activo.ACT_Baja_Destino))).all()]
+        return {
+            "movimientos": movimientos,
+            "fallas": sorted(fallas.values(), key=lambda f: -f["total"]),
+            "acciones": acciones,
+            "bajas_motivo": bajas_motivo,
+            "bajas_destino": bajas_destino,
+        }
+
     async def entradas_salidas(self, *, desde: date | None, hasta: date | None, sede_id: int | None) -> dict:
         cond = KardexService.filtros(categoria="ENTRADAS_SALIDAS", desde=desde, hasta=hasta, sede_id=sede_id)
         filas = (await self.db.execute(
@@ -293,7 +373,7 @@ class ReportesService:
     # ------------------------------------------------------------------
     # Hoja de vida del activo (PDF)
     # ------------------------------------------------------------------
-    async def hoja_de_vida_pdf(self, activo_id: uuid.UUID, lang: str) -> tuple[bytes, str]:
+    async def hoja_de_vida_pdf(self, activo_id: uuid.UUID, lang: str, *, con_costo: bool = True) -> tuple[bytes, str]:
         from fastapi import HTTPException
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import A4, landscape
@@ -327,7 +407,8 @@ class ReportesService:
             Paragraph(escape(
                 f"{t[1]}: {activo.ACT_Codigo_Interno}   ·   {t[2]}: {activo.ACT_Serie_Fabricante}   ·   "
                 f"{t[3]}: {modelo.MOD_Nombre if modelo else '—'}   ·   {t[5]}: {format_iso_date(activo.ACT_Fecha_Compra)}"
-                f"   ·   {t[4]}: {format_amount(activo.ACT_Costo)} {activo.ACT_Moneda or ''}"), estilos["BodyText"]),
+                + (f"   ·   {t[4]}: {format_amount(activo.ACT_Costo)} {activo.ACT_Moneda or ''}" if con_costo else "")),
+                estilos["BodyText"]),
             Spacer(1, 0.4 * cm),
         ]
 
@@ -364,7 +445,24 @@ class ReportesService:
     # ------------------------------------------------------------------
     # Alertas para el tablero ("Requiere su atención")
     # ------------------------------------------------------------------
-    async def atencion(self) -> dict[str, Any]:
+    # Pendientes que atiende o consulta cada rol; sin entrada = todos (los
+    # administradores de TI). Se filtra en el servidor: un rol no recibe ni el
+    # total de lo que no le corresponde.
+    ATENCION_POR_ROL: dict[str, tuple[str, ...]] = {
+        "TECNICO": ("TICKET_ANTIGUO", "PRESTAMO_VENCIDO", "ASIGNADO_SIN_CUSTODIO", "ALMACEN_CON_CUSTODIO",
+                    "STOCK_BAJO", "PERSONA_INACTIVA_CON_EQUIPOS", "FALTANTE_PENDIENTE", "RESPONSABLE_INACTIVO"),
+        "AUDITOR": ("ASIGNADO_SIN_CUSTODIO", "ALMACEN_CON_CUSTODIO", "BAJA_CON_CUSTODIA",
+                    "PERSONA_INACTIVA_CON_EQUIPOS", "DATOS_INCOMPLETOS", "CUENTA_SIN_ROTAR", "FALTANTE_PENDIENTE",
+                    "INSUMOS_POR_RECLASIFICAR"),
+        "COMPRAS": ("ORDEN_PARCIAL", "GARANTIA_POR_VENCER", "STOCK_BAJO"),
+        "CONTABILIDAD": ("DATOS_INCOMPLETOS",),
+        "CONSULTA": (),
+    }
+
+    async def atencion(self, rol: str | None = None) -> dict[str, Any]:
+        permitidos = self.ATENCION_POR_ROL.get(rol or "")
+        if permitidos is not None and not permitidos:
+            return {"generado": datetime.utcnow().isoformat(), "items": []}
         from app.core.config import settings
         from app.models.catalogs import EstadoOperativo
         from app.models.consumable import Consumible
@@ -414,6 +512,35 @@ class ReportesService:
         )).all()
         agregar("PERSONA_INACTIVA_CON_EQUIPOS", "alta",
                 [{"id": str(p), "nombre": f"{n} {a}", "cantidad": c} for p, n, a, c in filas])
+
+        # Faltantes de tomas sin resolver (investigar, localizar o pedir la baja).
+        from app.models.inventario_fisico import Faltante
+        filas = (await self.db.execute(
+            select(Faltante.FAL_Faltante, Activo.ACT_Codigo_Interno, Faltante.FAL_Estado)
+            .join(Activo, Activo.ACT_Activo == Faltante.ACT_Activo)
+            .where(Faltante.FAL_Estado.in_(("PENDIENTE", "EN_INVESTIGACION")))
+            .order_by(Faltante.FAL_Fecha)
+        )).all()
+        agregar("FALTANTE_PENDIENTE", "alta", [{"id": f, "codigo": c, "estado": e} for f, c, e in filas])
+
+        # Equipos compartidos cuyo responsable ya no está activo.
+        filas = (await self.db.execute(
+            select(Activo.ACT_Activo, Activo.ACT_Codigo_Interno, Persona.PER_Primer_Nombre, Persona.PER_Primer_Apellido)
+            .join(Persona, Persona.PER_Persona == Activo.ACT_Responsable)
+            .where(Activo.ACT_Instalado.is_(True), Persona.PER_Estado.is_(False))
+        )).all()
+        agregar("RESPONSABLE_INACTIVO", "media",
+                [{"id": str(a), "codigo": c, "nombre": f"{n} {ap}"} for a, c, n, ap in filas])
+
+        # Tipos «insumo» que aún tienen activos (deben pasar a consumibles).
+        from app.models.catalogs import TipoActivo
+        filas = (await self.db.execute(
+            select(TipoActivo.TAC_Tipo_Activo, TipoActivo.TAC_Nombre, func.count(Activo.ACT_Activo))
+            .join(Activo, Activo.TAC_Tipo_Activo == TipoActivo.TAC_Tipo_Activo)
+            .where(TipoActivo.TAC_Clase == "INSUMO", *([Activo.EOP_Estado_Operativo != baja] if baja else []))
+            .group_by(TipoActivo.TAC_Tipo_Activo, TipoActivo.TAC_Nombre)
+        )).all()
+        agregar("INSUMOS_POR_RECLASIFICAR", "baja", [{"id": t, "nombre": n, "cantidad": c} for t, n, c in filas])
 
         filas = (await self.db.execute(
             select(Movimiento.MOV_Movimiento, Activo.ACT_Codigo_Interno, Movimiento.MOV_Fecha_Prevista_Devolucion)
@@ -465,6 +592,43 @@ class ReportesService:
         agregar("LICENCIA_POR_VENCER", "media",
                 [{"id": lic, "nombre": n, "fecha": f.isoformat(), "vencida": f < hoy} for lic, n, f in filas])
 
+        # Cuentas de licencia: clave por cambiar tras la salida de una persona,
+        # claves sin rotar hace demasiado y licencias sin cupos libres.
+        from app.models.catalogo_estandar import FormaConteo
+        from app.models.software import LicenciaClave
+        filas = (await self.db.execute(
+            select(LicenciaClave.LCL_Licencia_Clave, LicenciaClave.LIC_Licencia, LicenciaClave.LCL_Usuario,
+                   Software.SOF_Nombre)
+            .join(Licencia, Licencia.LIC_Licencia == LicenciaClave.LIC_Licencia)
+            .join(Software, Software.SOF_Software == Licencia.SOF_Software)
+            .where(LicenciaClave.LCL_Requiere_Cambio.is_(True), LicenciaClave.LCL_Estado != "BAJA")
+        )).all()
+        agregar("CUENTA_POR_CAMBIAR", "alta",
+                [{"id": c, "licencia": lic, "usuario": u, "nombre": n} for c, lic, u, n in filas])
+
+        limite_rotacion = datetime.utcnow() - timedelta(days=settings.ROTACION_CUENTAS_DIAS)
+        filas = (await self.db.execute(
+            select(LicenciaClave.LCL_Licencia_Clave, LicenciaClave.LIC_Licencia, LicenciaClave.LCL_Usuario,
+                   Software.SOF_Nombre)
+            .join(Licencia, Licencia.LIC_Licencia == LicenciaClave.LIC_Licencia)
+            .join(Software, Software.SOF_Software == Licencia.SOF_Software)
+            .where(LicenciaClave.LCL_Secreto_Enc.is_not(None), LicenciaClave.LCL_Estado != "BAJA",
+                   LicenciaClave.LCL_Requiere_Cambio.is_(False),
+                   func.coalesce(LicenciaClave.LCL_Ultimo_Cambio_Secreto, LicenciaClave.created_at) < limite_rotacion)
+        )).all()
+        agregar("CUENTA_SIN_ROTAR", "baja",
+                [{"id": c, "licencia": lic, "usuario": u, "nombre": n} for c, lic, u, n in filas],
+                dias=settings.ROTACION_CUENTAS_DIAS)
+
+        filas = (await self.db.execute(
+            select(Licencia.LIC_Licencia, Software.SOF_Nombre, Licencia.LIC_Cantidad_Total)
+            .join(Software, Software.SOF_Software == Licencia.SOF_Software)
+            .join(FormaConteo, FormaConteo.FCO_Forma == Licencia.FCO_Forma_Conteo, isouter=True)
+            .where(Licencia.LIC_Cantidad_Usada >= Licencia.LIC_Cantidad_Total,
+                   func.coalesce(FormaConteo.FCO_Codigo, "") != "SITIO")
+        )).all()
+        agregar("CUPOS_AGOTADOS", "media", [{"id": lic, "nombre": n, "total": t} for lic, n, t in filas])
+
         sin_garantia = (await self.db.execute(select(func.count()).select_from(Activo).where(
             *cond_vigentes, Activo.ACT_Fin_Garantia.is_(None)))).scalar_one()
         sin_costo = (await self.db.execute(select(func.count()).select_from(Activo).where(
@@ -472,6 +636,8 @@ class ReportesService:
         if sin_garantia or sin_costo:
             items.append({"clave": "DATOS_INCOMPLETOS", "severidad": "baja", "total": sin_garantia + sin_costo,
                           "sin_garantia": sin_garantia, "sin_costo": sin_costo, "items": []})
+        if permitidos is not None:
+            items = [i for i in items if i["clave"] in permitidos]
         orden = {"alta": 0, "media": 1, "baja": 2}
         items.sort(key=lambda i: orden[i["severidad"]])
         return {"generado": datetime.utcnow().isoformat(), "items": items}

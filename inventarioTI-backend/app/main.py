@@ -116,6 +116,9 @@ app.add_exception_handler(RateLimitExceeded, lambda req, exc: JSONResponse(
     status_code=429, content={"detail": "RATE_LIMIT_EXCEEDED"}
 ))
 app.add_middleware(SlowAPIMiddleware)
+# TECNICO y CONSULTA no reciben costos ni montos en ninguna respuesta JSON.
+from app.core.ocultar_costos import OcultarCostosMiddleware  # noqa: E402
+app.add_middleware(OcultarCostosMiddleware)
 
 
 # =========================================================================

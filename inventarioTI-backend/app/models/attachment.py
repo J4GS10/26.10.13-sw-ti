@@ -33,6 +33,7 @@ class Adjunto(Base):
     ADJ_Tipo_MIME = Column(String(120), nullable=True)
     ADJ_Tamano_Bytes = Column(Integer, nullable=False)
     # factura | foto | acta | otro
+    # Código del catálogo de tipos de evidencia (INV_TIPO_EVIDENCIA.TEV_Codigo).
     ADJ_Categoria = Column(String(20), nullable=False, default="otro")
     ADJ_Descripcion = Column(String(255), nullable=True)
     ADJ_Fecha_Subida = Column(DateTime, server_default=func.now(), nullable=False, index=True)
@@ -56,18 +57,22 @@ class Adjunto(Base):
         nullable=True,
     )
 
+    # Archivo de licencia (método «Archivo de licencia»): sin sede, como la licencia.
+    LIC_Licencia = Column(
+        Integer,
+        ForeignKey("INV_LICENCIA.LIC_Licencia", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+
     activo = relationship("app.models.core.Activo", backref="adjuntos")
 
     __table_args__ = (
-        CheckConstraint(
-            "\"ADJ_Categoria\" IN ('factura', 'foto', 'acta', 'otro')",
-            name="ck_adjunto_categoria_valida",
-        ),
         CheckConstraint('"ADJ_Tamano_Bytes" >= 0', name="ck_adjunto_tamano_no_negativo"),
-        # XOR: exactamente un dueño (activo u orden), nunca ambos ni ninguno.
+        # Exactamente un dueño (activo, orden o licencia), nunca dos ni ninguno.
         CheckConstraint(
-            '("ACT_Activo" IS NOT NULL AND "OCO_Orden" IS NULL) '
-            'OR ("ACT_Activo" IS NULL AND "OCO_Orden" IS NOT NULL)',
+            '(("ACT_Activo" IS NOT NULL)::int + ("OCO_Orden" IS NOT NULL)::int'
+            ' + ("LIC_Licencia" IS NOT NULL)::int) = 1',
             name="ck_adjunto_un_solo_dueno",
         ),
     )

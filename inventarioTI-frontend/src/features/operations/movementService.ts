@@ -6,7 +6,33 @@ import { PersonaResumen } from '../../types/users';
 import { Area } from '../../types/geo';
 import type { SupportedLanguage } from '../../types/language';
 
+export interface InstalacionArea {
+  ACT_Activo: string;
+  ARE_Area: number;
+  PER_Responsable?: string | null;
+  MMO_Motivo: number | null;
+  MOV_Motivo_Detalle?: string | null;
+}
+
+export interface EstadoInstalacion {
+  ACT_Activo: string;
+  ACT_Codigo_Interno: string;
+  ACT_Instalado: boolean;
+  ARE_Area: number | null;
+  area: string | null;
+  PER_Responsable: string | null;
+  responsable: string | null;
+}
+
 export const movementService = {
+  /** Equipo compartido (impresora, switch…): instalar o reubicar en un área. */
+  instalarArea: async (datos: InstalacionArea): Promise<EstadoInstalacion> =>
+    (await client.post<EstadoInstalacion>('/trazabilidad/instalar-area', datos)).data,
+
+  retirarArea: async (datos: { ACT_Activo: string; ARE_Area_Destino?: number | null; MMO_Motivo: number | null;
+    MOV_Motivo_Detalle?: string | null; condicion?: 'BUENO' | 'CON_DANO' }): Promise<EstadoInstalacion> =>
+    (await client.post<EstadoInstalacion>('/trazabilidad/retirar-area', datos)).data,
+
   // --- LECTURA ---
   getMovements: async (): Promise<Movimiento[]> => {
     const response = await client.get<Movimiento[]>('/trazabilidad/movimientos');

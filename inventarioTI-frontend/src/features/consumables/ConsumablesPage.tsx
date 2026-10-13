@@ -28,7 +28,7 @@ import { CollapsibleToolbar } from '../../components/CollapsibleToolbar';
 import { useConfirm } from '../../components/confirm-context';
 export const ConsumablesPage = () => {
     const { t, i18n } = useTranslation();
-    const { canOperate, canAdminInventory, canExport } = usePermissions();
+    const { canOperate, canAdminInventory, canExportFinance: canExport, canSeeCosts } = usePermissions();
     const confirm = useConfirm();
     const { enqueueSnackbar } = useSnackbar();
     const [items, setItems] = useState<Consumible[]>([]);
@@ -120,7 +120,7 @@ export const ConsumablesPage = () => {
           { key: 'category', label: t('consumables.field_category') },
           { key: 'stock', label: t('consumables.stock') },
           { key: 'min', label: t('consumables.field_min') },
-          { key: 'cost', label: t('consumables.avg_cost'), align: 'right' },
+          ...(canSeeCosts ? [{ key: 'cost', label: t('consumables.avg_cost'), align: 'right' as const }] : []),
           { key: 'actions', label: t('common.actions'), align: 'right' },
         ]}
         rows={filtered}
@@ -133,7 +133,7 @@ export const ConsumablesPage = () => {
               <Chip icon={c.bajo_stock ? <WarningAmberIcon /> : undefined} label={`${c.CON_Stock_Actual} ${c.CON_Unidad}`} size="small" color={c.bajo_stock ? 'warning' : 'primary'} variant={c.bajo_stock ? 'filled' : 'outlined'}/>
             </TableCell>
             <TableCell sx={{ color: 'text.secondary' }}>{c.CON_Stock_Minimo}</TableCell>
-            <TableCell align="right" sx={{ color: 'text.secondary' }}>{c.CON_Costo_Unitario != null ? formatMoney(c.CON_Costo_Unitario, c.CON_Moneda ?? 'GTQ', i18n.language) : '—'}</TableCell>
+            {canSeeCosts && <TableCell align="right" sx={{ color: 'text.secondary' }}>{c.CON_Costo_Unitario != null ? formatMoney(c.CON_Costo_Unitario, c.CON_Moneda ?? 'GTQ', i18n.language) : '—'}</TableCell>}
             <TableCell align="right">
               {canOperate && (<>
               <Tooltip title={t('consumables.entry_title') as string}>

@@ -7,13 +7,15 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUser, get_client_ip, require_admin, require_operativo
+from app.api.deps import CurrentUser, get_client_ip, require_admin, require_operativo, require_people
 from app.api.idempotency import idempotency_guard, _IdempotencyGuard
 from app.core.limiter import limiter
 from app.db.session import get_db
 from app.schemas.traceability import (
     ActaLoteRequest,
     DevolucionCreate,
+    InstalacionAreaCreate,
+    RetiroAreaCreate,
     MovimientoCreate,
     MovimientoResponse,
     TipoMovimientoCreate,
@@ -21,7 +23,7 @@ from app.schemas.traceability import (
     TipoMovimientoUpdate,
     TransferenciaCreate,
 )
-from app.schemas.productividad import DevolucionLoteCreate, EntregaLoteCreate
+from app.schemas.productividad import DevolucionLoteCreate, EntregaLoteCreate, RevertirMovimientos
 from app.services.traceability import TraceabilityService
 
 router = APIRouter()
@@ -136,7 +138,8 @@ async def historial_activo(
 
 
 # ================= FLUJOS POR PERSONA =================
-@router.get("/persona/{persona_id}/asignaciones", response_model=List[MovimientoResponse])
+@router.get("/persona/{persona_id}/asignaciones", response_model=List[MovimientoResponse],
+            dependencies=[Depends(require_people)])
 async def get_asignaciones_persona(
     persona_id: uuid.UUID,
     service: TraceabilityService = Depends(get_service),
@@ -247,6 +250,41 @@ async def descargar_acta_multiple(
 
 
 # ================= OPERACIONES EN LOTE =================
+@router.get("/instalacion/{activo_id}")
+async def estado_instalacion(activo_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    """Área donde está instalado un equipo compartido y su responsable."""
+    from app.services.instalacion_area import InstalacionAreaService
+    return await InstalacionAreaService(db).estado(activo_id)
+
+
+@router.post("/instalar-area", dependencies=OPERATIVO)
+async def instalar_en_area(
+    schema: InstalacionAreaCreate, request: Request, current_user: CurrentUser, db: AsyncSession = Depends(get_db),
+):
+    """Instala o reubica un equipo compartido (impresora, switch…) en un área, con responsable opcional."""
+    from app.services.instalacion_area import InstalacionAreaService
+    return await InstalacionAreaService(db).instalar(schema, **_ctx(request, current_user))
+
+
+@router.post("/retirar-area", dependencies=OPERATIVO)
+async def retirar_de_area(
+    schema: RetiroAreaCreate, request: Request, current_user: CurrentUser, db: AsyncSession = Depends(get_db),
+):
+    """Retira un equipo compartido de su área y lo deja en bodega."""
+    from app.services.instalacion_area import InstalacionAreaService
+    return await InstalacionAreaService(db).retirar(schema, **_ctx(request, current_user))
+
+
+@router.post("/movimientos/revertir", dependencies=OPERATIVO)
+async def revertir_movimientos(
+    schema: RevertirMovimientos, request: Request, current_user: CurrentUser, db: AsyncSession = Depends(get_db),
+):
+    """Deshacer una asignación, transferencia o entrega reciente (movimiento inverso, motivo «Revertido»)."""
+    from app.services.productividad import ProductividadService
+    return await ProductividadService(db).revertir(
+        schema.movimientos, schema.instalaciones, rol=current_user.USU_Rol, **_ctx(request, current_user))
+
+
 @router.post("/entrega-lote", status_code=201, dependencies=OPERATIVO)
 @limiter.limit("20/minute")
 async def entrega_lote(

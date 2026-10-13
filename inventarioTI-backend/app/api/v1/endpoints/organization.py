@@ -4,7 +4,10 @@ import uuid
 from fastapi import APIRouter, Depends, Response, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUser, get_client_ip, require_admin, require_business, require_iam, require_super_admin
+from app.api.deps import (
+    CurrentUser, get_client_ip, require_admin, require_iam, require_people, require_people_or_iam,
+    require_super_admin,
+)
 from app.core.limiter import limiter
 from app.db.session import get_db
 from app.schemas.organization import (
@@ -21,6 +24,9 @@ router = APIRouter()
 ADMIN = [Depends(require_admin)]
 SUPER = [Depends(require_super_admin)]
 IAM = [Depends(require_iam)]
+# Personas, departamentos y cargos: inventario con personas e identidades.
+# Consulta, Compras y Contabilidad no ven datos personales.
+PEOPLE = [Depends(require_people_or_iam)]
 
 
 def get_service(db: AsyncSession = Depends(get_db)) -> OrganizationService:
@@ -43,7 +49,7 @@ async def sedes_en_alcance(db: AsyncSession = Depends(get_db)):
 
 
 # ================= DEPARTAMENTOS =================
-@router.get("/departamentos/resumen", dependencies=[Depends(require_business)])
+@router.get("/departamentos/resumen", dependencies=[Depends(require_people)])
 @limiter.limit("10/minute")
 async def departamentos_resumen(request: Request, service: OrganizationService = Depends(get_service)):
     """
@@ -54,7 +60,7 @@ async def departamentos_resumen(request: Request, service: OrganizationService =
     return await service.departamentos_resumen()
 
 
-@router.get("/departamentos/{id}/detalle", dependencies=[Depends(require_business)])
+@router.get("/departamentos/{id}/detalle", dependencies=[Depends(require_people)])
 @limiter.limit("10/minute")
 async def get_departamento_detalle(id: int, request: Request, service: OrganizationService = Depends(get_service)):
     """
@@ -64,12 +70,12 @@ async def get_departamento_detalle(id: int, request: Request, service: Organizat
     return await service.departamento_detalle(id)
 
 
-@router.get("/departamentos", response_model=List[DepartamentoResponse])
+@router.get("/departamentos", response_model=List[DepartamentoResponse], dependencies=PEOPLE)
 async def list_departamentos(service: OrganizationService = Depends(get_service)):
     return await service.get_departamentos()
 
 
-@router.get("/departamentos/{id}", response_model=DepartamentoResponse)
+@router.get("/departamentos/{id}", response_model=DepartamentoResponse, dependencies=PEOPLE)
 async def get_departamento(id: int, service: OrganizationService = Depends(get_service)):
     return await service.get_departamento(id)
 
@@ -99,12 +105,12 @@ async def delete_departamento(
 
 
 # ================= CARGOS =================
-@router.get("/cargos", response_model=List[CargoResponse])
+@router.get("/cargos", response_model=List[CargoResponse], dependencies=PEOPLE)
 async def list_cargos(service: OrganizationService = Depends(get_service)):
     return await service.get_cargos()
 
 
-@router.get("/cargos/{id}", response_model=CargoResponse)
+@router.get("/cargos/{id}", response_model=CargoResponse, dependencies=PEOPLE)
 async def get_cargo(id: int, service: OrganizationService = Depends(get_service)):
     return await service.get_cargo(id)
 
@@ -134,21 +140,21 @@ async def delete_cargo(
 
 
 # ================= PERSONAS =================
-@router.get("/personas", response_model=List[PersonaResponse])
+@router.get("/personas", response_model=List[PersonaResponse], dependencies=PEOPLE)
 @limiter.limit("20/minute")
 async def list_personas(request: Request, service: OrganizationService = Depends(get_service)):
     """Listado con PII (nombres, emails). Rate-limit para frenar scraping."""
     return await service.get_personas()
 
 
-@router.get("/personas/disponibles", response_model=List[PersonaResponse])
+@router.get("/personas/disponibles", response_model=List[PersonaResponse], dependencies=PEOPLE)
 @limiter.limit("20/minute")
 async def list_personas_disponibles(request: Request, service: OrganizationService = Depends(get_service)):
     """Personas sin usuario asignado."""
     return await service.get_personas_disponibles()
 
 
-@router.get("/personas/{id}", response_model=PersonaResponse)
+@router.get("/personas/{id}", response_model=PersonaResponse, dependencies=PEOPLE)
 async def get_persona(id: uuid.UUID, service: OrganizationService = Depends(get_service)):
     return await service.get_persona(id)
 
@@ -305,14 +311,14 @@ async def desactivar_usuario(
 
 
 # ================= SUGERENCIAS PARA FORMULARIOS =================
-@router.get("/personas/{id}/contexto")
+@router.get("/personas/{id}/contexto", dependencies=PEOPLE)
 async def persona_contexto(id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     """Datos que se derivan de la persona: departamento, cargo, jefe, área
     habitual, activos en custodia, usuario, y usuario/rol sugeridos."""
     return await SuggestionService(db).persona(id)
 
 
-@router.get("/departamentos/{id}/contexto", dependencies=[Depends(require_business)])
+@router.get("/departamentos/{id}/contexto", dependencies=[Depends(require_people)])
 async def departamento_contexto(id: int, db: AsyncSession = Depends(get_db)):
     """Cargo, jefe y área más probables para una persona nueva del departamento."""
     return await SuggestionService(db).departamento(id)

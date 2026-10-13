@@ -56,7 +56,7 @@ export const MaintenancePage = () => {
         }
     };
     return (<Box>
-      <PageHeader
+      <PageHeader help="maintenance"
         title={t('maintenance.title')}
         badge={tickets.length}
         actions={canOperate ? <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>{t('maintenance.new_ticket')}</Button> : undefined}

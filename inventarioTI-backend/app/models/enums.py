@@ -8,6 +8,8 @@ class EstadoOperativoEnum(str, Enum):
     REPARACION = "En Reparación"
     BAJA = "Baja"
     TRANSITO = "En Tránsito"
+    # Equipo compartido en uso en un área (impresora, switch…), sin custodio.
+    INSTALADO = "Instalado"
 
 
 class TipoMovimientoEnum(str, Enum):

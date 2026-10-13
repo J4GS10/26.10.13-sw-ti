@@ -145,10 +145,15 @@ async def _authenticate(db: AsyncSession, token: str, *, allow_restricted: bool)
 
 
 async def get_current_user(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     token: str = Depends(reusable_oauth2),
 ) -> Usuario:
-    return await _authenticate(db, token, allow_restricted=False)
+    user = await _authenticate(db, token, allow_restricted=False)
+    # El rol queda en la petición: el middleware ocultar_costos lo usa para
+    # quitar costos y montos de la respuesta a TECNICO y CONSULTA.
+    request.state.rol = user.USU_Rol
+    return user
 
 
 async def get_current_user_allow_restricted(
@@ -206,6 +211,20 @@ require_aprobador = RoleChecker(["SUPER_ADMIN", "JEFE_TI"])
 require_audit_reader = RoleChecker(["SUPER_ADMIN", "ADMIN_SEGURIDAD", "AUDITOR"])
 # Exportaciones CSV del inventario (lectura masiva de su alcance).
 require_export = RoleChecker(["SUPER_ADMIN", "JEFE_TI", "ADMIN_TI", "AUDITOR"])
+# Grupos por módulo (definidos en app/core/roles.py).
+from app.core import roles as _roles  # noqa: E402
+require_app = RoleChecker(list(_roles.APP_ROLES))
+require_inventory = RoleChecker(list(_roles.INVENTORY_READ_ROLES))
+require_stock_read = RoleChecker(list(_roles.STOCK_READ_ROLES))
+require_stock_catalog = RoleChecker(list(_roles.STOCK_READ_ROLES) + ["COMPRAS"])
+require_people = RoleChecker(list(_roles.PEOPLE_READ_ROLES))
+require_people_or_iam = RoleChecker(list(_roles.PEOPLE_READ_ROLES) + ["ADMIN_SEGURIDAD"])
+require_software = RoleChecker(list(_roles.SOFTWARE_READ_ROLES))
+require_purchase = RoleChecker(list(_roles.PURCHASE_WRITE_ROLES))
+require_purchase_read = RoleChecker(list(_roles.PURCHASE_READ_ROLES))
+require_control_read = RoleChecker(list(_roles.CONTROL_READ_ROLES))
+require_finance_export = RoleChecker(list(_roles.FINANCE_EXPORT_ROLES))
+require_purchase_export = RoleChecker(list(_roles.FINANCE_EXPORT_ROLES) + ["COMPRAS"])
 # Cualquier autenticado: usar Depends(get_current_user) directamente.
 
 

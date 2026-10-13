@@ -13,6 +13,7 @@ from typing import Optional
 
 from app.api.deps import (
     CurrentUser, get_client_ip, get_current_user, get_user_agent, require_audit_reader, require_export,
+    require_finance_export, require_purchase_export,
 )
 from app.core.errors import utcnow_naive
 from app.core.limiter import limiter
@@ -143,7 +144,7 @@ def _csv_response(headers: list[str], rows, filename_prefix: str) -> StreamingRe
     )
 
 
-@router.get("/activos.csv", dependencies=[Depends(require_export)])
+@router.get("/activos.csv", dependencies=[Depends(require_finance_export)])
 @limiter.limit("10/minute")
 async def export_activos_csv(
     request: Request,
@@ -202,7 +203,7 @@ async def export_movimientos_csv(
     return _csv_response(headers, rows, _filename("movimientos", lang))
 
 
-@router.get("/consumibles.csv", dependencies=[Depends(require_export)])
+@router.get("/consumibles.csv", dependencies=[Depends(require_finance_export)])
 @limiter.limit("10/minute")
 async def export_consumibles_csv(
     request: Request,
@@ -221,7 +222,7 @@ async def export_consumibles_csv(
     return _csv_response(headers, rows, _filename("consumibles", lang))
 
 
-@router.get("/proveedores.csv", dependencies=[Depends(require_export)])
+@router.get("/proveedores.csv", dependencies=[Depends(require_purchase_export)])
 @limiter.limit("10/minute")
 async def export_proveedores_csv(
     request: Request,
@@ -239,7 +240,7 @@ async def export_proveedores_csv(
     return _csv_response(headers, rows, _filename("proveedores", lang))
 
 
-@router.get("/ordenes.csv", dependencies=[Depends(require_export)])
+@router.get("/ordenes.csv", dependencies=[Depends(require_purchase_export)])
 @limiter.limit("10/minute")
 async def export_ordenes_csv(
     request: Request,

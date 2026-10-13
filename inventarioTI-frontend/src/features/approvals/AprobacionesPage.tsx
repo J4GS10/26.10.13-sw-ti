@@ -7,6 +7,7 @@ import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import UndoIcon from '@mui/icons-material/Undo';
 import { useTranslation } from 'react-i18next';
+import { useCatalogLabel } from '../../hooks/useCatalogo';
 import { useSnackbar } from 'notistack';
 import { DataTableShell, PageHeader } from '../../components/ui';
 import { aprobacionService } from '../../api/aprobacionService';
@@ -27,6 +28,8 @@ type Accion = { tipo: 'aprobar' | 'rechazar'; solicitud: Aprobacion } | null;
  */
 export const AprobacionesPage = () => {
   const { t, i18n } = useTranslation();
+  const motivoBaja = useCatalogLabel('motivos-baja');
+  const destinoBaja = useCatalogLabel('destinos-baja');
   const { enqueueSnackbar } = useSnackbar();
   const { canApprove, canAdminInventory } = usePermissions();
   const [vista, setVista] = useState<'PENDIENTE' | 'HISTORIAL'>('PENDIENTE');
@@ -85,8 +88,8 @@ export const AprobacionesPage = () => {
     const p = a.APR_Payload as Record<string, unknown>;
     if (a.APR_Tipo === 'BAJA') {
       return [
-        p.motivo ? t(`decommission.reasons.${p.motivo}`) : null,
-        p.destino ? t(`decommission.destinations.${p.destino}`) : null,
+        p.motivo ? motivoBaja(String(p.motivo)) : null,
+        p.destino ? destinoBaja(String(p.destino)) : null,
         p.documento ? `${t('decommission.document')}: ${p.documento}` : null,
       ].filter(Boolean).join(' · ');
     }

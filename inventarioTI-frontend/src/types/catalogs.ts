@@ -1,3 +1,4 @@
+import type { ClaseActivo, ReglasClase } from '../utils/clasesActivo';
 // src/types/catalogs.ts
 
 // --- 1. MARCAS ---
@@ -16,12 +17,15 @@ export interface TipoActivo {
   TAC_Nombre: string;
   TAC_Prefijo: string | null;
   TAC_Aplica_Depreciacion: boolean;
+  TAC_Clase?: ClaseActivo;
+  reglas?: ReglasClase;
 }
 
 export interface TipoActivoCreate {
   TAC_Nombre: string;
   TAC_Prefijo?: string;
   TAC_Aplica_Depreciacion?: boolean;
+  TAC_Clase?: ClaseActivo;
 }
 
 // --- 3. TIPOS DE CONEXIÓN ---

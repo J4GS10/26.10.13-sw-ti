@@ -4,6 +4,9 @@ import {
   FormControlLabel, Radio, RadioGroup, Stack, TextField, Typography,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import type { CatalogoItem } from '../../api/catalogoService';
+import { CatalogField } from '../../components/CatalogField';
+import { pideDetalle } from '../../hooks/useCatalogo';
 import { useSnackbar } from 'notistack';
 import { getApiErrorMessage } from '../../api/errors';
 import { productividadService, type ResultadoLote } from '../../api/productividadService';
@@ -12,7 +15,6 @@ import type { Area } from '../../types/geo';
 import { movementService } from './movementService';
 import { EntregaResultado } from './EntregaResultado';
 
-const MOTIVOS = ['renuncia', 'cambio_equipo', 'fin_prestamo', 'falla', 'reasignacion', 'otro'] as const;
 
 interface Props {
   open: boolean;
@@ -26,7 +28,7 @@ export const DevolucionLoteDialog = ({ open, activos, onClose }: Props) => {
   const { enqueueSnackbar } = useSnackbar();
   const [areas, setAreas] = useState<Area[]>([]);
   const [area, setArea] = useState<Area | null>(null);
-  const [motivo, setMotivo] = useState<typeof MOTIVOS[number] | ''>('');
+  const [motivo, setMotivo] = useState<CatalogoItem | null>(null);
   const [detalle, setDetalle] = useState('');
   const [condicion, setCondicion] = useState<'BUENO' | 'CON_DANO'>('BUENO');
   const [enviando, setEnviando] = useState(false);
@@ -34,16 +36,15 @@ export const DevolucionLoteDialog = ({ open, activos, onClose }: Props) => {
 
   useEffect(() => {
     if (!open) return;
-    setResultado(null); setMotivo(''); setDetalle(''); setArea(null); setCondicion('BUENO');
+    setResultado(null); setMotivo(null); setDetalle(''); setArea(null); setCondicion('BUENO');
     movementService.getAreas().then(setAreas).catch(() => setAreas([]));
   }, [open]);
 
   const enviar = async () => {
     setEnviando(true);
     try {
-      const texto = [motivo ? t(`returns.reasons.${motivo}`) : '', detalle.trim()].filter(Boolean).join(': ');
       setResultado(await productividadService.devolucionLote({
-        activos: activos.map((a) => a.ACT_Activo), MOV_Motivo: texto || undefined,
+        activos: activos.map((a) => a.ACT_Activo), MMO_Motivo: motivo?.id ?? null, MOV_Motivo_Detalle: detalle.trim() || null,
         ARE_Area_Destino: area?.ARE_Area ?? null, condicion,
       }));
     } catch (err) {
@@ -67,13 +68,11 @@ export const DevolucionLoteDialog = ({ open, activos, onClose }: Props) => {
                 {activos.map((a) => <Chip key={a.ACT_Activo} size="small" label={a.ACT_Codigo_Interno} />)}
               </Stack>
             </Box>
-            <TextField select SelectProps={{ native: true }} label={t('returns.reason')} value={motivo}
-              onChange={(e) => setMotivo(e.target.value as typeof MOTIVOS[number] | '')} InputLabelProps={{ shrink: true }}>
-              <option value="">{t('returns.choose_reason')}</option>
-              {MOTIVOS.map((m) => <option key={m} value={m}>{t(`returns.reasons.${m}`)}</option>)}
-            </TextField>
-            <TextField label={t('returns.detail')} value={detalle} onChange={(e) => setDetalle(e.target.value)}
-              inputProps={{ maxLength: 200 }} helperText={motivo === 'otro' ? t('returns.detail_required') : undefined} />
+            <CatalogField clave="motivos-movimiento" aplicaA="DEVOLUCION" label={t('movement_reason.reason')} required
+              value={motivo?.id ?? null} onChange={(_v, item) => setMotivo(item)} />
+            <TextField label={t('movement_reason.note')} value={detalle} onChange={(e) => setDetalle(e.target.value)}
+              inputProps={{ maxLength: 200 }} helperText={pideDetalle(motivo) ? t('returns.detail_required') : undefined}
+              error={pideDetalle(motivo) && !detalle.trim()} />
             <Autocomplete options={areas} value={area} onChange={(_, v) => setArea(v)}
               getOptionLabel={(a) => a.ARE_Nombre} isOptionEqualToValue={(a, b) => a.ARE_Area === b.ARE_Area}
               renderInput={(p) => <TextField {...p} label={t('returns.storage_area')} helperText={t('returns.storage_area_help')} />} />
@@ -94,7 +93,7 @@ export const DevolucionLoteDialog = ({ open, activos, onClose }: Props) => {
         ) : (
           <>
             <Button color="inherit" onClick={() => onClose(false)}>{t('common.cancel')}</Button>
-            <Button variant="contained" onClick={enviar} disabled={enviando || !motivo || (motivo === 'otro' && !detalle.trim())}
+            <Button variant="contained" onClick={enviar} disabled={enviando || !motivo || (pideDetalle(motivo) && !detalle.trim())}
               startIcon={enviando ? <CircularProgress size={16} color="inherit" /> : undefined}>
               {t('returns_batch.submit', { count: activos.length })}
             </Button>

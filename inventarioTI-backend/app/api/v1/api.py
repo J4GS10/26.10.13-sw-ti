@@ -4,6 +4,7 @@ from app.api.v1.endpoints import (
     organization,
     location,
     catalogs,
+    catalogos,
     core,
     traceability,
     software,
@@ -34,10 +35,13 @@ api_router.include_router(governance.router, prefix="/gov", tags=["Gobierno"])
 
 # 3. Módulos de Negocio (Requieren autenticación JWT)
 _auth = [Depends(deps.get_current_user)]
-# Inventario/operación: el administrador de seguridad NO accede (separación de
-# funciones; su ámbito son identidades y auditoría). Seguro por defecto en el
-# router, no solo ocultando menús en el frontend.
-_business = [Depends(deps.require_business)]
+# Cada módulo exige su grupo de roles (app/core/roles.py) en el router, no solo
+# ocultando menús: un rol sin el módulo recibe 403 y no ve ni indicios de sus
+# registros. El administrador de seguridad no accede al inventario (separación
+# de funciones). Los endpoints afinan más (escritura, personas, exportes).
+_app = [Depends(deps.require_app)]
+_inventory = [Depends(deps.require_inventory)]
+_stock = [Depends(deps.require_stock_read)]
 
 api_router.include_router(
     organization.router, prefix="/org", tags=["Organización"],
@@ -45,65 +49,70 @@ api_router.include_router(
 )
 api_router.include_router(
     location.router, prefix="/geo", tags=["Ubicación Geográfica"],
-    dependencies=_business
+    dependencies=_app
 )
 api_router.include_router(
     catalogs.router, prefix="/cat", tags=["Catálogos Técnicos"],
-    dependencies=_business
+    dependencies=_app
+)
+api_router.include_router(
+    catalogos.router, prefix="/catalogos", tags=["Centro de catálogos"],
+    dependencies=_app
 )
 api_router.include_router(
     core.router, prefix="/core", tags=["Core Inventario"],
-    dependencies=_business
+    dependencies=_stock
 )
 api_router.include_router(
     traceability.router, prefix="/trazabilidad", tags=["Trazabilidad"],
-    dependencies=_business
+    dependencies=_inventory
 )
 api_router.include_router(
     software.router, prefix="/soft", tags=["Software y Licencias"],
-    dependencies=_business
+    dependencies=[Depends(deps.require_software)]
 )
 api_router.include_router(
     maintenance.router, prefix="/mantenimiento", tags=["Mantenimiento y Soporte"],
-    dependencies=_business
+    dependencies=_inventory
 )
 api_router.include_router(
     consumable.router, prefix="/consumibles", tags=["Consumibles"],
-    dependencies=_business
+    dependencies=_app
 )
 api_router.include_router(
     attachment.router, prefix="/adjuntos", tags=["Adjuntos"],
-    dependencies=_business
+    dependencies=_app
 )
 api_router.include_router(
     procurement.router, prefix="/compras", tags=["Compras y Garantías"],
-    dependencies=_business
+    dependencies=[Depends(deps.require_purchase_read)]
 )
 api_router.include_router(
     inventario.router, prefix="/inventario", tags=["Trazabilidad e inventario"],
-    dependencies=_business
+    dependencies=_app
 )
 api_router.include_router(
     aprobaciones.router, prefix="/aprobaciones", tags=["Aprobaciones del Jefe de TI"],
-    dependencies=_business
+    dependencies=[Depends(deps.require_control_read)]
 )
 
 # 4. Dashboard (Requiere autenticación)
 api_router.include_router(
     stats.router, prefix="/stats", tags=["Dashboard y Métricas"],
-    dependencies=_business
+    dependencies=_stock
 )
 
 # Productividad: búsqueda global, kit sugerido, calidad de datos e importación
 api_router.include_router(
     productividad.router, prefix="/productividad", tags=["Productividad"],
-    dependencies=_business,
+    dependencies=_app,
 )
 
 # Exportes CSV
 api_router.include_router(
     export.router, prefix="/export", tags=["Exportación CSV"],
-    dependencies=_business,
+    # Cada exporte exige su rol (valores, compras, auditoría para seguridad).
+    dependencies=_auth,
 )
 
 # Active Directory + reglas de notificación (roles validados por endpoint)

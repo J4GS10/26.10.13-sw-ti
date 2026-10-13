@@ -16,7 +16,10 @@ import { Sidebar } from './components/Sidebar';
 import { ProtectedRoute } from './router/ProtectedRoute';
 import { WorkspaceProvider } from './context/WorkspaceContext';
 import { useWorkspace } from './context/workspace-context';
-import { ADMIN_READER_ROLES, AUDIT_READER_ROLES, IAM_ROLES, INVENTORY_ADMIN_ROLES, INVENTORY_READER_ROLES } from './utils/roles';
+import {
+    ADMIN_READER_ROLES, AUDIT_READER_ROLES, IAM_ROLES, INVENTORY_ADMIN_ROLES, INVENTORY_ROLES, PURCHASE_READ_ROLES,
+    SOFTWARE_PAGE_ROLES, STOCK_ROLES, FINANCE_EXPORT_ROLES,
+} from './utils/roles';
 // Páginas
 const LoginPage = lazy(() => import('./features/auth/LoginPage').then((m) => ({ default: m.LoginPage })));
 const ResetPasswordPage = lazy(() => import('./features/auth/ResetPasswordPage').then((m) => ({ default: m.ResetPasswordPage })));
@@ -43,9 +46,12 @@ const DirectoryPage = lazy(() => import('./features/directory/DirectoryPage').th
 const SecurityGate = lazy(() => import('./features/auth/security/SecurityGate').then((m) => ({ default: m.SecurityGate })));
 const TrazabilidadPage = lazy(() => import('./features/traceability/TrazabilidadPage').then((m) => ({ default: m.TrazabilidadPage })));
 const TomasPage = lazy(() => import('./features/inventory-count/TomasPage').then((m) => ({ default: m.TomasPage })));
+const CierreMensualPage = lazy(() => import('./features/accounting/CierreMensualPage').then((m) => ({ default: m.CierreMensualPage })));
 const AprobacionesPage = lazy(() => import('./features/approvals/AprobacionesPage').then((m) => ({ default: m.AprobacionesPage })));
 const AuditPage = lazy(() => import('./features/audit/AuditPage').then((m) => ({ default: m.AuditPage })));
 const OnboardingPage = lazy(() => import('./features/onboarding/OnboardingPage').then((m) => ({ default: m.OnboardingPage })));
+const CatalogCenterPage = lazy(() => import('./features/catalogs/center/CatalogCenterPage').then((m) => ({ default: m.CatalogCenterPage })));
+const PersonFilePage = lazy(() => import('./features/persons/PersonFilePage').then((m) => ({ default: m.PersonFilePage })));
 const ImportAssetsPage = lazy(() => import('./features/import/ImportAssetsPage').then((m) => ({ default: m.ImportAssetsPage })));
 const PageFallback = () => (<Box role="status" aria-live="polite" sx={{
         display: 'flex',
@@ -167,6 +173,9 @@ const HomeRoute = () => {
     const { user } = useAuth();
     if (user?.role === 'ADMIN_SEGURIDAD')
         return <Navigate to="/usuarios" replace/>;
+    // Compras (Administración) no ve el inventario: empieza en sus órdenes.
+    if (user?.role === 'COMPRAS')
+        return <Navigate to="/compras/ordenes" replace/>;
     return <DashboardPage />;
 };
 // Wrapper que consume el ConfigContext y monta el ThemeProvider con los colores
@@ -194,16 +203,20 @@ const ThemedApp = () => {
                 <Route element={<DashboardLayout />}>
                   <Route path="/" element={<HomeRoute />}/>
 
-                  {/* Lectura del inventario: operadores y auditor (las acciones se ocultan por rol). */}
-                  <Route element={<ProtectedRoute allowedRoles={INVENTORY_READER_ROLES}/>}>
+                  {/* Activos y consumibles: el inventario y Contabilidad (valores, sin personas). */}
+                  <Route element={<ProtectedRoute allowedRoles={STOCK_ROLES}/>}>
                     <Route path="/activos" element={<AssetsPage />}/>
                     <Route path="/activos/:codigo" element={<AssetsPage />}/>
+                    <Route path="/consumibles" element={<ConsumablesPage />}/>
+                  </Route>
+
+                  {/* Operación del inventario: operadores, auditor y Consulta (las acciones se ocultan por rol). */}
+                  <Route element={<ProtectedRoute allowedRoles={INVENTORY_ROLES}/>}>
                     <Route path="/scanner" element={<ScannerPage />}/>
                     <Route path="/operaciones/guia" element={<Navigate to="/operaciones/movimientos" replace/>}/>
                     <Route path="/operaciones/flujo" element={<Navigate to="/operaciones/movimientos" replace/>}/>
                     <Route path="/operaciones/movimientos" element={<MovementsPage />}/>
                     <Route path="/mantenimiento" element={<MaintenancePage />}/>
-                    <Route path="/consumibles" element={<ConsumablesPage />}/>
                     <Route path="/trazabilidad" element={<TrazabilidadPage />}/>
                     <Route path="/inventario/tomas" element={<TomasPage />}/>
                   </Route>
@@ -211,12 +224,25 @@ const ThemedApp = () => {
                   <Route element={<ProtectedRoute allowedRoles={ADMIN_READER_ROLES}/>}>
                     <Route path="/departamentos" element={<DepartmentsPage />}/>
                     <Route path="/empleados" element={<PersonsPage />}/>
-                    <Route path="/empleados/:personaId" element={<PersonsPage />}/>
+                    <Route path="/empleados/:personaId" element={<PersonFilePage />}/>
+                    <Route path="/aprobaciones" element={<AprobacionesPage />}/>
+                    <Route path="/config/catalogos" element={<CatalogCenterPage />}/>
+                  </Route>
+
+                  <Route element={<ProtectedRoute allowedRoles={SOFTWARE_PAGE_ROLES}/>}>
                     <Route path="/software" element={<SoftwarePage />}/>
+                  </Route>
+
+                  {/* Cierre mensual: valores para Contabilidad (y TI y el auditor). */}
+                  <Route element={<ProtectedRoute allowedRoles={FINANCE_EXPORT_ROLES}/>}>
+                    <Route path="/contabilidad/cierre" element={<CierreMensualPage />}/>
+                  </Route>
+
+                  {/* Compras: TI, Compras y Contabilidad (lectura) y el auditor. */}
+                  <Route element={<ProtectedRoute allowedRoles={PURCHASE_READ_ROLES}/>}>
                     <Route path="/compras/proveedores" element={<ProvidersPage />}/>
                     <Route path="/compras/ordenes" element={<PurchaseOrdersPage />}/>
                     <Route path="/compras/garantias" element={<WarrantiesPage />}/>
-                    <Route path="/aprobaciones" element={<AprobacionesPage />}/>
                   </Route>
 
                   <Route element={<ProtectedRoute allowedRoles={INVENTORY_ADMIN_ROLES}/>}>

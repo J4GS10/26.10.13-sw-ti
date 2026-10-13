@@ -23,6 +23,12 @@ TIPOS_APROBACION = ("BAJA", "RECEPCION_SOBRANTE")
 ESTADOS_APROBACION = ("PENDIENTE", "APROBADA", "RECHAZADA", "ANULADA")
 
 
+# BAJA y RECEPCION_SOBRANTE (sesión 13); el resto completa la separación de
+# funciones en toda salida de inventario (sesión 16).
+TIPOS_APROBACION = ("BAJA", "RECEPCION_SOBRANTE", "AJUSTE_CONSUMIBLE", "CIERRE_FALTANTE", "CANCELACION_ORDEN",
+                    "RECLASIFICACION")
+
+
 class Aprobacion(Base):
     __tablename__ = "INV_APROBACION"
 
@@ -37,6 +43,7 @@ class Aprobacion(Base):
 
     ACT_Activo = Column(Uuid, nullable=True, index=True)
     OCO_Orden = Column(Integer, nullable=True, index=True)
+    CON_Consumible = Column(Integer, nullable=True, index=True)
     SED_Sede = Column(Integer, nullable=True, index=True)
 
     APR_Solicitante = Column(Uuid, nullable=False)
@@ -46,7 +53,7 @@ class Aprobacion(Base):
     APR_Comentario = Column(String(500), nullable=True)
 
     __table_args__ = (
-        CheckConstraint("\"APR_Tipo\" IN ('BAJA', 'RECEPCION_SOBRANTE')", name="ck_aprobacion_tipo"),
+        CheckConstraint(f'"APR_Tipo" IN ({", ".join(repr(t) for t in TIPOS_APROBACION)})', name="ck_aprobacion_tipo"),
         CheckConstraint(
             "\"APR_Estado\" IN ('PENDIENTE', 'APROBADA', 'RECHAZADA', 'ANULADA')", name="ck_aprobacion_estado"),
         # Separación de funciones también en la base: nadie se aprueba a sí mismo.

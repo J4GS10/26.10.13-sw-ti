@@ -19,5 +19,6 @@ class AdjuntoResponse(BaseModel):
     ADJ_Fecha_Subida: datetime
     ACT_Activo: Optional[uuid.UUID] = None
     OCO_Orden: Optional[int] = None
+    LIC_Licencia: Optional[int] = None
     USU_Usuario: Optional[uuid.UUID] = None
     model_config = ConfigDict(from_attributes=True)

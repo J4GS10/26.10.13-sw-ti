@@ -19,8 +19,13 @@ def instalar_indices(conn: Connection) -> list[tuple[str, int]]:
     registrar_indices()
     omitidos: list[tuple[str, int]] = []
     existentes = set(conn.execute(text("SELECT indexname FROM pg_indexes")).scalars().all())
+    # Una migración intermedia instala los índices antes de que existan las
+    # tablas de migraciones posteriores: esas se omiten (las crea su migración).
+    tablas = set(conn.execute(text(
+        "SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema()"
+    )).scalars().all())
     for nombre, tabla, texto, exactas, _codigo in INDICES_CI:
-        if nombre in existentes:
+        if nombre in existentes or tabla not in tablas:
             continue
         claves = [f'"{c}"' for c in exactas] + [f'lower(trim("{c}"))' for c in texto]
         if tabla == "INV_SOFTWARE":

@@ -29,6 +29,14 @@ from app.schemas.maintenance import (
 )
 
 
+
+
+def _con_prefijo(nombre: str, texto: str) -> str:
+    """«Nombre del catálogo: detalle», sin repetir el nombre si el texto ya lo trae (edición)."""
+    if not texto or texto == nombre:
+        return nombre
+    return texto if texto.startswith(f"{nombre}:") else f"{nombre}: {texto}"
+
 class MaintenanceService(BaseService[MaintenanceRepository]):
     repo_class = MaintenanceRepository
 
@@ -145,6 +153,7 @@ class MaintenanceService(BaseService[MaintenanceRepository]):
                 raise HTTPException(400, "ASSET_STATE_DOES_NOT_ALLOW_MAINTENANCE")
             activo.EOP_Estado_Operativo = estado_reparacion.EOP_Estado_Operativo
 
+            await self._textos_de_catalogo(schema)
             mantenimiento = await self.repo.create_mantenimiento(schema)
             from app.services.kardex import KardexService
             await KardexService(self.db).registrar(
@@ -206,6 +215,36 @@ class MaintenanceService(BaseService[MaintenanceRepository]):
             # abrió un ticket para el mismo activo entre el SELECT y el INSERT.
             raise HTTPException(409, "ASSET_ALREADY_HAS_OPEN_MAINTENANCE_TICKET")
 
+    async def _detalle_de_catalogo(self, detalle) -> None:
+        """Acción del catálogo + detalle escrito (obligatorio si la acción lo pide o no hay acción)."""
+        from app.services.catalogo_generico import CatalogoGenericoService
+        texto = (detalle.DMA_Accion_Realizada or "").strip()
+        if detalle.AMA_Accion is None:
+            if len(texto) < 5:
+                raise HTTPException(422, "MAINTENANCE_ACTION_REQUIRED")
+            return
+        nombre = await CatalogoGenericoService(self.db).nombre_vigente("acciones-mantenimiento", detalle.AMA_Accion)
+        from app.models.catalogo_estandar import AccionMantenimiento
+        if (await self.db.get(AccionMantenimiento, detalle.AMA_Accion)).AMA_Pide_Detalle and not texto:
+            raise HTTPException(422, "MAINTENANCE_ACTION_DETAIL_REQUIRED")
+        detalle.DMA_Accion_Realizada = _con_prefijo(nombre, texto)[:255]
+
+    async def _textos_de_catalogo(self, schema) -> None:
+        """Tipo de falla del catálogo + descripción (obligatoria sin tipo o si el tipo la pide)."""
+        from app.services.catalogo_generico import CatalogoGenericoService
+        from app.models.catalogo_estandar import TipoFalla
+        texto = (schema.MAN_Descripcion_Falla or "").strip()
+        if schema.TFA_Tipo_Falla is None:
+            if not texto:
+                raise HTTPException(422, "FAULT_DESCRIPTION_REQUIRED")
+        else:
+            nombre = await CatalogoGenericoService(self.db).nombre_vigente("tipos-falla", schema.TFA_Tipo_Falla)
+            if (await self.db.get(TipoFalla, schema.TFA_Tipo_Falla)).TFA_Pide_Detalle and not texto:
+                raise HTTPException(422, "FAULT_DESCRIPTION_REQUIRED")
+            schema.MAN_Descripcion_Falla = _con_prefijo(nombre, texto)[:2000]
+        for detalle in schema.detalles:
+            await self._detalle_de_catalogo(detalle)
+
     @transactional
     async def agregar_detalle(
         self, mantenimiento_id: uuid.UUID, schema: DetalleCreate, usuario_id=None, ip=None,
@@ -213,6 +252,7 @@ class MaintenanceService(BaseService[MaintenanceRepository]):
         mant = await self.get_mantenimiento(mantenimiento_id)
         if mant.MAN_Fecha_Cierre:
             raise HTTPException(400, "CANNOT_ADD_DETAILS_TO_CLOSED_TICKET")
+        await self._detalle_de_catalogo(schema)
         obj = await self.repo.add_detalle(mantenimiento_id, schema)
         await self.gov_repo.create_audit_log(
             "CREATE", "INV_DETALLE_MANT",
@@ -233,6 +273,7 @@ class MaintenanceService(BaseService[MaintenanceRepository]):
         mant = await self.repo.get_by_id(det.MAN_Mantenimiento)
         if mant and mant.MAN_Fecha_Cierre:
             raise HTTPException(400, "CANNOT_MODIFY_DETAILS_OF_CLOSED_TICKET")
+        await self._detalle_de_catalogo(schema)
         obj = await self.repo.update_detalle(detalle_id, schema)
         await self.gov_repo.create_audit_log(
             "UPDATE", "INV_DETALLE_MANT",
@@ -295,7 +336,10 @@ class MaintenanceService(BaseService[MaintenanceRepository]):
                     _Mov.MOV_Fecha_Devolucion.is_(None),
                 )
             )).scalar_one_or_none()
-            nuevo_nombre = "Asignado" if mov_vigente else "%Bodega%"
+            activo_previo = await self.core_repo.get_by_id_simple(mant.ACT_Activo)
+            # Un equipo compartido vuelve a su área («Instalado»).
+            instalado = bool(activo_previo and activo_previo.ACT_Instalado and not mov_vigente)
+            nuevo_nombre = "Asignado" if mov_vigente else "Instalado" if instalado else "%Bodega%"
             estado_nuevo = (await self.db.execute(
                 select(EstadoOperativo).where(EstadoOperativo.EOP_Nombre.ilike(nuevo_nombre))
             )).scalar_one_or_none()
@@ -316,7 +360,7 @@ class MaintenanceService(BaseService[MaintenanceRepository]):
                 destino={"sede": activo.SED_Sede if activo else None},
                 costo=schema.MAN_Costo_Total, moneda=moneda,
                 documento=("TICKET", str(mantenimiento_id)),
-                detalle={"estado_final": "Asignado" if mov_vigente else "En Bodega"},
+                detalle={"estado_final": "Asignado" if mov_vigente else "Instalado" if instalado else "En Bodega"},
             )
             await self.gov_repo.create_audit_log(
                 "CLOSE", "INV_MANTENIMIENTO",

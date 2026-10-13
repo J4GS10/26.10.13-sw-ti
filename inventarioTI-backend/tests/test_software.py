@@ -193,7 +193,8 @@ async def test_licencia_con_claves_reserva_y_libera_key(
     keys = await client.get(f"/api/v1/soft/licencias/{lic_id}/claves", headers=auth_headers)
     assert keys.status_code == 200, keys.text
     assigned_key = next(k for k in keys.json() if k["LCL_Licencia_Clave"] == key_id)
-    assert assigned_key["LCL_Clave_Activacion"] == "KEY-SW-IND-001"
+    # El listado enmascara la key (solo se revela una por una, con auditoría).
+    assert assigned_key["LCL_Clave_Activacion"] == "•••• D-001"
     assert assigned_key["LCL_Estado"] == "ASIGNADA"
     assert assigned_key["LCL_Destino_Tipo"] == "ACTIVO"
     assert assigned_key["LCL_Destino_Id"] == s["act_1"]
@@ -283,11 +284,15 @@ async def test_claves_no_salen_en_listado_general_y_requieren_admin(
 
     keys = await client.get(f"/api/v1/soft/licencias/{lic_id}/claves", headers=auth_headers)
     assert keys.status_code == 200, keys.text
-    assert keys.json()[0]["LCL_Clave_Activacion"] == "KEY-SENSITIVE-001"
+    assert keys.json()[0]["LCL_Clave_Activacion"] == "•••• E-001"
+    clave_id = keys.json()[0]["LCL_Licencia_Clave"]
+    assert (await client.post(f"/api/v1/soft/credenciales/{clave_id}/revelar", headers=tech_headers)).status_code == 403
+    revelada = await client.post(f"/api/v1/soft/credenciales/{clave_id}/revelar", headers=auth_headers)
+    assert revelada.status_code == 200 and revelada.json()["clave"] == "KEY-SENSITIVE-001"
 
     audit = (await session.execute(
         select(AuditoriaSistema).where(
-            AuditoriaSistema.AUD_Accion == "VIEW_KEYS",
+            AuditoriaSistema.AUD_Accion.in_(("VIEW_KEYS", "LICENSE_SECRET_VIEWED")),
             AuditoriaSistema.AUD_Entidad_Afectada == "INV_LICENCIA_CLAVE",
         )
     )).scalars().all()
@@ -325,7 +330,7 @@ async def test_clave_legada_solo_se_expone_en_endpoint_auditado(
     assert keys.json() == [{
         "LCL_Licencia_Clave": -legacy.LIC_Licencia,
         "LIC_Licencia": legacy.LIC_Licencia,
-        "LCL_Clave_Activacion": "KEY-LEGACY-001",
+        "LCL_Clave_Activacion": "•••• Y-001",
         "LCL_Referencia": "Clave legada",
         "LCL_Estado": "DISPONIBLE",
         "LCL_Creado_En": None,

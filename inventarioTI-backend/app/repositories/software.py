@@ -110,7 +110,7 @@ class SoftwareRepository(BaseRepository):
     # LICENCIAS
     # =====================================================================
     async def create_licencia(self, schema: LicenciaCreate) -> Licencia:
-        obj = Licencia(**schema.model_dump(exclude={"LIC_Claves"}))
+        obj = Licencia(**schema.model_dump(exclude={"LIC_Claves", "LIC_Credenciales"}))
         self.db.add(obj)
         await self.db.flush()
         return obj
@@ -221,7 +221,11 @@ class SoftwareRepository(BaseRepository):
         return result.rowcount == 1
 
     async def get_licencia_by_id(self, id: int) -> Optional[Licencia]:
-        result = await self.db.execute(select(Licencia).where(Licencia.LIC_Licencia == id))
+        from sqlalchemy.orm import selectinload
+        result = await self.db.execute(
+            select(Licencia).options(selectinload(Licencia.forma_conteo), selectinload(Licencia.metodo_activacion))
+            .where(Licencia.LIC_Licencia == id)
+        )
         return result.scalar_one_or_none()
 
     async def get_licencias_by_software(self, software_id: int) -> List[Licencia]:
@@ -283,8 +287,8 @@ class SoftwareRepository(BaseRepository):
     # =====================================================================
     # INSTALACIONES
     # =====================================================================
-    async def create_instalacion(self, schema: InstalacionCreate) -> Instalacion:
-        obj = Instalacion(**schema.model_dump(exclude={"motivo"}))
+    async def create_instalacion(self, schema: InstalacionCreate, consume_cupo: bool = True) -> Instalacion:
+        obj = Instalacion(**schema.model_dump(exclude={"motivo"}), INS_Consume_Cupo=consume_cupo)
         self.db.add(obj)
         await self.db.flush()
         return obj
@@ -412,7 +416,9 @@ class SoftwareRepository(BaseRepository):
         ]
         conteo_por_licencia: dict[int, int] = {}
         for inst in instalaciones:
-            conteo_por_licencia[inst.LIC_Licencia] = conteo_por_licencia.get(inst.LIC_Licencia, 0) + 1
+            # Las licencias por sitio registran uso sin descontar cupos.
+            if inst.INS_Consume_Cupo:
+                conteo_por_licencia[inst.LIC_Licencia] = conteo_por_licencia.get(inst.LIC_Licencia, 0) + 1
 
         await self.db.execute(
             update(Instalacion)

@@ -90,6 +90,12 @@ class Settings(BaseSettings):
     TWO_FACTOR_RECOVERY_CODES: int = 8               # códigos de recuperación generados
     # Roles para los que 2FA es OBLIGATORIO (deben enrolarse; CSV de roles).
     TWO_FACTOR_REQUIRED_ROLES: str = "SUPER_ADMIN,ADMIN_SEGURIDAD,JEFE_TI,ADMIN_TI"
+    # Licencias: días sin cambiar la clave de una cuenta antes de avisar en la bandeja.
+    ROTACION_CUENTAS_DIAS: int = 180
+    # Toda asignación, préstamo, devolución, transferencia e instalación exige un
+    # motivo del catálogo (o el texto de una integración). Las pruebas lo apagan
+    # salvo la que lo verifica (como TWO_FACTOR_REQUIRED_ROLES).
+    MOVIMIENTO_EXIGE_MOTIVO: bool = True
     # Base pública del frontend para construir el enlace de restablecimiento.
     FRONTEND_BASE_URL: str = "https://localhost"
 

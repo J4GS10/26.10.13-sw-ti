@@ -53,6 +53,23 @@ export const catalogService = {
     await client.delete(`/cat/tipos-activo/${id}`);
   },
 
+  /** Componentes internos que admite el tipo (Laptop → RAM, disco…). */
+  getComponentesTipo: async (id: number): Promise<number[]> =>
+    (await client.get<number[]>(`/cat/tipos-activo/${id}/componentes`)).data,
+
+  setComponentesTipo: async (id: number, componentes: number[]): Promise<number[]> =>
+    (await client.put<number[]>(`/cat/tipos-activo/${id}/componentes`, { componentes })).data,
+
+  /** Insumos registrados como activos: vista previa y solicitud de paso a consumible. */
+  vistaReclasificacion: async (id: number, sede?: number) =>
+    (await client.get(`/core/tipos-activo/${id}/reclasificar`, { params: sede ? { sede } : {} })).data as {
+      tipo: string; activos: number; bloqueados: { codigo: string; motivo: string }[];
+      por_sede: { SED_Sede: number | null; sede: string | null; activos: number }[];
+    },
+
+  solicitarReclasificacion: async (id: number, datos: { SED_Sede: number; nombre: string; CON_Unidad: string; motivo: string }) =>
+    (await client.post(`/core/tipos-activo/${id}/reclasificar`, datos)).data,
+
   // ==========================================
   // 3. TIPOS DE CONEXIÓN
   // ==========================================

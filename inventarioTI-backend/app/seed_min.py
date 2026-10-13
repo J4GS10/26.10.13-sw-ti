@@ -12,6 +12,7 @@ ninguna data de demostración (no crea usuarios, personas, activos ni movimiento
 - TipoMantenimiento: Preventivo, Correctivo, Predictivo (para poder abrir tickets).
 - TipoEspecificacion: RAM, Almacenamiento, Procesador, etc. (características de activos).
 - TipoEvidencia: Fotografía, Acta firmada, Reporte técnico.
+- Catálogos estándar con código (motivos, bajas, unidades, fallas…): app/db/catalogos_semilla.py.
 
 Idempotente fila a fila (inserta por nombre solo si falta), así que se puede correr en
 cada arranque sin duplicar. A diferencia de seed_demo, NO aborta en producción.
@@ -44,6 +45,7 @@ _CANONICAL = [
         {"EOP_Nombre": EstadoOperativoEnum.BAJA.value, "EOP_Descripcion": "Fuera de inventario"},
         {"EOP_Nombre": EstadoOperativoEnum.BODEGA.value, "EOP_Descripcion": "Almacenado sin asignar"},
         {"EOP_Nombre": EstadoOperativoEnum.TRANSITO.value, "EOP_Descripcion": "Movimiento entre sedes"},
+        {"EOP_Nombre": EstadoOperativoEnum.INSTALADO.value, "EOP_Descripcion": "Equipo compartido en uso en un área"},
     ]),
     (TipoMovimiento, "TMO_Nombre", [
         {"TMO_Nombre": TipoMovimientoEnum.INGRESO.value},
@@ -91,6 +93,12 @@ async def seed_min() -> None:
                 await db.flush()
             total_creados += nuevos
             log.info("%-20s: %d nuevos (%d ya existían)", model.__name__, nuevos, len(existentes))
+        # Catálogos estándar: filas de sistema por código (app/db/catalogos_semilla.py).
+        from app.db.catalogos_semilla import sembrar
+        conn = await db.connection()
+        estandar = await conn.run_sync(sembrar)
+        log.info("Catálogos estándar : %d filas de sistema nuevas", estandar)
+        total_creados += estandar
         await db.commit()
     log.info("Seed mínimo completado. Filas creadas: %d", total_creados)
 

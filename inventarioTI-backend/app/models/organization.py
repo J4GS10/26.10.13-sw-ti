@@ -169,7 +169,8 @@ class Usuario(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "\"USU_Rol\" IN ('SUPER_ADMIN', 'ADMIN_SEGURIDAD', 'JEFE_TI', 'ADMIN_TI', 'TECNICO', 'AUDITOR', 'CONSULTA')",
+            "\"USU_Rol\" IN ('SUPER_ADMIN', 'ADMIN_SEGURIDAD', 'JEFE_TI', 'ADMIN_TI', 'TECNICO', 'AUDITOR', "
+            "'CONSULTA', 'COMPRAS', 'CONTABILIDAD')",
             name="ck_usuario_rol_valido",
         ),
         CheckConstraint(

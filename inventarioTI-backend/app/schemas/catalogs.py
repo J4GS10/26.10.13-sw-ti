@@ -1,5 +1,5 @@
 from typing import Optional, List
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, computed_field
 from app.schemas.common import Esquema
 
 # =======================
@@ -9,6 +9,8 @@ class TipoActivoBase(Esquema):
     TAC_Nombre: str = Field(..., min_length=2, max_length=100)
     TAC_Prefijo: Optional[str] = Field(None, max_length=10)
     TAC_Aplica_Depreciacion: bool = True
+    # Clase (app/core/clases_activo.py); sin indicarla se deduce del nombre.
+    TAC_Clase: Optional[str] = Field(None, pattern="^(COMPUTO|MOVIL|PERIFERICO|IMPRESION|RED|ENERGIA|AUDIOVISUAL|COMPONENTE|HERRAMIENTA|INSUMO|OTRO)$")
 
 class TipoActivoCreate(TipoActivoBase):
     pass
@@ -17,11 +19,23 @@ class TipoActivoUpdate(Esquema):
     TAC_Nombre: Optional[str] = Field(None, min_length=2, max_length=100)
     TAC_Prefijo: Optional[str] = Field(None, max_length=10)
     TAC_Aplica_Depreciacion: Optional[bool] = None
+    TAC_Clase: Optional[str] = Field(None, pattern="^(COMPUTO|MOVIL|PERIFERICO|IMPRESION|RED|ENERGIA|AUDIOVISUAL|COMPONENTE|HERRAMIENTA|INSUMO|OTRO)$")
 
 
 class TipoActivoResponse(TipoActivoBase):
     TAC_Tipo_Activo: int
     model_config = ConfigDict(from_attributes=True)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def reglas(self) -> dict:
+        """Cómo se opera: uso (PERSONAL, COMPARTIDO, COMPONENTE, INSUMO), software, componentes, red, consumibles."""
+        from app.core.clases_activo import reglas
+        return reglas(self.TAC_Clase)
+
+
+class TiposComponenteUpdate(Esquema):
+    componentes: list[int] = Field(default_factory=list, max_length=50)
 
 # =======================
 # 2. MARCA

@@ -1,4 +1,5 @@
-export type TipoAprobacion = 'BAJA' | 'RECEPCION_SOBRANTE';
+export type TipoAprobacion = 'BAJA' | 'RECEPCION_SOBRANTE' | 'AJUSTE_CONSUMIBLE' | 'CIERRE_FALTANTE' | 'CANCELACION_ORDEN'
+  | 'RECLASIFICACION';
 export type EstadoAprobacion = 'PENDIENTE' | 'APROBADA' | 'RECHAZADA' | 'ANULADA';
 
 /** Solicitud que requiere la aprobación del Jefe de TI (otra persona). */

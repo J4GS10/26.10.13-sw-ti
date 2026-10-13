@@ -4,6 +4,9 @@ export interface Consumible {
   CON_Descripcion?: string | null;
   CON_Categoria?: string | null;
   CON_Unidad: string;
+  /** Catálogos de categoría y unidad (los textos quedan con su nombre). */
+  CCO_Categoria?: number | null;
+  UME_Unidad?: number | null;
   CON_Stock_Actual: number;
   CON_Stock_Minimo: number;
   CON_Activo: boolean;
@@ -20,6 +23,8 @@ export interface ConsumibleCreate {
   CON_Descripcion?: string;
   CON_Categoria?: string;
   CON_Unidad: string;
+  CCO_Categoria?: number | null;
+  UME_Unidad?: number | null;
   CON_Stock_Minimo: number;
   CON_Stock_Actual: number;
   SED_Sede?: number | null;
@@ -47,6 +52,8 @@ export interface StockMovimientoCreate {
   MOC_Cantidad: number;
   MOC_Motivo?: string;
   PER_Persona?: string;
+  /** Solo en salidas: equipo en que se instala (tóner en una impresora). */
+  ACT_Activo?: string;
   /** Solo en entradas: costo unitario y su moneda. */
   precio_unitario?: string;
   moneda?: string;

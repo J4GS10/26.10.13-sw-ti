@@ -101,7 +101,13 @@ _FUNCTIONS = [
 ]
 
 
-def _policies() -> dict[str, list[tuple[str, str, str | None, str | None]]]:
+def _policies(adjunto_de_licencia: bool = True,
+              responsable_de_activo: bool = True) -> dict[str, list[tuple[str, str, str | None, str | None]]]:
+    """
+    `adjunto_de_licencia`: INV_ADJUNTO ya tiene LIC_Licencia (migración A1).
+    `responsable_de_activo`: INV_ACTIVO ya tiene ACT_Responsable (migración e5a6).
+    Las migraciones anteriores reinstalan la capa sin esas columnas.
+    """
     """tabla -> [(nombre, comando, USING, WITH CHECK)]"""
     persona_relacionada = " OR ".join([
         _sede('"INV_PERSONA"."SED_Sede"'),
@@ -110,7 +116,10 @@ def _policies() -> dict[str, list[tuple[str, str, str | None, str | None]]]:
         _exists("INV_MANTENIMIENTO", "mt", 'mt."PER_Persona_Solicita" = "INV_PERSONA"."PER_Persona"'),
         _exists("INV_INSTALACION", "i", 'i."PER_Persona" = "INV_PERSONA"."PER_Persona"'),
         _exists("INV_MOVIMIENTO_CONSUMIBLE", "mc", 'mc."PER_Persona" = "INV_PERSONA"."PER_Persona"'),
-    ])
+    ] + ([
+        # Responsable de un equipo compartido visible (impresora de su área).
+        _exists("INV_ACTIVO", "ar", 'ar."ACT_Responsable" = "INV_PERSONA"."PER_Persona"'),
+    ] if responsable_de_activo else []))
     persona_sede = _sede('"INV_PERSONA"."SED_Sede"')
     mant_visible = _exists(
         "INV_MANTENIMIENTO", "mt", 'mt."MAN_Mantenimiento" = "INV_DETALLE_MANT"."MAN_Mantenimiento"'
@@ -125,7 +134,10 @@ def _policies() -> dict[str, list[tuple[str, str, str | None, str | None]]]:
         _exists("INV_MOVIMIENTO", "m", 'm."MOV_Movimiento" = "INV_EVIDENCIA"."MOV_Movimiento_Ref"'),
         _exists("INV_MANTENIMIENTO", "mt", 'mt."MAN_Mantenimiento" = "INV_EVIDENCIA"."MAN_Mantenimiento_Ref"'),
     )
-    adjunto_visible = "({} OR {})".format(_ACTIVO_VISIBLE("INV_ADJUNTO"), orden_visible("INV_ADJUNTO"))
+    # Los archivos de licencia no tienen sede (las licencias son globales).
+    adjunto_visible = "({} OR {}{})".format(
+        _ACTIVO_VISIBLE("INV_ADJUNTO"), orden_visible("INV_ADJUNTO"),
+        " OR \"INV_ADJUNTO\".\"LIC_Licencia\" IS NOT NULL" if adjunto_de_licencia else "")
     # Una instalación va a un activo o, sin activo, directamente a una persona.
     instalacion_visible = "({} OR (\"INV_INSTALACION\".\"ACT_Activo\" IS NULL AND {}))".format(
         _ACTIVO_VISIBLE("INV_INSTALACION"),
@@ -142,6 +154,9 @@ def _policies() -> dict[str, list[tuple[str, str, str | None, str | None]]]:
     )
     recepcion_linea_visible = _exists(
         "INV_RECEPCION", "r", 'r."REC_Recepcion" = "INV_RECEPCION_LINEA"."REC_Recepcion"'
+    )
+    compatible_visible = _exists(
+        "INV_CONSUMIBLE", "c", 'c."CON_Consumible" = "INV_CONSUMIBLE_COMPATIBLE"."CON_Consumible"'
     )
     toma_visible = _exists(
         "INV_TOMA_INVENTARIO", "t", 't."TOM_Toma" = "INV_TOMA_LECTURA"."TOM_Toma"'
@@ -184,6 +199,8 @@ def _policies() -> dict[str, list[tuple[str, str, str | None, str | None]]]:
             ("todo", "ALL", _sede('"INV_TOMA_INVENTARIO"."SED_Sede"'), _sede('"INV_TOMA_INVENTARIO"."SED_Sede"')),
         ],
         "INV_TOMA_LECTURA": [("todo", "ALL", toma_visible, toma_visible)],
+        "INV_FALTANTE": [("todo", "ALL", _ACTIVO_VISIBLE("INV_FALTANTE"), _ACTIVO_VISIBLE("INV_FALTANTE"))],
+        "INV_CONSUMIBLE_COMPATIBLE": [("todo", "ALL", compatible_visible, compatible_visible)],
         # Solicitudes de aprobación: las de las sedes del alcance y las propias.
         "INV_APROBACION": [(
             "todo", "ALL",
@@ -284,7 +301,13 @@ def install_rls(conn: Connection, *, strict: bool = False) -> bool:
     for ddl in _FUNCTIONS:
         conn.execute(text(ddl))
 
-    for table, policies in _policies().items():
+    adjunto_de_licencia = conn.execute(text(
+        "SELECT 1 FROM information_schema.columns WHERE table_name = 'INV_ADJUNTO' AND column_name = 'LIC_Licencia'"
+    )).first() is not None
+    responsable_de_activo = conn.execute(text(
+        "SELECT 1 FROM information_schema.columns WHERE table_name = 'INV_ACTIVO' AND column_name = 'ACT_Responsable'"
+    )).first() is not None
+    for table, policies in _policies(adjunto_de_licencia, responsable_de_activo).items():
         if table not in existentes:
             continue
         conn.execute(text(f'ALTER TABLE "{table}" ENABLE ROW LEVEL SECURITY'))

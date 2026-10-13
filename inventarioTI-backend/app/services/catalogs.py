@@ -48,12 +48,52 @@ class CatalogService(BaseService[CatalogRepository]):
     async def create_tipo_activo(self, schema: TipoActivoCreate, usuario_id=None, ip=None):
         if await self.repo.get_tipo_activo_by_name(schema.TAC_Nombre):
             raise HTTPException(400, "ASSET_TYPE_ALREADY_EXISTS")
+        if not schema.TAC_Clase:
+            from app.core.clases_activo import clase_por_nombre
+            schema = schema.model_copy(update={"TAC_Clase": clase_por_nombre(schema.TAC_Nombre)})
         obj = await self.repo.create_tipo_activo(schema)
+        await self._plantilla_especificaciones(obj.TAC_Tipo_Activo)
         await self.gov_repo.create_audit_log(
             "CREATE", "INV_TIPO_ACTIVO", {"nombre": schema.TAC_Nombre}, **_audit_ctx(usuario_id, ip)
         )
         await self._commit_or_rollback()
         return obj
+
+    async def _plantilla_especificaciones(self, tipo_id: int) -> None:
+        """Un tipo sin especificaciones recibe la plantilla de su clase (p. ej. impresora → tecnología, color, IP)."""
+        from app.db.catalogos_semilla import sembrar_especificaciones
+        conn = await self.db.connection()
+        await conn.run_sync(lambda c: sembrar_especificaciones(c, solo_tipo=tipo_id))
+
+    async def componentes_de_tipo(self, tipo_id: int) -> list[int]:
+        from app.services.clases import tipos_componente_permitidos
+        await self.get_tipo_activo(tipo_id)
+        return await tipos_componente_permitidos(self.db, tipo_id)
+
+    async def fijar_componentes_de_tipo(self, tipo_id: int, componentes: list[int], usuario_id=None, ip=None):
+        """Componentes internos que admite el tipo (vacío = cualquier tipo de clase Componente)."""
+        from sqlalchemy import delete, select
+        from app.core.clases_activo import reglas
+        from app.models.catalogs import TipoActivo, TipoComponente
+        tipo = await self.get_tipo_activo(tipo_id)
+        if componentes and not reglas(tipo.TAC_Clase)["componentes"]:
+            raise HTTPException(422, "ASSET_CLASS_NO_COMPONENTS")
+        componentes = sorted(set(componentes) - {tipo_id})
+        if componentes:
+            existentes = set((await self.db.execute(select(TipoActivo.TAC_Tipo_Activo).where(
+                TipoActivo.TAC_Tipo_Activo.in_(componentes)))).scalars())
+            if existentes != set(componentes):
+                raise HTTPException(404, "ASSET_TYPE_NOT_FOUND")
+        antes = await self.componentes_de_tipo(tipo_id)
+        await self.db.execute(delete(TipoComponente).where(TipoComponente.TAC_Padre == tipo_id))
+        for c in componentes:
+            self.db.add(TipoComponente(TAC_Padre=tipo_id, TAC_Componente=c))
+        await self.gov_repo.create_audit_log(
+            "UPDATE", "INV_TIPO_COMPONENTE", {"tipo": tipo.TAC_Nombre, "antes": antes, "despues": componentes},
+            **_audit_ctx(usuario_id, ip),
+        )
+        await self._commit_or_rollback()
+        return componentes
 
     async def list_tipos_activo(self):
         return await self.repo.get_tipos_activo()
@@ -68,6 +108,8 @@ class CatalogService(BaseService[CatalogRepository]):
         if not await self.repo.get_tipo_activo_by_id(id):
             raise HTTPException(404, "ASSET_TYPE_NOT_FOUND")
         obj = await self.repo.update_tipo_activo(id, schema)
+        if schema.TAC_Clase:
+            await self._plantilla_especificaciones(id)
         await self.gov_repo.create_audit_log(
             "UPDATE", "INV_TIPO_ACTIVO",
             {"id": id, "cambios": schema.model_dump(exclude_unset=True)},

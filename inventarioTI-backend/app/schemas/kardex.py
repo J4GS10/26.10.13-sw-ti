@@ -134,3 +134,14 @@ class CustodiaItem(BaseModel):
     desde: datetime
     tipo: Optional[str] = None
     devolucion_prevista: Optional[date] = None
+
+
+# ================= FALTANTES DE LA TOMA =================
+class FaltanteNota(Esquema):
+    nota: str = Field(..., min_length=3, max_length=500)
+
+
+class FaltanteLocalizado(Esquema):
+    nota: str = Field(..., min_length=3, max_length=500)
+    # Dónde apareció (corrige la ubicación del equipo).
+    ARE_Area: Optional[int] = None

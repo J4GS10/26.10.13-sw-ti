@@ -362,8 +362,14 @@ class LocationService(BaseService[LocationRepository]):
     # =====================================================================
     # AREA
     # =====================================================================
+    async def _validar_tipo_area(self, schema) -> None:
+        if getattr(schema, "TAR_Tipo_Area", None) is not None:
+            from app.services.catalogo_generico import CatalogoGenericoService
+            await CatalogoGenericoService(self.db).nombre_vigente("tipos-area", schema.TAR_Tipo_Area)
+
     async def create_area(self, schema: AreaCreate, usuario_id=None, ip=None):
         require_owned(await self._sede_de_nivel(schema.NIV_Nivel))
+        await self._validar_tipo_area(schema)
         obj = await self.repo.create_area(schema)
         await self._commit_audit(
             accion="CREATE", entidad="INV_AREA",
@@ -380,6 +386,10 @@ class LocationService(BaseService[LocationRepository]):
 
     async def list_all_areas_hierarchy(self) -> list[dict]:
         rows = await self.repo.get_all_areas_with_hierarchy()
+        # Código del tipo de área (BODEGA, OFICINA…): la devolución sugiere bodegas.
+        from sqlalchemy import select as _select
+        from app.models.catalogo_estandar import TipoArea
+        codigos = dict((await self.db.execute(_select(TipoArea.TAR_Tipo_Area, TipoArea.TAR_Codigo))).all())
         output = []
         for area in rows:
             nivel = area.nivel
@@ -398,6 +408,8 @@ class LocationService(BaseService[LocationRepository]):
                 "ARE_Area": area.ARE_Area,
                 "ARE_Nombre": area.ARE_Nombre,
                 "ARE_Tipo_Acceso": area.ARE_Tipo_Acceso,
+                "TAR_Tipo_Area": area.TAR_Tipo_Area,
+                "tipo_area": codigos.get(area.TAR_Tipo_Area),
                 "NIV_Nivel": area.NIV_Nivel,
                 "SED_Sede": sede.SED_Sede if sede else None,
                 "ruta": " › ".join(part for part in path_parts if part),
@@ -414,6 +426,7 @@ class LocationService(BaseService[LocationRepository]):
         require_owned(await self._sede_de_area(id))
         if getattr(schema, "NIV_Nivel", None) is not None:
             require_owned(await self._sede_de_nivel(schema.NIV_Nivel))
+        await self._validar_tipo_area(schema)
         obj = await self.repo.update_area(id, schema)
         await self._commit_audit(
             accion="UPDATE", entidad="INV_AREA",

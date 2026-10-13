@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert, Autocomplete, Box, Button, Chip, CircularProgress, IconButton, Stack, Table, TableBody, TableCell,
+  Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, FormControlLabel, IconButton, Stack, Table, TableBody, TableCell,
   TableHead, TableRow, TextField, Tooltip, Typography,
 } from '@mui/material';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
@@ -13,10 +13,15 @@ import { ContextCaption, SectionCard, SuggestionHint } from '../../components/ui
 import { getApiErrorMessage } from '../../api/errors';
 import { suggestionService } from '../../api/suggestionService';
 import { productividadService, type KitSugerido, type ResultadoLote } from '../../api/productividadService';
+import { softwareService } from '../software/softwareService';
+import type { LicenciaDisponible } from '../../types/software';
 import { useEntityContext } from '../../hooks/useEntityContext';
 import { useSuggestion } from '../../hooks/useSuggestion';
 import { areaReason, personContextLine, shortList } from '../../utils/suggestionReasons';
 import { stateLabel } from '../../utils/catalogLabels';
+import type { CatalogoItem } from '../../api/catalogoService';
+import { CatalogField } from '../../components/CatalogField';
+import { pideDetalle, useCatalogo } from '../../hooks/useCatalogo';
 import { createSearchFilter } from '../../utils/autocomplete';
 import { nombrePersona } from '../../utils/personas';
 import { assetService } from '../assets/assetService';
@@ -57,10 +62,24 @@ export const EntregaPuestoForm = ({ personaFija, personaInicial, activosIniciale
   const [tipoFiltro, setTipoFiltro] = useState<number | null>(null);
   const [opciones, setOpciones] = useState<Activo[]>([]);
   const [buscando, setBuscando] = useState(false);
-  const [motivo, setMotivo] = useState(t('handover.default_reason'));
+  // Motivo del catálogo; por defecto «Ingreso de personal» (una sola vez: el usuario puede quitarlo).
+  const { items: motivos } = useCatalogo('motivos-movimiento');
+  const [motivo, setMotivo] = useState<CatalogoItem | null>(null);
+  const [detalleMotivo, setDetalleMotivo] = useState('');
+  const motivoInicial = useRef(false);
+  useEffect(() => {
+    if (motivoInicial.current || motivos.length === 0) return;
+    motivoInicial.current = true;
+    setMotivo(motivos.find((m) => m.codigo === 'INGRESO_PERSONAL') ?? null);
+  }, [motivos]);
   const [ticket, setTicket] = useState('');
-  const [observacion, setObservacion] = useState('');
   const [kit, setKit] = useState<KitSugerido | null>(null);
+  // Licencias por persona (p. ej. la cuenta de Microsoft 365) en la misma entrega.
+  const [licDisponibles, setLicDisponibles] = useState<LicenciaDisponible[]>([]);
+  const [licencias, setLicencias] = useState<number[]>([]);
+  useEffect(() => {
+    softwareService.licenciasDisponibles('PERSONA').then(setLicDisponibles).catch(() => setLicDisponibles([]));
+  }, []);
   const [enviando, setEnviando] = useState(false);
 
   useEffect(() => {
@@ -90,7 +109,12 @@ export const EntregaPuestoForm = ({ personaFija, personaInicial, activosIniciale
     setKit(null);
     if (!persona) return undefined;
     let vivo = true;
-    productividadService.kitSugerido(persona.PER_Persona).then((k) => { if (vivo) setKit(k); }).catch(() => undefined);
+    productividadService.kitSugerido(persona.PER_Persona).then((k) => {
+      if (!vivo) return;
+      setKit(k);
+      // El kit estándar trae sus licencias ya marcadas.
+      setLicencias(k.licencias ?? []);
+    }).catch(() => undefined);
     return () => { vivo = false; };
   }, [persona]);
 
@@ -153,7 +177,8 @@ export const EntregaPuestoForm = ({ personaFija, personaInicial, activosIniciale
   const tiposEnLista = new Set(lista.map((a) => a.TAC_Tipo_Activo));
   const nombre = persona ? nombrePersona(persona) : '';
   const propios = lista.filter((a) => custodios[a.ACT_Activo] && custodios[a.ACT_Activo] === nombre);
-  const puedeEnviar = !!persona && !!area && lista.length > 0 && propios.length === 0 && !enviando;
+  const faltaDetalle = pideDetalle(motivo) && !detalleMotivo.trim();
+  const puedeEnviar = !!persona && !!area && lista.length > 0 && propios.length === 0 && !enviando && !faltaDetalle && !!motivo;
 
   const enviar = async () => {
     if (!persona || !area) return;
@@ -161,8 +186,9 @@ export const EntregaPuestoForm = ({ personaFija, personaInicial, activosIniciale
     try {
       const res = await productividadService.entregaLote({
         PER_Persona: persona.PER_Persona, ARE_Area: area.ARE_Area, activos: lista.map((a) => a.ACT_Activo),
-        MOV_Motivo: motivo.trim() || undefined, ticket: ticket.trim() || undefined,
-        MOV_Observacion: observacion.trim() || undefined,
+        licencias: licencias.filter((id) => licDisponibles.some((l) => l.LIC_Licencia === id)),
+        MMO_Motivo: motivo?.id ?? null, MOV_Motivo_Detalle: detalleMotivo.trim() || null, ticket: ticket.trim() || undefined,
+        MOV_Observacion: detalleMotivo.trim() || undefined,
       });
       onCompleted(res, persona, lista);
     } catch (err) {
@@ -221,9 +247,11 @@ export const EntregaPuestoForm = ({ personaFija, personaInicial, activosIniciale
             <Box>
               <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.75 }}>
                 <AutoAwesomeIcon sx={{ fontSize: 14 }} />
-                {kit.origen === 'departamento'
-                  ? t('handover.kit_department', { department: kit.departamento, count: kit.personas_referencia })
-                  : t('handover.kit_general')}
+                {kit.origen === 'kit'
+                  ? t('handover.kit_standard', { name: kit.kit })
+                  : kit.origen === 'departamento'
+                    ? t('handover.kit_department', { department: kit.departamento, count: kit.personas_referencia })
+                    : t('handover.kit_general')}
               </Typography>
               <Stack direction="row" useFlexGap flexWrap="wrap" gap={0.75}>
                 {kit.tipos.map((k) => {
@@ -332,12 +360,34 @@ export const EntregaPuestoForm = ({ personaFija, personaInicial, activosIniciale
         </Stack>
       </SectionCard>
 
+      <SectionCard title={t('handover.sections.licenses')}>
+        {licDisponibles.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">{t('handover.licenses_none')}</Typography>
+        ) : (
+          <Stack>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>{t('handover.licenses_help')}</Typography>
+            {licDisponibles.map((l) => (
+              <FormControlLabel key={l.LIC_Licencia}
+                control={<Checkbox checked={licencias.includes(l.LIC_Licencia)}
+                  onChange={(e) => setLicencias((prev) => e.target.checked
+                    ? [...prev, l.LIC_Licencia] : prev.filter((x) => x !== l.LIC_Licencia))} />}
+                label={t('handover.license_option', { name: l.software, count: l.libres ?? 0 })} />
+            ))}
+          </Stack>
+        )}
+      </SectionCard>
+
       <SectionCard title={t('handover.sections.record')}>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-          <TextField label={t('handover.reason')} value={motivo} onChange={(e) => setMotivo(e.target.value)} fullWidth inputProps={{ maxLength: 255 }} />
+          <Box sx={{ flex: 1 }}>
+            <CatalogField clave="motivos-movimiento" aplicaA="ASIGNACION" label={t('movement_reason.reason')} required
+              value={motivo?.id ?? null} onChange={(_v, item) => setMotivo(item)} />
+          </Box>
+          <TextField label={t('movement_reason.note')} value={detalleMotivo} onChange={(e) => setDetalleMotivo(e.target.value)}
+            sx={{ flex: 1 }} inputProps={{ maxLength: 255 }} error={faltaDetalle}
+            helperText={faltaDetalle ? t('returns.detail_required') : t('movement_reason.note_help')} />
           <TextField label={t('handover.ticket')} value={ticket} onChange={(e) => setTicket(e.target.value)} sx={{ minWidth: { sm: 180 } }} inputProps={{ maxLength: 50 }} />
         </Stack>
-        <TextField label={t('operations.dialog.notes')} value={observacion} onChange={(e) => setObservacion(e.target.value)} multiline minRows={2} fullWidth sx={{ mt: 2 }} inputProps={{ maxLength: 900 }} />
       </SectionCard>
 
       {propios.length > 0 && <Alert severity="error">{t('handover.remove_owned')}</Alert>}

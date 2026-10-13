@@ -5,6 +5,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 from app.db.base import Base
+from app.models.gestion import gestion
 from app.core.currency import CURRENCY_SQL_LIST, DEFAULT_CURRENCY
 
 
@@ -21,12 +22,18 @@ class TipoMantenimiento(Base):
     __tablename__ = "INV_TIPO_MANTENIMIENTO"
     TMA_Tipo_Mantenimiento = Column(Integer, primary_key=True, index=True, autoincrement=True)
     TMA_Nombre = Column(String(50), unique=True, nullable=False)
+    TMA_Descripcion = Column(String(255), nullable=True)
+    locals().update(gestion("INV_TIPO_MANTENIMIENTO", "TMA", "TMA_Tipo_Mantenimiento"))
 
 
 class TipoEvidencia(Base):
     __tablename__ = "INV_TIPO_EVIDENCIA"
     TEV_Tipo_Evidencia = Column(Integer, primary_key=True, index=True, autoincrement=True)
     TEV_Nombre = Column(String(50), unique=True, nullable=False)
+    # Código estable (los de sistema coinciden con INV_ADJUNTO.ADJ_Categoria).
+    TEV_Codigo = Column(String(40), nullable=True, unique=True)
+    TEV_Descripcion = Column(String(255), nullable=True)
+    locals().update(gestion("INV_TIPO_EVIDENCIA", "TEV", "TEV_Tipo_Evidencia"))
 
 
 # ==========================================
@@ -44,6 +51,12 @@ class Movimiento(Base):
     MOV_Usuario_Registra = Column(Uuid, nullable=True)
     # Motivo de la transferencia o de la devolución.
     MOV_Motivo = Column(String(255), nullable=True)
+    # Motivo del catálogo (INV_MOTIVO_MOVIMIENTO) y su detalle escrito.
+    # MOV_Motivo conserva el texto legible («Motivo: detalle») para reportes.
+    MMO_Motivo = Column(
+        Integer, ForeignKey("INV_MOTIVO_MOVIMIENTO.MMO_Motivo", ondelete="RESTRICT"), nullable=True, index=True,
+    )
+    MOV_Motivo_Detalle = Column(String(255), nullable=True)
     # Solo préstamos: fecha comprometida de devolución (alerta si vence).
     MOV_Fecha_Prevista_Devolucion = Column(Date, nullable=True)
 
@@ -110,6 +123,10 @@ class Mantenimiento(Base):
     MAN_Fecha_Ingreso = Column(DateTime, server_default=func.now(), nullable=False)
     MAN_Fecha_Cierre = Column(DateTime, nullable=True)
     MAN_Descripcion_Falla = Column(Text, nullable=False)
+    # Tipo de falla del catálogo; MAN_Descripcion_Falla queda como el detalle.
+    TFA_Tipo_Falla = Column(
+        Integer, ForeignKey("INV_TIPO_FALLA.TFA_Tipo_Falla", ondelete="RESTRICT"), nullable=True, index=True,
+    )
     MAN_Costo_Total = Column(Numeric(12, 2), default=0, nullable=False)
     # Moneda del ticket: aplica al total y a cada detalle.
     MAN_Moneda = Column(
@@ -175,6 +192,10 @@ class DetalleMantenimiento(Base):
 
     DMA_Detalle_Mant = Column(Integer, primary_key=True, index=True, autoincrement=True)
     DMA_Accion_Realizada = Column(String(255), nullable=False)
+    # Acción del catálogo; DMA_Accion_Realizada queda como el detalle.
+    AMA_Accion = Column(
+        Integer, ForeignKey("INV_ACCION_MANTENIMIENTO.AMA_Accion", ondelete="RESTRICT"), nullable=True, index=True,
+    )
     DMA_Costo_Item = Column(Numeric(12, 2), default=0, nullable=False)
 
     MAN_Mantenimiento = Column(

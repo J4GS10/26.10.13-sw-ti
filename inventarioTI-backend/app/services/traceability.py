@@ -26,6 +26,8 @@ from app.repositories.software import SoftwareRepository
 from app.repositories.traceability import TraceabilityRepository
 from app.services.base import BaseService
 from app.services.kardex import KardexService
+from app.services.clases import exigir_asignable_a_persona
+from app.services.motivos import con_motivo
 from app.schemas.traceability import (
     DevolucionCreate,
     MovimientoCreate,
@@ -284,6 +286,8 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
             activo = await self.core_repo.get_by_id_simple(schema.ACT_Activo)
             if not activo:
                 raise HTTPException(404, detail="ASSET_NOT_FOUND")
+            # Una impresora o un switch se instalan en un área, no se asignan a una persona.
+            await exigir_asignable_a_persona(self.db, activo)
 
             tipo_enum = await self._get_tipo_movimiento_enum(schema.TMO_Tipo_Movimiento)
             # Este endpoint solo ABRE custodias. Devolución, transferencia,
@@ -345,6 +349,8 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
                 if estado_actual not in (EstadoOperativoEnum.DISPONIBLE, EstadoOperativoEnum.BODEGA):
                     raise HTTPException(400, detail="ASSET_NOT_AVAILABLE_FOR_ASSIGNMENT")
 
+            schema = await con_motivo(
+                self.db, schema, "PRESTAMO" if tipo_enum == TipoMovimientoEnum.PRESTAMO else "ASIGNACION")
             await self._ubicar_en_sede(activo, persona, sede_destino, usuario_id=usuario_id, ip=ip)
             nuevo = await self.repo.create_movimiento(schema)
             nuevo.MOV_Usuario_Registra = usuario_id
@@ -540,6 +546,11 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
                     origen={"persona": per_id, "activo": act_id, "sede": persona.SED_Sede},
                     motivo="Salida de la persona (offboarding)",
                 )
+            # Las cuentas que usaba (correo + clave) quedan libres y con el
+            # pendiente «cambiar la clave» en la bandeja de atención.
+            from app.services.licencias import CredencialService
+            cuentas_por_cambiar = await CredencialService(self.db).marcar_cambio_tras_salida(
+                [c for _l, _a, _p, c in getattr(sw_repo, "ultimas_liberadas", []) if c is not None])
 
             # 5. Desactivar usuario
             usuario_desactivado = False
@@ -630,6 +641,7 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
                 "movimientos_cerrados": cerrados,
                 "activos_devueltos_a_bodega": len(activos_ids),
                 "licencias_liberadas": licencias_liberadas,
+                "cuentas_por_cambiar": cuentas_por_cambiar,
                 "usuario_desactivado": usuario_desactivado,
                 "persona_inactivada": True,
                 "idempotent_noop": not algo_cambio,
@@ -668,11 +680,15 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
                     raise HTTPException(404, detail="AREA_NOT_FOUND")
                 await self._sede_de_destino(area_destino.ARE_Area)
 
+            schema = await con_motivo(self.db, schema, "DEVOLUCION")
             cerrado = await self.repo.cerrar_movimiento(vigente.MOV_Movimiento)
             if not cerrado:
                 raise HTTPException(409, detail="MOVEMENT_ALREADY_CLOSED")
             if schema.MOV_Motivo:
                 vigente.MOV_Motivo = schema.MOV_Motivo
+            if schema.MMO_Motivo is not None:
+                vigente.MMO_Motivo = schema.MMO_Motivo
+                vigente.MOV_Motivo_Detalle = schema.MOV_Motivo_Detalle
 
             estado_bodega_id = await self._get_estado_id(EstadoOperativoEnum.BODEGA)
             if estado_bodega_id is None:
@@ -754,6 +770,7 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
             activo = await self.core_repo.get_by_id_simple(schema.ACT_Activo)
             if not activo:
                 raise HTTPException(404, detail="ASSET_NOT_FOUND")
+            await exigir_asignable_a_persona(self.db, activo)
 
             estado_actual = await self._get_estado_nombre_enum(activo.EOP_Estado_Operativo)
             
@@ -800,6 +817,7 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
             if not tipo_asignacion_id:
                 raise HTTPException(500, detail="SYSTEM_CONFIG_ERROR_MISSING_ASSIGNMENT_TYPE")
 
+            schema = await con_motivo(self.db, schema, "TRANSFERENCIA")
             await self.repo.cerrar_movimiento(vigente.MOV_Movimiento)
             sede_origen = activo.SED_Sede
             await self._ubicar_en_sede(activo, persona, sede_destino, usuario_id=usuario_id, ip=ip)
@@ -811,6 +829,8 @@ class TraceabilityService(BaseService[TraceabilityRepository]):
                 TMO_Tipo_Movimiento=tipo_asignacion_id,
                 MOV_Observacion=schema.MOV_Observacion or "Transferencia de custodia",
                 MOV_Motivo=schema.MOV_Motivo,
+                MMO_Motivo=schema.MMO_Motivo,
+                MOV_Motivo_Detalle=schema.MOV_Motivo_Detalle,
             )
             created = await self.repo.create_movimiento(nuevo_mov)
             created.MOV_Usuario_Registra = usuario_id

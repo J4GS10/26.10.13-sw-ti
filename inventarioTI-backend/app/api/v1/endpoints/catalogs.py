@@ -9,7 +9,7 @@ from app.schemas.catalogs import (
     EstadoOperativoCreate, EstadoOperativoResponse, EstadoOperativoUpdate,
     MarcaCreate, MarcaResponse, MarcaUpdate,
     ModeloCreate, ModeloFlatResponse, ModeloResponse, ModeloUpdate,
-    TipoActivoCreate, TipoActivoResponse, TipoActivoUpdate,
+    TipoActivoCreate, TipoActivoResponse, TiposComponenteUpdate, TipoActivoUpdate,
     TipoConexionCreate, TipoConexionResponse, TipoConexionUpdate,
     TipoEspecificacionCreate, TipoEspecificacionResponse, TipoEspecificacionUpdate,
 )
@@ -37,6 +37,27 @@ async def create_tipo_activo(
 @router.get("/tipos-activo", response_model=List[TipoActivoResponse])
 async def list_tipos_activo(service: CatalogService = Depends(get_service)):
     return await service.list_tipos_activo()
+
+
+@router.get("/clases-activo")
+async def list_clases_activo():
+    """Clases de activo y sus reglas (cómo se opera cada una)."""
+    from app.core.clases_activo import CLASES, reglas
+    return [reglas(c) for c in CLASES]
+
+
+@router.get("/tipos-activo/{id}/componentes")
+async def get_componentes_tipo(id: int, service: CatalogService = Depends(get_service)):
+    return await service.componentes_de_tipo(id)
+
+
+@router.put("/tipos-activo/{id}/componentes", dependencies=WRITE)
+async def put_componentes_tipo(
+    id: int, schema: TiposComponenteUpdate, request: Request, current_user: CurrentUser,
+    service: CatalogService = Depends(get_service),
+):
+    return await service.fijar_componentes_de_tipo(
+        id, schema.componentes, usuario_id=current_user.USU_Usuario, ip=get_client_ip(request))
 
 
 @router.get("/tipos-activo/{id}", response_model=TipoActivoResponse)

@@ -55,12 +55,18 @@ class MovimientoCreate(MovimientoBase):
     # Préstamos: fecha comprometida de devolución (obligatoria en un préstamo).
     MOV_Fecha_Prevista_Devolucion: Optional[date] = None
     MOV_Motivo: Optional[str] = Field(None, max_length=255)
+    # Motivo del catálogo (INV_MOTIVO_MOVIMIENTO) y su detalle; MOV_Motivo
+    # (texto libre) se acepta sin catálogo por compatibilidad.
+    MMO_Motivo: Optional[int] = None
+    MOV_Motivo_Detalle: Optional[str] = Field(None, max_length=255)
 
 class MovimientoResponse(MovimientoBase):
     MOV_Movimiento: uuid.UUID
     MOV_Fecha_Asignacion: datetime
     MOV_Fecha_Devolucion: Optional[datetime] = None
     MOV_Motivo: Optional[str] = None
+    MMO_Motivo: Optional[int] = None
+    MOV_Motivo_Detalle: Optional[str] = None
     MOV_Fecha_Prevista_Devolucion: Optional[date] = None
     MOV_Usuario_Registra: Optional[uuid.UUID] = None
     
@@ -80,6 +86,10 @@ class DevolucionCreate(Esquema):
     ACT_Activo: uuid.UUID
     # Por qué se devuelve (renuncia, cambio de equipo, fin de préstamo…).
     MOV_Motivo: Optional[str] = Field(None, max_length=255)
+    # Motivo del catálogo (INV_MOTIVO_MOVIMIENTO) y su detalle; MOV_Motivo
+    # (texto libre) se acepta sin catálogo por compatibilidad.
+    MMO_Motivo: Optional[int] = None
+    MOV_Motivo_Detalle: Optional[str] = Field(None, max_length=255)
     # Bodega o área donde queda el equipo (su ubicación física).
     ARE_Area_Destino: Optional[int] = None
     # Estado en que llega: CON_DANO propone abrir un ticket de mantenimiento.
@@ -94,6 +104,32 @@ class TransferenciaCreate(Esquema):
     ARE_Area_Destino: int
     MOV_Observacion: Optional[str] = Field(None, max_length=1000)
     MOV_Motivo: Optional[str] = Field(None, max_length=255)
+    # Motivo del catálogo (INV_MOTIVO_MOVIMIENTO) y su detalle; MOV_Motivo
+    # (texto libre) se acepta sin catálogo por compatibilidad.
+    MMO_Motivo: Optional[int] = None
+    MOV_Motivo_Detalle: Optional[str] = Field(None, max_length=255)
+
+# =======================
+# EQUIPOS COMPARTIDOS (instalar en un área / retirar)
+# =======================
+class InstalacionAreaCreate(Esquema):
+    ACT_Activo: uuid.UUID
+    ARE_Area: int
+    # Responsable opcional (reporta fallas, recibe el tóner); no es custodia.
+    PER_Responsable: Optional[uuid.UUID] = None
+    MMO_Motivo: Optional[int] = None
+    MOV_Motivo: Optional[str] = Field(None, max_length=255)
+    MOV_Motivo_Detalle: Optional[str] = Field(None, max_length=255)
+
+
+class RetiroAreaCreate(Esquema):
+    ACT_Activo: uuid.UUID
+    # Bodega o área donde queda (si no, conserva el área).
+    ARE_Area_Destino: Optional[int] = None
+    MMO_Motivo: Optional[int] = None
+    MOV_Motivo: Optional[str] = Field(None, max_length=255)
+    MOV_Motivo_Detalle: Optional[str] = Field(None, max_length=255)
+    condicion: Optional[str] = Field(None, pattern="^(BUENO|CON_DANO)$")
 
 # Request para descarga por lote
 class ActaLoteRequest(Esquema):

@@ -38,16 +38,24 @@ EVENTOS_ACTIVO = (
     "CAMBIO_ESTADO",            # edición de almacén o corrección de datos
     "BAJA",
     "INVENTARIO_FISICO",        # hallazgo de una toma de inventario
+    "INSTALACION_AREA",         # equipo compartido instalado o reubicado en un área
+    "RETIRO_AREA",              # equipo compartido retirado de su área (a bodega)
+    "RECLASIFICACION",          # un insumo registrado como activo pasa a consumible
 )
 EVENTOS_CONSUMIBLE = ("CONSUMIBLE_ENTRADA", "CONSUMIBLE_SALIDA", "CONSUMIBLE_AJUSTE", "CONSUMIBLE_TRASLADO")
-EVENTOS_LICENCIA = ("LICENCIA_ALTA", "LICENCIA_ASIGNADA", "LICENCIA_RETIRADA", "LICENCIA_AJUSTE", "LICENCIA_BAJA")
+EVENTOS_LICENCIA = (
+    "LICENCIA_ALTA", "LICENCIA_ASIGNADA", "LICENCIA_RETIRADA", "LICENCIA_AJUSTE", "LICENCIA_BAJA",
+    "LICENCIA_CREDENCIAL_ALTA",     # nueva cuenta, serial o key
+    "LICENCIA_SECRETO_CAMBIADO",    # rotación de la clave de una cuenta
+    "LICENCIA_SECRETO_VISTO",       # alguien reveló el secreto (también en la bitácora)
+)
 TIPOS_EVENTO = EVENTOS_ACTIVO + EVENTOS_CONSUMIBLE + EVENTOS_LICENCIA
 
 # Clasificación para la bitácora de entradas y salidas.
 EVENTOS_ENTRADA = ("ALTA", "RECEPCION", "CONSUMIBLE_ENTRADA", "LICENCIA_ALTA")
-EVENTOS_SALIDA = ("BAJA", "CONSUMIBLE_SALIDA", "LICENCIA_BAJA")
+EVENTOS_SALIDA = ("BAJA", "RECLASIFICACION", "CONSUMIBLE_SALIDA", "LICENCIA_BAJA")
 EVENTOS_REASIGNACION = (
-    "ASIGNACION", "PRESTAMO", "DEVOLUCION", "TRANSFERENCIA",
+    "ASIGNACION", "PRESTAMO", "DEVOLUCION", "TRANSFERENCIA", "INSTALACION_AREA", "RETIRO_AREA",
     "COMPONENTE_INSTALADO", "COMPONENTE_RETIRADO", "LICENCIA_ASIGNADA", "LICENCIA_RETIRADA",
 )
 

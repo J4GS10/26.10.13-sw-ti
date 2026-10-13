@@ -14,6 +14,8 @@ const COLOR = { alta: 'error', media: 'warning', baja: 'info' } as const;
 const rutaDe = (i: ItemVerificacion): string => {
   if (i.tipo === 'activo') return `/activos/${encodeURIComponent(i.codigo ?? i.titulo)}`;
   if (i.tipo === 'persona') return `/empleados/${i.id}`;
+  // Marcas casi iguales: se abre el catálogo de marcas para fusionarlas.
+  if (i.tipo === 'marca') return '/config/catalogos?c=marcas';
   return '/config/modelos';
 };
 

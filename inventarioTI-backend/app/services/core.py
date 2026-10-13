@@ -44,6 +44,9 @@ class CoreService(BaseService[CoreRepository]):
         tipo_activo = await self.cat_repo.get_tipo_activo_by_id(schema.TAC_Tipo_Activo)
         if not tipo_activo:
             raise HTTPException(status_code=404, detail="ASSET_TYPE_NOT_FOUND")
+        # Los insumos se registran como consumibles (por cantidad), no como activos.
+        from app.services.clases import exigir_no_insumo_tipo
+        await exigir_no_insumo_tipo(self.db, schema.TAC_Tipo_Activo)
 
         modelo = await self.cat_repo.get_modelo_by_id(schema.MOD_Modelo)
         if not modelo:
@@ -246,9 +249,22 @@ class CoreService(BaseService[CoreRepository]):
         """
         raise HTTPException(status_code=409, detail="USE_DECOMMISSION_REQUEST")
 
-    async def validar_baja(self, activo_id: uuid.UUID, schema):
+    async def validar_baja(self, activo_id: uuid.UUID, schema, al_aprobar: bool = False):
         """Reglas de la baja (al solicitarla y otra vez al aprobarla). Devuelve (activo, estado_baja, componentes)."""
         from app.models.traceability import Mantenimiento
+
+        from app.services.catalogo_generico import CatalogoGenericoService
+        catalogos = CatalogoGenericoService(self.db)
+        # Al aprobar se acepta un motivo o destino desactivado después de la
+        # solicitud: era válido cuando se pidió (solo se exige que exista).
+        motivo = await catalogos.obtener_por_codigo("motivos-baja", schema.motivo, solo_activos=not al_aprobar)
+        if motivo is None:
+            raise HTTPException(status_code=422, detail="DECOMMISSION_REASON_NOT_FOUND")
+        destino = await catalogos.obtener_por_codigo("destinos-baja", schema.destino, solo_activos=not al_aprobar)
+        if destino is None:
+            raise HTTPException(status_code=422, detail="DECOMMISSION_DESTINATION_NOT_FOUND")
+        if (motivo.MBA_Pide_Detalle or destino.DBA_Pide_Detalle) and not (schema.observacion or "").strip():
+            raise HTTPException(status_code=422, detail="OBSERVATION_REQUIRED_FOR_OTHER")
 
         activo = await self.repo.get_by_id_simple(activo_id)
         if not activo:
@@ -295,7 +311,7 @@ class CoreService(BaseService[CoreRepository]):
         if not aprobacion:
             # Separación de funciones: la baja solo se ejecuta desde una aprobación.
             raise HTTPException(status_code=409, detail="USE_DECOMMISSION_REQUEST")
-        activo, estado_baja, componentes = await self.validar_baja(activo_id, schema)
+        activo, estado_baja, componentes = await self.validar_baja(activo_id, schema, al_aprobar=True)
         kardex = KardexService(self.db)
         for comp in componentes:
             await self._retirar(activo, comp, "Retiro por baja del equipo", "En Bodega", usuario_id, kardex)
@@ -383,6 +399,9 @@ class CoreService(BaseService[CoreRepository]):
             raise HTTPException(404, "ASSET_NOT_FOUND")
         if comp.ACT_Activo == equipo.ACT_Activo:
             raise HTTPException(400, "COMPONENT_CANNOT_BE_ITSELF")
+        # Una impresora no lleva RAM: solo los componentes que admite el tipo de equipo.
+        from app.services.clases import exigir_componente_valido
+        await exigir_componente_valido(self.db, equipo, comp)
         if comp.ACT_Activo_Padre is not None:
             raise HTTPException(409, "COMPONENT_ALREADY_INSTALLED")
         # Sin ciclos: el equipo no puede estar instalado (directa o indirectamente) en el componente.

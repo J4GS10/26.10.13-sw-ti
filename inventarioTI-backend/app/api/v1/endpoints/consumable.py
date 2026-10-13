@@ -1,15 +1,18 @@
 """Consumibles: inventario por cantidad (tóner, cables, periféricos a granel)."""
 from typing import List
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUser, get_client_ip, require_admin, require_operativo
+from app.api.deps import (
+    CurrentUser, get_client_ip, require_admin, require_inventory, require_operativo, require_stock_catalog,
+)
 from app.api.idempotency import _IdempotencyGuard, idempotency_guard
 from app.core.limiter import limiter
+from app.core.ocultar_costos import descartar_costos
 from app.db.session import get_db
 from app.schemas.consumable import (
-    ConsumibleCreate, ConsumibleResponse, ConsumibleUpdate,
+    CompatiblesUpdate, ConsumibleCreate, ConsumibleResponse, ConsumibleUpdate,
     MovimientoConsumibleResponse, StockAjusteCreate, StockMovimientoCreate,
 )
 from app.services.consumable import ConsumableService
@@ -28,7 +31,9 @@ def _ctx(request: Request, user: CurrentUser) -> dict:
     return {"usuario_id": user.USU_Usuario, "ip": get_client_ip(request)}
 
 
-@router.get("", response_model=List[ConsumibleResponse])
+# Catálogo y existencias: el inventario, Contabilidad (valores) y Compras
+# (para elegir qué reabastecer en una orden). Los movimientos, solo el inventario.
+@router.get("", response_model=List[ConsumibleResponse], dependencies=[Depends(require_stock_catalog)])
 async def list_consumibles(
     bajo_stock: bool = Query(False, description="Solo consumibles en o por debajo del mínimo"),
     service: ConsumableService = Depends(get_service),
@@ -36,7 +41,7 @@ async def list_consumibles(
     return await service.list(solo_bajo_stock=bajo_stock)
 
 
-@router.get("/{id}", response_model=ConsumibleResponse)
+@router.get("/{id}", response_model=ConsumibleResponse, dependencies=[Depends(require_stock_catalog)])
 async def get_consumible(id: int, service: ConsumableService = Depends(get_service)):
     return await service.get(id)
 
@@ -75,7 +80,9 @@ async def registrar_entrada(
     service: ConsumableService = Depends(get_service),
     idempotency: _IdempotencyGuard = Depends(idempotency_guard),
 ):
-    """Suma stock al consumible (compra, reabastecimiento)."""
+    """Suma stock al consumible (compra, reabastecimiento). Sin precio, se
+    mantiene el costo promedio (quien no ve costos no los registra)."""
+    descartar_costos(schema, current_user.USU_Rol, "precio_unitario", "moneda")
     return await idempotency.execute(
         lambda: service.registrar_entrada(id, schema, **_ctx(request, current_user)),
         status_code=201,
@@ -96,16 +103,40 @@ async def registrar_salida(
     )
 
 
-@router.post("/{id}/ajuste", response_model=MovimientoConsumibleResponse, status_code=201, dependencies=ADMIN)
+@router.post("/{id}/ajuste", status_code=201, dependencies=ADMIN)
 @limiter.limit("30/minute")
 async def registrar_ajuste(
-    id: int, schema: StockAjusteCreate, request: Request, current_user: CurrentUser,
+    id: int, schema: StockAjusteCreate, request: Request, response: Response, current_user: CurrentUser,
     service: ConsumableService = Depends(get_service),
 ):
-    """Fija la existencia real tras un conteo físico (queda en el kardex con su motivo)."""
-    return await service.registrar_ajuste(id, schema, **_ctx(request, current_user))
+    """
+    Fija la existencia real tras un conteo físico. Si sube, se aplica (201,
+    movimiento); si baja, se solicita aprobación del Jefe de TI (202, solicitud).
+    """
+    from app.services.aprobaciones import AprobacionService
+    obj = await service.get_or_404(id, "CONSUMABLE_NOT_FOUND")
+    if schema.CON_Stock_Real < obj.CON_Stock_Actual:
+        response.status_code = 202
+        return await AprobacionService(service.db).solicitar_ajuste(id, schema, **_ctx(request, current_user))
+    mov = await service.registrar_ajuste(id, schema, **_ctx(request, current_user))
+    return MovimientoConsumibleResponse.model_validate(mov)
 
 
-@router.get("/{id}/movimientos", response_model=List[MovimientoConsumibleResponse])
+@router.get("/{id}/compatibles", dependencies=[Depends(require_stock_catalog)])
+async def listar_compatibles(id: int, service: ConsumableService = Depends(get_service)):
+    """Modelos de equipo con los que es compatible (tóner → impresoras)."""
+    return await service.compatibles(id)
+
+
+@router.put("/{id}/compatibles", dependencies=ADMIN)
+async def fijar_compatibles(
+    id: int, schema: CompatiblesUpdate, request: Request, current_user: CurrentUser,
+    service: ConsumableService = Depends(get_service),
+):
+    return await service.fijar_compatibles(id, schema.modelos, **_ctx(request, current_user))
+
+
+@router.get("/{id}/movimientos", response_model=List[MovimientoConsumibleResponse],
+            dependencies=[Depends(require_inventory)])
 async def list_movimientos(id: int, service: ConsumableService = Depends(get_service)):
     return await service.list_movimientos(id)

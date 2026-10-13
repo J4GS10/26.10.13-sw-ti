@@ -95,13 +95,15 @@ export const procurementService = {
     const r = await client.post<OrdenCompra>('/compras/ordenes', data);
     return r.data;
   },
-  cambiarEstado: async (id: number, estado: string, motivo?: string): Promise<OrdenCompra> => {
-    const r = await client.patch<OrdenCompra>(`/compras/ordenes/${id}/estado`, { OCO_Estado: estado, motivo });
+  /** Cancelar se solicita (202): la orden cambia cuando el Jefe de TI lo aprueba. */
+  cambiarEstado: async (id: number, estado: string, motivo?: string): Promise<{ APR_Aprobacion: number }> => {
+    const r = await client.patch<{ APR_Aprobacion: number }>(`/compras/ordenes/${id}/estado`, { OCO_Estado: estado, motivo });
     return r.data;
   },
   /** Cierra una orden PARCIAL aceptando que lo pendiente no llegará. */
-  cerrarConFaltante: async (id: number, motivo: string): Promise<OrdenCompra> => {
-    const r = await client.post<OrdenCompra>(`/compras/ordenes/${id}/cerrar`, { motivo });
+  /** Cerrar con faltante se solicita (202): se cierra cuando el Jefe de TI lo aprueba. */
+  cerrarConFaltante: async (id: number, motivo: string): Promise<{ APR_Aprobacion: number }> => {
+    const r = await client.post<{ APR_Aprobacion: number }>(`/compras/ordenes/${id}/cerrar`, { motivo });
     return r.data;
   },
   recepciones: async (id: number): Promise<Recepcion[]> => {

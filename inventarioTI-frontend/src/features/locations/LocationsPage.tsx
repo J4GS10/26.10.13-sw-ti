@@ -6,6 +6,7 @@ import FolderIcon from '@mui/icons-material/Folder';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/DeleteOutline';
 import { useTranslation } from 'react-i18next';
+import { CatalogField } from '../../components/CatalogField';
 import { useSnackbar } from 'notistack';
 import { PageHeader, EmptyState } from '../../components/ui';
 import { getApiErrorMessage } from '../../api/errors';
@@ -19,7 +20,7 @@ interface BreadcrumbItem {
 }
 type LocationFieldValue = string | number | null | undefined;
 type LocationItem = Record<string, LocationFieldValue>;
-type LocationPayload = Record<string, string | number>;
+type LocationPayload = Record<string, string | number | null>;
 interface LocationApi {
     list: (parentId?: number) => Promise<LocationItem[]>;
     create: (payload: LocationPayload) => Promise<unknown>;
@@ -103,6 +104,8 @@ export const LocationsPage = () => {
     const [editing, setEditing] = useState<LocationItem | null>(null);
     const [name, setName] = useState('');
     const [extra, setExtra] = useState('');
+    // Áreas: tipo del catálogo (Bodega, Oficina…); el nivel de acceso es General o Restringido.
+    const [tipoArea, setTipoArea] = useState<number | null>(null);
     const meta = LEVEL_META[currentLevel];
     const api = apiByLevel[currentLevel];
     const loadItems = useCallback(async () => {
@@ -147,13 +150,15 @@ export const LocationsPage = () => {
     const openCreate = () => {
         setEditing(null);
         setName('');
-        setExtra('');
+        setExtra(currentLevel === 'AREA' ? 'General' : '');
+        setTipoArea(null);
         setDialogOpen(true);
     };
     const openEdit = (item: LocationItem) => {
         setEditing(item);
         setName(fieldAsString(item, meta.nameField));
         setExtra(meta.extra ? fieldAsString(item, meta.extra) : '');
+        setTipoArea(currentLevel === 'AREA' ? (fieldAsNumber(item, 'TAR_Tipo_Area') || null) : null);
         setDialogOpen(true);
     };
     const handleSubmit = async () => {
@@ -167,6 +172,8 @@ export const LocationsPage = () => {
             payload[meta.extra] = extra.trim();
         if (meta.parentField && !editing)
             payload[meta.parentField] = parentId;
+        if (currentLevel === 'AREA')
+            payload.TAR_Tipo_Area = tipoArea;
         // Validación específica de PAIS: ISO requerido
         if (currentLevel === 'PAIS' && !extra.trim()) {
             enqueueSnackbar(t('locations.iso_required'), { variant: 'warning' });
@@ -260,7 +267,17 @@ export const LocationsPage = () => {
         </DialogTitle>
         <DialogContent>
           <TextField autoFocus margin="dense" fullWidth label={t('common.name')} value={name} onChange={(e) => setName(e.target.value)}/>
-          {meta.extra && meta.extraLabelKey && (<TextField margin="dense" fullWidth label={t(meta.extraLabelKey)} value={extra} onChange={(e) => setExtra(e.target.value)}/>)}
+          {currentLevel === 'AREA' ? (<>
+              <TextField select margin="dense" fullWidth label={t('locations.field_access_type')} value={extra || 'General'}
+                onChange={(e) => setExtra(e.target.value)} SelectProps={{ native: true }}>
+                <option value="General">{t('locations.access.General')}</option>
+                <option value="Restringido">{t('locations.access.Restringido')}</option>
+              </TextField>
+              <Box sx={{ mt: 1 }}>
+                <CatalogField clave="tipos-area" label={t('locations.field_area_type')} value={tipoArea}
+                  onChange={(v) => setTipoArea(v as number | null)}/>
+              </Box>
+            </>) : meta.extra && meta.extraLabelKey && (<TextField margin="dense" fullWidth label={t(meta.extraLabelKey)} value={extra} onChange={(e) => setExtra(e.target.value)}/>)}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)}>{t('common.cancel')}</Button>

@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy import (
-    Column, Integer, String, ForeignKey, Date, Numeric, Uuid,
+    Boolean, Column, Integer, String, ForeignKey, Date, Numeric, Uuid,
     CheckConstraint, UniqueConstraint, Index,
 )
 from sqlalchemy.orm import relationship
@@ -23,6 +23,9 @@ class Activo(Base):
     ACT_Fecha_Compra = Column(Date, nullable=False)
     ACT_Fin_Garantia = Column(Date, nullable=True)
     ACT_Costo = Column(Numeric(12, 2), nullable=True)
+    # Origen de la compra (editable en lote): proveedor y número de factura.
+    PRV_Proveedor = Column(Integer, ForeignKey("INV_PROVEEDOR.PRV_Proveedor", ondelete="SET NULL"), nullable=True)
+    ACT_Factura = Column(String(60), nullable=True)
     # Moneda en que se pagó el costo (no se convierte).
     ACT_Moneda = Column(
         String(3), nullable=False, default=DEFAULT_CURRENCY, server_default=DEFAULT_CURRENCY,
@@ -55,6 +58,13 @@ class Activo(Base):
     # devolución a una bodega; vacía si no se conoce.
     ARE_Area_Ubicacion = Column(
         Integer, ForeignKey("INV_AREA.ARE_Area", ondelete="SET NULL"), nullable=True,
+    )
+    # Equipo compartido instalado en un área (impresora, switch, UPS…): no es
+    # custodia de nadie; el responsable es opcional. Al volver de un
+    # mantenimiento regresa a «Instalado».
+    ACT_Instalado = Column(Boolean, nullable=False, default=False, server_default="false")
+    ACT_Responsable = Column(
+        Uuid, ForeignKey("INV_PERSONA.PER_Persona", ondelete="SET NULL"), nullable=True, index=True,
     )
     # Baja formal: motivo, destino y respaldo (el estado es "Baja").
     ACT_Baja_Motivo = Column(String(30), nullable=True)

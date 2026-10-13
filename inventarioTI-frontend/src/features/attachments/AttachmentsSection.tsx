@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Box, Button, Chip, CircularProgress, IconButton, MenuItem, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip, Typography } from '@mui/material';
+import { Box, Button, Chip, CircularProgress, IconButton, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tooltip, Typography } from '@mui/material';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import DownloadIcon from '@mui/icons-material/Download';
 import DeleteIcon from '@mui/icons-material/DeleteOutline';
 import { useTranslation } from 'react-i18next';
+import { CatalogField } from '../../components/CatalogField';
+import { useCatalogLabel } from '../../hooks/useCatalogo';
 import { EmptyState } from '../../components/ui';
 import { useConfirm } from '../../components/confirm-context';
 import { useSnackbar } from 'notistack';
@@ -11,7 +13,6 @@ import { getApiErrorMessage } from '../../api/errors';
 import { usePermissions } from '../../hooks/usePermissions';
 import { formatDate } from '../../utils/dates';
 import { attachmentService, Adjunto } from './attachmentService';
-const CATEGORIES = ['factura', 'foto', 'acta', 'otro'];
 // Mismos límites que el servidor: se avisa antes de subir.
 const MAX_MB = 10;
 const ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,.docx,.xlsx,.csv,.txt';
@@ -29,15 +30,18 @@ interface Props {
 export const AttachmentsSection = ({ activoId, ordenId }: Props) => {
     const { t, i18n } = useTranslation();
     const confirm = useConfirm();
-    const { canOperate, canAdminInventory } = usePermissions();
+    const { canOperate, canAdminInventory, canPurchase } = usePermissions();
     const { enqueueSnackbar } = useSnackbar();
     const fileRef = useRef<HTMLInputElement>(null);
     const isOrden = ordenId != null;
     // Subir: operativos en activos, administradores en órdenes. Eliminar: administradores.
-    const puedeSubir = isOrden ? canAdminInventory : canOperate;
+    // La factura de una orden la adjunta Compras (o TI).
+    const puedeSubir = isOrden ? canPurchase : canOperate;
     const [items, setItems] = useState<Adjunto[]>([]);
     const [loading, setLoading] = useState(false);
+    // Categoría = código del catálogo de tipos de evidencia (factura, foto, acta…).
     const [categoria, setCategoria] = useState(isOrden ? 'factura' : 'otro');
+    const etiquetaCategoria = useCatalogLabel('tipos-evidencia');
     const [uploading, setUploading] = useState(false);
     const load = useCallback(async () => {
         if (!activoId && !ordenId)
@@ -105,9 +109,10 @@ export const AttachmentsSection = ({ activoId, ordenId }: Props) => {
     };
     return (<Box>
       {puedeSubir && (<Stack direction="row" spacing={2} alignItems="center" useFlexGap sx={{ mb: 2, flexWrap: 'wrap' }}>
-        <TextField select size="small" label={t('attachments.category')} value={categoria} onChange={(e) => setCategoria(e.target.value)} sx={{ minWidth: 160 }}>
-          {CATEGORIES.map((c) => (<MenuItem key={c} value={c}>{t(`attachments.cat_${c}`, c)}</MenuItem>))}
-        </TextField>
+        <Box sx={{ minWidth: 200 }}>
+          <CatalogField size="small" clave="tipos-evidencia" valueBy="codigo" label={t('attachments.category')}
+            value={categoria} onChange={(v) => setCategoria((v as string | null) ?? 'otro')}/>
+        </Box>
         <input ref={fileRef} type="file" hidden accept={ACCEPT} onChange={handleFile}/>
         <Button variant="contained" startIcon={uploading ? <CircularProgress size={18}/> : <UploadFileIcon />} onClick={() => fileRef.current?.click()} disabled={uploading}>
           {t('attachments.upload')}
@@ -131,7 +136,7 @@ export const AttachmentsSection = ({ activoId, ordenId }: Props) => {
             <TableBody>
               {items.map((a) => (<TableRow key={a.ADJ_Adjunto} hover>
                   <TableCell>{a.ADJ_Nombre_Original}</TableCell>
-                  <TableCell><Chip size="small" label={t(`attachments.cat_${a.ADJ_Categoria}`, a.ADJ_Categoria)}/></TableCell>
+                  <TableCell><Chip size="small" label={etiquetaCategoria(a.ADJ_Categoria)}/></TableCell>
                   <TableCell>{fmtSize(a.ADJ_Tamano_Bytes)}</TableCell>
                   <TableCell>{formatDate(a.ADJ_Fecha_Subida, i18n.language)}</TableCell>
                   <TableCell align="right">

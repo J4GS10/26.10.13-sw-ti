@@ -4,6 +4,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.transactional import schedule_post_commit, transactional
@@ -26,6 +27,8 @@ def _con_to_response(con) -> dict:
         "CON_Descripcion": con.CON_Descripcion,
         "CON_Categoria": con.CON_Categoria,
         "CON_Unidad": con.CON_Unidad,
+        "CCO_Categoria": con.CCO_Categoria,
+        "UME_Unidad": con.UME_Unidad,
         "CON_Stock_Actual": con.CON_Stock_Actual,
         "CON_Stock_Minimo": con.CON_Stock_Minimo,
         "CON_Activo": con.CON_Activo,
@@ -51,6 +54,15 @@ class ConsumableService(BaseService[ConsumibleRepository]):
         obj = await self.get_or_404(id, "CONSUMABLE_NOT_FOUND")
         return _con_to_response(obj)
 
+    async def _textos_de_catalogo(self, schema) -> None:
+        """Categoría y unidad del catálogo: su nombre queda también en el texto legible."""
+        from app.services.catalogo_generico import CatalogoGenericoService
+        catalogos = CatalogoGenericoService(self.db)
+        if schema.CCO_Categoria is not None:
+            schema.CON_Categoria = (await catalogos.nombre_vigente("categorias-consumible", schema.CCO_Categoria))[:50]
+        if schema.UME_Unidad is not None:
+            schema.CON_Unidad = (await catalogos.nombre_vigente("unidades-medida", schema.UME_Unidad))[:20].lower()
+
     @transactional
     async def create(self, schema: ConsumibleCreate, usuario_id=None, ip=None):
         from app.core.data_scope import elevated, require_sede
@@ -62,6 +74,7 @@ class ConsumableService(BaseService[ConsumibleRepository]):
             raise HTTPException(409, "CONSUMABLE_ALREADY_EXISTS")
         if schema.CON_Costo_Unitario is not None and not schema.CON_Moneda:
             schema.CON_Moneda = "GTQ"
+        await self._textos_de_catalogo(schema)
         obj = await self.repo.create(schema)
         if schema.CON_Stock_Actual > 0:
             # Saldo inicial: el kardex del consumible cuadra desde cero.
@@ -91,6 +104,7 @@ class ConsumableService(BaseService[ConsumibleRepository]):
             sede_final = schema.SED_Sede
         sede_antes = obj.SED_Sede
         stock, promedio, moneda_val, nombre = obj.CON_Stock_Actual, obj.CON_Costo_Unitario, obj.CON_Moneda, obj.CON_Nombre
+        await self._textos_de_catalogo(schema)
         updated = await self.repo.update(id, schema)
         if sede_final != sede_antes:
             # Traslado de bodega: la existencia sale de una sede y entra en otra.
@@ -145,6 +159,11 @@ class ConsumableService(BaseService[ConsumibleRepository]):
             from app.models.organization import Persona as _Persona
             if not await self.db.get(_Persona, schema.PER_Persona):
                 raise HTTPException(404, "PERSON_NOT_FOUND")
+        equipo = None
+        if getattr(schema, "ACT_Activo", None) is not None:
+            if tipo != "SALIDA":
+                raise HTTPException(422, "ASSET_ONLY_ON_STOCK_OUT")
+            equipo = await self._equipo_para_consumo(schema.ACT_Activo)
 
         # Capturar metadatos ANTES del UPDATE (que sincroniza el objeto en sesión).
         stock_antes = obj.CON_Stock_Actual
@@ -179,6 +198,7 @@ class ConsumableService(BaseService[ConsumibleRepository]):
             MOC_Stock_Resultante=stock_despues,
             MOC_Motivo=schema.MOC_Motivo,
             PER_Persona=schema.PER_Persona,
+            ACT_Activo=equipo.ACT_Activo if equipo else None,
             USU_Usuario=usuario_id,
         )
         await self.repo.add_movimiento(mov)
@@ -188,7 +208,9 @@ class ConsumableService(BaseService[ConsumibleRepository]):
             "CONSUMIBLE_ENTRADA" if tipo == "ENTRADA" else "CONSUMIBLE_SALIDA",
             consumible_id=id, referencia=nombre, cantidad=schema.MOC_Cantidad, saldo=stock_despues,
             costo=costo, moneda=moneda_val, saldo_valor=valoracion.valor_saldo(stock_despues, promedio),
-            destino={"persona": schema.PER_Persona, "sede": sede} if tipo == "SALIDA" else {"sede": sede},
+            destino=({"persona": schema.PER_Persona, "sede": sede,
+                      "activo": equipo.ACT_Activo if equipo else None, "area": equipo.ARE_Area_Ubicacion if equipo else None}
+                     if tipo == "SALIDA" else {"sede": sede}),
             origen={"sede": sede} if tipo == "SALIDA" else None,
             motivo=schema.MOC_Motivo, usuario_id=usuario_id,
         )
@@ -198,6 +220,7 @@ class ConsumableService(BaseService[ConsumibleRepository]):
             {
                 "id": id, "nombre": nombre, "cantidad": schema.MOC_Cantidad,
                 "stock_resultante": stock_despues, "motivo": schema.MOC_Motivo,
+                "equipo": equipo.ACT_Codigo_Interno if equipo else None,
             },
             usuario_id=usuario_id, ip_origen=ip, sede_id=sede,
         )
@@ -217,12 +240,21 @@ class ConsumableService(BaseService[ConsumibleRepository]):
         return mov
 
     @transactional
-    async def registrar_ajuste(self, id: int, schema, usuario_id=None, ip=None):
-        """Ajuste por conteo físico: la existencia pasa a CON_Stock_Real."""
+    async def registrar_ajuste(self, id: int, schema, usuario_id=None, ip=None, aprobacion: dict | None = None,
+                               stock_esperado: int | None = None):
+        """
+        Ajuste por conteo físico: la existencia pasa a CON_Stock_Real. Una
+        disminución solo se ejecuta aprobada (AprobacionService); al aprobarla se
+        exige que la existencia siga siendo la del momento de la solicitud.
+        """
         obj = await self.get_or_404(id, "CONSUMABLE_NOT_FOUND")
         antes = obj.CON_Stock_Actual
+        if stock_esperado is not None and antes != stock_esperado:
+            raise HTTPException(409, "STOCK_CHANGED_SINCE_REQUEST")
         if schema.CON_Stock_Real == antes:
             raise HTTPException(400, "STOCK_ALREADY_MATCHES")
+        if schema.CON_Stock_Real < antes and aprobacion is None:
+            raise HTTPException(409, "STOCK_DECREASE_REQUIRES_APPROVAL")
         obj.CON_Stock_Actual = schema.CON_Stock_Real
         mov = MovimientoConsumible(
             CON_Consumible=id, MOC_Tipo="AJUSTE", MOC_Cantidad=abs(schema.CON_Stock_Real - antes),
@@ -235,7 +267,8 @@ class ConsumableService(BaseService[ConsumibleRepository]):
             costo=obj.CON_Costo_Unitario, moneda=obj.CON_Moneda,
             saldo_valor=valoracion.valor_saldo(schema.CON_Stock_Real, obj.CON_Costo_Unitario),
             destino={"sede": obj.SED_Sede}, motivo=schema.MOC_Motivo, usuario_id=usuario_id,
-            detalle={"stock_antes": antes, "stock_despues": schema.CON_Stock_Real},
+            detalle={"stock_antes": antes, "stock_despues": schema.CON_Stock_Real,
+                     **({"aprobacion": {k: str(v) for k, v in aprobacion.items()}} if aprobacion else {})},
         )
         await self.gov_repo.create_audit_log(
             "STOCK_ADJUST", "INV_CONSUMIBLE",
@@ -246,6 +279,86 @@ class ConsumableService(BaseService[ConsumibleRepository]):
         await self.db.flush()
         await self.db.refresh(mov)
         return mov
+
+    async def _equipo_para_consumo(self, activo_id):
+        """El equipo que recibe el consumible: visible, no dado de baja."""
+        from app.models.catalogs import EstadoOperativo
+        from app.models.core import Activo
+        equipo = (await self.db.execute(select(Activo).where(Activo.ACT_Activo == activo_id))).scalar_one_or_none()
+        if equipo is None:
+            raise HTTPException(404, "ASSET_NOT_FOUND")
+        estado = (await self.db.execute(select(EstadoOperativo.EOP_Nombre).where(
+            EstadoOperativo.EOP_Estado_Operativo == equipo.EOP_Estado_Operativo))).scalar()
+        if (estado or "").lower() == "baja":
+            raise HTTPException(400, "ASSET_DECOMMISSIONED")
+        return equipo
+
+    # ------------------------------------------------------------------
+    # Compatibilidad con modelos de equipo y consumo por equipo
+    # ------------------------------------------------------------------
+    async def compatibles(self, id: int) -> list[dict]:
+        from app.models.catalogs import Marca, Modelo
+        from app.models.consumable import ConsumibleCompatible
+        await self.get_or_404(id, "CONSUMABLE_NOT_FOUND")
+        filas = (await self.db.execute(
+            select(Modelo.MOD_Modelo, Modelo.MOD_Nombre, Marca.MAR_Nombre)
+            .join(ConsumibleCompatible, ConsumibleCompatible.MOD_Modelo == Modelo.MOD_Modelo)
+            .join(Marca, Marca.MAR_Marca == Modelo.MAR_Marca)
+            .where(ConsumibleCompatible.CON_Consumible == id).order_by(Marca.MAR_Nombre, Modelo.MOD_Nombre)
+        )).all()
+        return [{"MOD_Modelo": m, "modelo": n, "marca": mar} for m, n, mar in filas]
+
+    @transactional
+    async def fijar_compatibles(self, id: int, modelos: list[int], usuario_id=None, ip=None) -> list[dict]:
+        from sqlalchemy import delete
+        from app.models.catalogs import Modelo
+        from app.models.consumable import ConsumibleCompatible
+        obj = await self.get_or_404(id, "CONSUMABLE_NOT_FOUND")
+        modelos = sorted(set(modelos))
+        existentes = set((await self.db.execute(select(Modelo.MOD_Modelo).where(
+            Modelo.MOD_Modelo.in_(modelos)))).scalars()) if modelos else set()
+        if len(existentes) != len(modelos):
+            raise HTTPException(404, "MODEL_NOT_FOUND")
+        antes = sorted((await self.db.execute(select(ConsumibleCompatible.MOD_Modelo).where(
+            ConsumibleCompatible.CON_Consumible == id))).scalars())
+        await self.db.execute(delete(ConsumibleCompatible).where(ConsumibleCompatible.CON_Consumible == id))
+        for m in modelos:
+            self.db.add(ConsumibleCompatible(CON_Consumible=id, MOD_Modelo=m))
+        await self.gov_repo.create_audit_log(
+            "UPDATE", "INV_CONSUMIBLE_COMPATIBLE", {"id": id, "nombre": obj.CON_Nombre, "antes": antes, "despues": modelos},
+            usuario_id=usuario_id, ip_origen=ip, sede_id=obj.SED_Sede,
+        )
+        await self.db.flush()
+        return await self.compatibles(id)
+
+    async def consumo_de_equipo(self, activo_id) -> dict:
+        """Consumibles instalados en un equipo (historial) y los compatibles con su modelo."""
+        from app.models.consumable import Consumible, ConsumibleCompatible
+        from app.models.core import Activo
+        from app.models.organization import Usuario
+        equipo = (await self.db.execute(select(Activo).where(Activo.ACT_Activo == activo_id))).scalar_one_or_none()
+        if equipo is None:
+            raise HTTPException(404, "ASSET_NOT_FOUND")
+        historial = (await self.db.execute(
+            select(MovimientoConsumible, Consumible.CON_Nombre, Consumible.CON_Unidad, Usuario.USU_Username)
+            .join(Consumible, Consumible.CON_Consumible == MovimientoConsumible.CON_Consumible)
+            .outerjoin(Usuario, Usuario.USU_Usuario == MovimientoConsumible.USU_Usuario)
+            .where(MovimientoConsumible.ACT_Activo == activo_id)
+            .order_by(MovimientoConsumible.MOC_Fecha.desc()).limit(200)
+        )).all()
+        compatibles = (await self.db.execute(
+            select(Consumible).join(ConsumibleCompatible, ConsumibleCompatible.CON_Consumible == Consumible.CON_Consumible)
+            .where(ConsumibleCompatible.MOD_Modelo == equipo.MOD_Modelo, Consumible.CON_Activo.is_(True))
+            .order_by(Consumible.CON_Nombre)
+        )).scalars().all()
+        return {
+            "historial": [{"MOC_Movimiento": m.MOC_Movimiento, "MOC_Fecha": m.MOC_Fecha, "CON_Consumible": m.CON_Consumible,
+                           "consumible": n, "unidad": u, "MOC_Cantidad": m.MOC_Cantidad, "MOC_Motivo": m.MOC_Motivo,
+                           "usuario": usu} for m, n, u, usu in historial],
+            "compatibles": [{"CON_Consumible": c.CON_Consumible, "CON_Nombre": c.CON_Nombre,
+                             "CON_Stock_Actual": c.CON_Stock_Actual, "CON_Unidad": c.CON_Unidad,
+                             "SED_Sede": c.SED_Sede} for c in compatibles],
+        }
 
     async def _notificar_stock_bajo(self, nombre, stock_actual, minimo, unidad, categoria, usuario_id):
         """Email post-commit fire-and-forget a admins. No bloquea ni revierte."""

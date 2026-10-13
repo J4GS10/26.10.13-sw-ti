@@ -15,6 +15,7 @@ import { ensureReadable } from '../../theme/theme';
 import type { PanelProps } from '../../types/ui';
 import { formatMoneyTotals } from '../../utils/currency';
 import { AttentionInbox } from './AttentionInbox';
+import { usePermissions } from '../../hooks/usePermissions';
 import { DataQualityCard } from './DataQualityCard';
 interface DashboardDistributionItem {
     label: string;
@@ -104,6 +105,9 @@ const statusColor = (label: string) => {
 };
 export const DashboardPage = () => {
     const { t, i18n } = useTranslation();
+    // Cada rol ve los indicadores de lo que le corresponde (el servidor tampoco
+    // envía costos a quien no los ve ni licencias a quien no ve software).
+    const { canSeeCosts, canSeeSoftware, canSeeInventory, readOnly, canAdminInventory } = usePermissions();
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [loading, setLoading] = useState(true);
     useEffect(() => {
@@ -136,7 +140,7 @@ export const DashboardPage = () => {
       />
 
       <AttentionInbox />
-      <DataQualityCard />
+      {(canAdminInventory || readOnly && canSeeInventory && canSeeSoftware) && <DataQualityCard />}
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' }, gap: 2, mb: 2 }}>
         <KpiCard title={t('dashboard.kpi.total_assets')} value={stats?.activos_totales ?? 0} icon={ComputerIcon} tone="primary"/>
@@ -146,10 +150,10 @@ export const DashboardPage = () => {
       </Box>
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' }, gap: 2, mb: 3 }}>
-        <KpiCard title={t('dashboard.kpi.inventory_value')} value={formatMoneyTotals(stats?.costo_inventario_por_moneda, language)} icon={PaidIcon} tone="primary" subtitle={t('dashboard.kpi.not_decommissioned')}/>
-        <KpiCard title={t('dashboard.kpi.maintenance_cost')} value={formatMoneyTotals(stats?.costo_mantenimiento_por_moneda, language)} icon={BuildIcon} tone="info" subtitle={t('dashboard.kpi.historical_total')}/>
+        {canSeeCosts && <KpiCard title={t('dashboard.kpi.inventory_value')} value={formatMoneyTotals(stats?.costo_inventario_por_moneda, language)} icon={PaidIcon} tone="primary" subtitle={t('dashboard.kpi.not_decommissioned')}/>}
+        {canSeeCosts && <KpiCard title={t('dashboard.kpi.maintenance_cost')} value={formatMoneyTotals(stats?.costo_mantenimiento_por_moneda, language)} icon={BuildIcon} tone="info" subtitle={t('dashboard.kpi.historical_total')}/>}
         <KpiCard title={t('dashboard.kpi.decommissioned')} value={stats?.en_baja ?? 0} icon={DeleteSweepIcon} tone="error"/>
-        <KpiCard title={t('dashboard.kpi.free_licenses')} value={stats?.licencias_disponibles ?? 0} icon={InventoryIcon} tone="primary" subtitle={t('dashboard.kpi.licenses_in_use', { used: stats?.licencias_usadas ?? 0, total: stats?.licencias_total ?? 0 })}/>
+        {canSeeSoftware && <KpiCard title={t('dashboard.kpi.free_licenses')} value={stats?.licencias_disponibles ?? 0} icon={InventoryIcon} tone="primary" subtitle={t('dashboard.kpi.licenses_in_use', { used: stats?.licencias_usadas ?? 0, total: stats?.licencias_total ?? 0 })}/>}
       </Box>
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' }, gap: 2.5, mb: 2.5 }}>
@@ -173,13 +177,13 @@ export const DashboardPage = () => {
             </List>)}
         </Panel>
 
-        <Panel title={t('dashboard.panels.licenses_80')}>
+        {canSeeSoftware && <Panel title={t('dashboard.panels.licenses_80')}>
           {(!stats?.licencias_por_agotar || stats.licencias_por_agotar.length === 0) ? (<Typography variant="body2" color="text.disabled">{t('dashboard.empty.no_licenses')}</Typography>) : (<List dense sx={{ maxHeight: 240, overflow: 'auto' }}>
               {stats.licencias_por_agotar.map((license, index) => (<ListItem key={`${license.software}-${index}`} secondaryAction={<Chip size="small" color="error" label={`${license.usadas}/${license.total}`}/>}>
                   <ListItemText primary={license.software}/>
                 </ListItem>))}
             </List>)}
-        </Panel>
+        </Panel>}
       </Box>
     </Box>);
 };

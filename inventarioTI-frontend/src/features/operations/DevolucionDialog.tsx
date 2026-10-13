@@ -11,8 +11,11 @@ import { getApiErrorMessage } from '../../api/errors';
 import { downloadFile } from '../../api/downloadCsv';
 import { movementService } from './movementService';
 import type { DevolucionResultado } from '../../types/kardex';
+import type { CatalogoItem } from '../../api/catalogoService';
+import { CatalogField } from '../../components/CatalogField';
+import { pideDetalle } from '../../hooks/useCatalogo';
 
-type AreaRuta = { ARE_Area: number; ruta: string; SED_Sede?: number | null };
+type AreaRuta = { ARE_Area: number; ruta: string; SED_Sede?: number | null; tipo_area?: string | null };
 
 interface Props {
   open: boolean;
@@ -21,8 +24,6 @@ interface Props {
   custodio?: string | null;
   onClose: (changed: boolean) => void;
 }
-
-const MOTIVOS = ['renuncia', 'cambio_equipo', 'fin_prestamo', 'falla', 'reasignacion', 'otro'] as const;
 
 /**
  * Devolución de un equipo a bodega: motivo, dónde queda y en qué estado llega.
@@ -34,7 +35,7 @@ export const DevolucionDialog = ({ open, activo, custodio, onClose }: Props) => 
   const { enqueueSnackbar } = useSnackbar();
   const navigate = useNavigate();
   const [areas, setAreas] = useState<AreaRuta[]>([]);
-  const [motivo, setMotivo] = useState<typeof MOTIVOS[number] | ''>('');
+  const [motivo, setMotivo] = useState<CatalogoItem | null>(null);
   const [detalle, setDetalle] = useState('');
   const [area, setArea] = useState<AreaRuta | null>(null);
   const [condicion, setCondicion] = useState<'BUENO' | 'CON_DANO'>('BUENO');
@@ -43,23 +44,31 @@ export const DevolucionDialog = ({ open, activo, custodio, onClose }: Props) => 
 
   useEffect(() => {
     if (!open) return;
-    setMotivo('');
+    setMotivo(null);
     setDetalle('');
     setArea(null);
     setCondicion('BUENO');
     setResultado(null);
-    movementService.getAreas().then((a) => setAreas(a as AreaRuta[])).catch(() => setAreas([]));
-  }, [open]);
+    movementService.getAreas().then((a) => {
+      const lista = a as AreaRuta[];
+      setAreas(lista);
+      // Si la sede tiene una sola bodega, se propone (el usuario puede cambiarla).
+      const bodegas = lista.filter((x) => x.tipo_area === 'BODEGA' && (!activo?.SED_Sede || x.SED_Sede === activo.SED_Sede));
+      if (bodegas.length === 1) setArea(bodegas[0]);
+    }).catch(() => setAreas([]));
+  }, [open, activo?.SED_Sede]);
 
-  const areasSede = areas.filter((a) => !activo?.SED_Sede || a.SED_Sede === activo.SED_Sede);
+  // Las bodegas primero: es donde queda normalmente un equipo devuelto.
+  const areasSede = areas.filter((a) => !activo?.SED_Sede || a.SED_Sede === activo.SED_Sede)
+    .sort((a, b) => Number(b.tipo_area === 'BODEGA') - Number(a.tipo_area === 'BODEGA'));
+  const faltaDetalle = pideDetalle(motivo) && !detalle.trim();
 
   const devolver = async () => {
     if (!activo) return;
     setEnviando(true);
     try {
-      const texto = [motivo ? t(`returns.reasons.${motivo}`) : '', detalle.trim()].filter(Boolean).join(': ');
       setResultado(await inventarioService.devolver({
-        ACT_Activo: activo.ACT_Activo, MOV_Motivo: texto || undefined,
+        ACT_Activo: activo.ACT_Activo, MMO_Motivo: motivo?.id ?? null, MOV_Motivo_Detalle: detalle.trim() || null,
         ARE_Area_Destino: area?.ARE_Area ?? null, condicion,
       }));
     } catch (err) {
@@ -96,14 +105,11 @@ export const DevolucionDialog = ({ open, activo, custodio, onClose }: Props) => 
         ) : (
           <Stack spacing={2} sx={{ mt: 1 }}>
             {custodio && <Typography variant="body2">{t('returns.current_custodian', { name: custodio })}</Typography>}
-            <TextField select SelectProps={{ native: true }} label={t('returns.reason')} value={motivo}
-              onChange={(e) => setMotivo(e.target.value as typeof MOTIVOS[number] | '')} InputLabelProps={{ shrink: true }}>
-              <option value="">{t('returns.choose_reason')}</option>
-              {MOTIVOS.map((m) => <option key={m} value={m}>{t(`returns.reasons.${m}`)}</option>)}
-            </TextField>
-            <TextField label={t('returns.detail')} value={detalle} onChange={(e) => setDetalle(e.target.value)}
-              inputProps={{ maxLength: 200 }} helperText={motivo === 'otro' ? t('returns.detail_required') : undefined}
-              error={motivo === 'otro' && !detalle.trim()} />
+            <CatalogField clave="motivos-movimiento" aplicaA="DEVOLUCION" label={t('movement_reason.reason')} required
+              value={motivo?.id ?? null} onChange={(_v, item) => setMotivo(item)} />
+            <TextField label={t('movement_reason.note')} value={detalle} onChange={(e) => setDetalle(e.target.value)}
+              inputProps={{ maxLength: 200 }} helperText={faltaDetalle ? t('returns.detail_required') : undefined}
+              error={faltaDetalle} />
             <Autocomplete options={areasSede} value={area} onChange={(_, v) => setArea(v)}
               getOptionLabel={(a) => a.ruta} isOptionEqualToValue={(a, b) => a.ARE_Area === b.ARE_Area}
               renderInput={(p) => <TextField {...p} label={t('returns.storage_area')} helperText={t('returns.storage_area_help')} />} />
@@ -132,7 +138,7 @@ export const DevolucionDialog = ({ open, activo, custodio, onClose }: Props) => 
           <>
             <Button color="inherit" onClick={() => onClose(false)}>{t('common.cancel')}</Button>
             <Button variant="contained" onClick={devolver}
-              disabled={enviando || !motivo || (motivo === 'otro' && !detalle.trim())}>
+              disabled={enviando || !motivo || faltaDetalle}>
               {enviando ? <CircularProgress size={22} /> : t('returns.confirm')}
             </Button>
           </>

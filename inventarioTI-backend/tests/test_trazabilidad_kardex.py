@@ -118,17 +118,26 @@ async def test_kardex_solo_insercion(session, auth_headers, software_seed, clien
 @pytest.mark.asyncio
 async def test_componentes_instalar_y_retirar(client, auth_headers, domain_seed):
     h, d = auth_headers, domain_seed
+    # Un disco (clase Componente) va dentro de la laptop; otra laptop no.
+    tipo = (await client.post(f"{BASE}/cat/tipos-activo", headers=h,
+                              json={"TAC_Nombre": "Disco", "TAC_Prefijo": "DIS"})).json()
+    disco = (await client.post(f"{BASE}/core/activos", headers=h, json={
+        "ACT_Serie_Fabricante": "DIS-SER-1", "ACT_Fecha_Compra": "2024-01-10", "MOD_Modelo": d["mod"],
+        "TAC_Tipo_Activo": tipo["TAC_Tipo_Activo"], "EOP_Estado_Operativo": d["eop_bod"]})).json()
     r = await client.post(f"{BASE}/core/activos/{d['act_1']}/componentes", headers=h,
-                          json={"ACT_Componente": d["act_2"], "motivo": "Monitor adicional"})
+                          json={"ACT_Componente": d["act_2"], "motivo": "Otra laptop"})
+    assert r.status_code == 422 and r.json()["detail"] == "COMPONENT_TYPE_NOT_ALLOWED"
+    r = await client.post(f"{BASE}/core/activos/{d['act_1']}/componentes", headers=h,
+                          json={"ACT_Componente": disco["ACT_Activo"], "motivo": "Disco adicional"})
     assert r.status_code == 200, r.text
-    assert [c["ACT_Codigo_Interno"] for c in r.json()["actuales"]] == ["LAP-002"]
-    # Ciclo: el equipo no puede instalarse en su propio componente.
-    r = await client.post(f"{BASE}/core/activos/{d['act_2']}/componentes", headers=h,
+    assert [c["ACT_Codigo_Interno"] for c in r.json()["actuales"]] == [disco["ACT_Codigo_Interno"]]
+    # Un disco no admite componentes (tampoco la laptop dentro de él).
+    r = await client.post(f"{BASE}/core/activos/{disco['ACT_Activo']}/componentes", headers=h,
                           json={"ACT_Componente": d["act_1"]})
-    assert r.status_code == 400 and r.json()["detail"] == "COMPONENT_CYCLE"
+    assert r.status_code == 422 and r.json()["detail"] == "ASSET_CLASS_NO_COMPONENTS"
     # Un componente instalado no se asigna por separado.
     r = await client.post(f"{BASE}/trazabilidad/movimientos", headers=h, json={
-        "ACT_Activo": d["act_2"], "PER_Persona": d["alice"], "ARE_Area": d["area"],
+        "ACT_Activo": disco["ACT_Activo"], "PER_Persona": d["alice"], "ARE_Area": d["area"],
         "TMO_Tipo_Movimiento": d["tmo_asg"]})
     assert r.status_code == 409 and r.json()["detail"] == "ASSET_INSTALLED_AS_COMPONENT"
     # La baja del equipo exige retirar (o autorizar el retiro de) sus componentes.
@@ -136,7 +145,7 @@ async def test_componentes_instalar_y_retirar(client, auth_headers, domain_seed)
                           json={"motivo": "OBSOLESCENCIA", "destino": "DONACION"})
     assert r.status_code == 409 and r.json()["detail"] == "ASSET_HAS_COMPONENTS:1"
 
-    r = await client.post(f"{BASE}/core/activos/{d['act_1']}/componentes/{d['act_2']}/retirar", headers=h,
+    r = await client.post(f"{BASE}/core/activos/{d['act_1']}/componentes/{disco['ACT_Activo']}/retirar", headers=h,
                           json={"motivo": "Se reasigna a otra estación", "estado_destino": "Disponible"})
     assert r.status_code == 200, r.text
     assert r.json()["actuales"] == []
@@ -242,7 +251,7 @@ async def test_toma_de_inventario(client, auth_headers, domain_seed):
 
 
 @pytest.mark.asyncio
-async def test_consumibles_en_kardex_y_ajuste(client, auth_headers, domain_seed):
+async def test_consumibles_en_kardex_y_ajuste(client, auth_headers, jefe_headers, domain_seed):
     h = auth_headers
     cid = (await client.post("/api/v1/consumibles", headers=h, json={
         "CON_Nombre": "Cable HDMI", "CON_Unidad": "unidad", "CON_Stock_Actual": 0,
@@ -253,9 +262,12 @@ async def test_consumibles_en_kardex_y_ajuste(client, auth_headers, domain_seed)
     r = await client.post(f"/api/v1/consumibles/{cid}/salida", headers=h,
                           json={"MOC_Cantidad": 3, "PER_Persona": domain_seed["alice"]})
     assert r.status_code == 201 and r.json()["bajo_minimo"] is True
+    # Un ajuste que baja la existencia se aplica cuando el Jefe de TI lo aprueba.
     r = await client.post(f"/api/v1/consumibles/{cid}/ajuste", headers=h,
                           json={"CON_Stock_Real": 1, "MOC_Motivo": "Conteo físico de bodega"})
-    assert r.status_code == 201, r.text
+    assert r.status_code == 202, r.text
+    r = await client.post(f"/api/v1/aprobaciones/{r.json()['APR_Aprobacion']}/aprobar", headers=jefe_headers, json={})
+    assert r.status_code == 200, r.text
     eventos = await _eventos(client, h, consumible_id=cid)
     assert [(e["KDX_Tipo"], e["KDX_Saldo"]) for e in reversed(eventos)] == [
         ("CONSUMIBLE_ENTRADA", 5), ("CONSUMIBLE_SALIDA", 2), ("CONSUMIBLE_AJUSTE", 1)]

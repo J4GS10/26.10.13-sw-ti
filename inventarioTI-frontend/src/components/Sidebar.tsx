@@ -18,6 +18,8 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import SecurityIcon from '@mui/icons-material/Security';
 import { useAuth } from '../context/auth-context';
+import { NotificationsBell } from './NotificationsBell';
+import { APP_ROLES } from '../utils/roles';
 import { useConfig } from '../context/config-context';
 import { NAVIGATION_ITEMS, NavItem, navItemFor } from '../router/navigation';
 import { useWorkspace } from '../context/workspace-context';
@@ -71,6 +73,9 @@ export const Sidebar = ({ variant, collapsed = false, onToggleCollapse, open = f
   const actual = navItemFor(location.pathname);
 
   const rail = variant === 'permanent' && collapsed;
+  // La campana muestra los pendientes que el servidor asigna al rol (Consulta no
+  // atiende pendientes y el administrador de seguridad no ve el inventario).
+  const esInventario = !!user?.role && APP_ROLES.includes(user.role) && user.role !== 'CONSULTA';
   const width = rail ? DRAWER_COLLAPSED_WIDTH : DRAWER_WIDTH;
   const menuItems: NavItem[] = user
     ? NAVIGATION_ITEMS.filter((item) => item.allowedRoles.includes(user.role))
@@ -176,8 +181,8 @@ export const Sidebar = ({ variant, collapsed = false, onToggleCollapse, open = f
       </Box>
       <Divider />
 
-      {/* Buscar o ejecutar (Ctrl+K) */}
-      <Box sx={{ px: rail ? 1 : 1.5, pt: 1.25 }}>
+      {/* Buscar o ejecutar (Ctrl+K) y avisos */}
+      <Box sx={{ px: rail ? 1 : 1.5, pt: 1.25, display: 'flex', flexDirection: rail ? 'column' : 'row', alignItems: 'center', gap: 0.5 }}>
         {rail ? (
           <Tooltip title={`${t('workspace.search')} (Ctrl+K)`} placement="right">
             <IconButton onClick={abrirPaleta} aria-label={t('workspace.search')} sx={{ width: '100%', borderRadius: 1.5 }}>
@@ -195,6 +200,7 @@ export const Sidebar = ({ variant, collapsed = false, onToggleCollapse, open = f
             <Box component="kbd" sx={{ fontSize: '0.68rem', fontFamily: 'inherit', fontWeight: 700, px: 0.6, borderRadius: 0.75, border: 1, borderColor: 'divider' }}>Ctrl K</Box>
           </ButtonBase>
         )}
+        {esInventario && <NotificationsBell />}
       </Box>
 
       {/* Navegación */}

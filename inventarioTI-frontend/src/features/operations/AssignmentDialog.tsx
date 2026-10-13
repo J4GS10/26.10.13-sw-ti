@@ -24,6 +24,10 @@ import { PersonaResumen } from '../../types/users';
 import { Movimiento, MovimientoCreate, TipoMovimiento } from '../../types/traceability';
 import { Area } from '../../types/geo';
 import { createSearchFilter } from '../../utils/autocomplete';
+import type { CatalogoItem, MovimientoAplica } from '../../api/catalogoService';
+import { CatalogField } from '../../components/CatalogField';
+import client from '../../api/axios';
+import { motivoAplica, pideDetalle } from '../../hooks/useCatalogo';
 interface Props {
     open: boolean;
     onClose: (refresh?: boolean) => void;
@@ -38,7 +42,8 @@ interface AssignmentFormData {
     tipo_movimiento: TipoMovimiento | null;
     observacion: string;
     hostname: string;
-    motivo: string;
+    motivo: CatalogoItem | null;
+    motivo_detalle: string;
     fecha_prevista: string;
 }
 const personFilter = createSearchFilter<PersonaResumen>((person) => [
@@ -68,6 +73,26 @@ export const AssignmentDialog = ({ open, onClose, activoInicial }: Props) => {
     const [busquedaActivo, setBusquedaActivo] = useState('');
     const [buscandoActivo, setBuscandoActivo] = useState(false);
     const [resultado, setResultado] = useState<{ mov: Movimiento; persona: PersonaResumen | null } | null>(null);
+    // «Deshacer» durante 8 s tras una asignación: se registra la devolución con motivo «Revertido».
+    const [puedeDeshacer, setPuedeDeshacer] = useState(false);
+    useEffect(() => {
+        if (!resultado) return undefined;
+        const inicio = window.setTimeout(() => setPuedeDeshacer(true), 0);
+        const fin = window.setTimeout(() => setPuedeDeshacer(false), 8000);
+        return () => { window.clearTimeout(inicio); window.clearTimeout(fin); };
+    }, [resultado]);
+    const deshacer = async () => {
+        if (!resultado) return;
+        try {
+            // Asignación → vuelve a bodega; transferencia → vuelve al custodio anterior.
+            await client.post('/trazabilidad/movimientos/revertir', { movimientos: [resultado.mov.MOV_Movimiento] });
+            enqueueSnackbar(t('operations.done.undone'), { variant: 'info' });
+            setResultado(null);
+            onClose(true);
+        } catch (err) {
+            enqueueSnackbar(getApiErrorMessage(err, t('common.error_save')), { variant: 'error' });
+        }
+    };
     const [personas, setPersonas] = useState<PersonaResumen[]>([]);
     const [tiposMov, setTiposMov] = useState<TipoMovimiento[]>([]);
     const [areas, setAreas] = useState<Area[]>([]);
@@ -157,7 +182,7 @@ export const AssignmentDialog = ({ open, onClose, activoInicial }: Props) => {
                 tipo_movimiento: null,
                 observacion: '',
                 hostname: '',
-                motivo: '',
+                motivo: null, motivo_detalle: '',
                 fecha_prevista: hoyLocal(7),
             });
             setActivos(activoInicial ? [activoInicial] : []);
@@ -192,6 +217,12 @@ export const AssignmentDialog = ({ open, onClose, activoInicial }: Props) => {
     const tiposPermitidos = tiposMov.filter((tm) => (enCustodia ? TIPOS_EN_CUSTODIA : TIPOS_LIBRE).includes(catalogSlug(tm.TMO_Nombre)));
     const esPrestamo = catalogSlug(currentType?.TMO_Nombre ?? '') === 'prestamo';
     const esTransferencia = catalogSlug(currentType?.TMO_Nombre ?? '') === 'transferencia';
+    const aplicaA: MovimientoAplica = esTransferencia ? 'TRANSFERENCIA' : esPrestamo ? 'PRESTAMO' : 'ASIGNACION';
+    const motivoActual = watch('motivo');
+    // Un motivo que no aplica al nuevo tipo de movimiento se quita.
+    useEffect(() => {
+        if (motivoActual && !motivoAplica(motivoActual, aplicaA)) setValue('motivo', null);
+    }, [aplicaA, motivoActual, setValue]);
     // --- LÓGICA VISUAL (Producción - Más rica) ---
     const getActivoLabel = (activo: Activo) => {
         // Usamos la lógica de producción que busca el nombre del tipo para mostrarlo bonito
@@ -216,8 +247,9 @@ export const AssignmentDialog = ({ open, onClose, activoInicial }: Props) => {
                     ACT_Activo: data.activo.ACT_Activo,
                     PER_Persona_Destino: data.persona.PER_Persona,
                     ARE_Area_Destino: data.area.ARE_Area,
-                    MOV_Observacion: data.observacion || undefined,
-                    MOV_Motivo: data.motivo || undefined,
+                    MOV_Observacion: data.motivo_detalle.trim() || undefined,
+                    MMO_Motivo: data.motivo?.id ?? null,
+                    MOV_Motivo_Detalle: data.motivo_detalle.trim() || null,
                 });
             } else {
                 const payload: MovimientoCreate = {
@@ -225,9 +257,10 @@ export const AssignmentDialog = ({ open, onClose, activoInicial }: Props) => {
                     PER_Persona: data.persona.PER_Persona,
                     ARE_Area: data.area.ARE_Area,
                     TMO_Tipo_Movimiento: data.tipo_movimiento.TMO_Tipo_Movimiento,
-                    MOV_Observacion: data.observacion,
+                    MOV_Observacion: data.motivo_detalle.trim() || undefined,
                     ACT_Hostname: data.hostname ?? '',
-                    MOV_Motivo: data.motivo || undefined,
+                    MMO_Motivo: data.motivo?.id ?? null,
+                    MOV_Motivo_Detalle: data.motivo_detalle.trim() || null,
                     MOV_Fecha_Prevista_Devolucion: esPrestamo ? data.fecha_prevista : null,
                 };
                 mov = await movementService.createMovement(payload);
@@ -266,11 +299,12 @@ export const AssignmentDialog = ({ open, onClose, activoInicial }: Props) => {
           </DialogContent>
           <DialogActions sx={{ p: 3, flexWrap: 'wrap', gap: 1 }}>
             <Button onClick={() => onClose(true)} color="inherit">{t('common.close')}</Button>
+            {puedeDeshacer && (<Button color="warning" onClick={() => void deshacer()}>{t('common.undo')}</Button>)}
             <Button onClick={() => {
                 const persona = resultado.persona;
                 setResultado(null);
                 reset({ categoria: '', activo: null, persona, area: null, tipo_movimiento: null, observacion: '',
-                    hostname: '', motivo: '', fecha_prevista: hoyLocal(7) });
+                    hostname: '', motivo: null, motivo_detalle: '', fecha_prevista: hoyLocal(7) });
             }}>{t('operations.done.assign_another')}</Button>
             <Button variant="contained" onClick={descargarActa}>{t('operations.done.download_acta')}</Button>
           </DialogActions>
@@ -355,12 +389,13 @@ export const AssignmentDialog = ({ open, onClose, activoInicial }: Props) => {
               </Box>
               </SectionCard>
 
-              <SectionCard title={t('operations.sections.notes')}>
+              <SectionCard title={t('movement_reason.section')}>
               <Box display="flex" flexDirection="column" gap={2}>
               {/* 5. OBSERVACIONES (Producción - Controller seguro) */}
               {esPrestamo && (<Controller name="fecha_prevista" control={control} render={({ field }) => (<TextField {...field} type="date" required fullWidth label={t('operations.dialog.loan_return_date')} helperText={t('operations.dialog.loan_return_help')} InputLabelProps={{ shrink: true }} inputProps={{ min: hoyLocal() }}/>)}/>)}
-              <Controller name="motivo" control={control} defaultValue="" render={({ field }) => (<TextField {...field} label={t(esTransferencia ? 'operations.dialog.transfer_reason' : 'operations.dialog.reason')} fullWidth inputProps={{ maxLength: 255 }}/>)}/>
-              <Controller name="observacion" control={control} defaultValue="" render={({ field }) => (<TextField {...field} label={t('operations.dialog.notes')} multiline rows={3} fullWidth/>)}/>
+              {/* Un motivo del catálogo (obligatorio) y una sola nota: lo que queda en el kardex y en el acta. */}
+              <Controller name="motivo" control={control} rules={{ required: t('movement_reason.required') }} render={({ field, fieldState: { error } }) => (<CatalogField clave="motivos-movimiento" aplicaA={aplicaA} required error={!!error} helperText={error?.message} label={t(esTransferencia ? 'operations.dialog.transfer_reason' : 'movement_reason.reason')} value={field.value?.id ?? null} onChange={(_v, item) => field.onChange(item)}/>)}/>
+              <Controller name="motivo_detalle" control={control} rules={{ validate: (v) => !pideDetalle(motivoActual) || !!v.trim() || t('returns.detail_required') }} render={({ field, fieldState: { error } }) => (<TextField {...field} label={t('movement_reason.note')} multiline minRows={2} fullWidth inputProps={{ maxLength: 255 }} error={!!error} helperText={error?.message ?? t('movement_reason.note_help')}/>)}/>
 
               <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
                 {t('operations.dialog.auto_close_note')}

@@ -31,7 +31,6 @@ from app.models.procurement import OrdenCompra
 from app.repositories.attachment import AttachmentRepository
 from app.repositories.governance import GovernanceRepository
 
-_VALID_CATEGORIES = {"factura", "foto", "acta", "otro"}
 log = structlog.get_logger("attachments")
 
 
@@ -45,8 +44,9 @@ class AttachmentService:
     def _object_key_for(self, adjunto: Adjunto) -> str:
         if adjunto.ADJ_Object_Key:
             return adjunto.ADJ_Object_Key
-        kind = "activos" if adjunto.ACT_Activo is not None else "ordenes"
-        owner_id = adjunto.ACT_Activo or adjunto.OCO_Orden
+        kind = ("activos" if adjunto.ACT_Activo is not None
+                else "ordenes" if adjunto.OCO_Orden is not None else "licencias")
+        owner_id = adjunto.ACT_Activo or adjunto.OCO_Orden or adjunto.LIC_Licencia
         return f"{kind}/{owner_id}/{adjunto.ADJ_Nombre_Almacenado}"
 
     async def _ensure_activo(self, activo_id: uuid.UUID) -> Activo:
@@ -74,6 +74,28 @@ class AttachmentService:
         await self._ensure_orden(orden_id)
         return await self.repo.get_by_orden(orden_id)
 
+    async def _ensure_licencia(self, licencia_id: int):
+        from app.models.software import Licencia
+        obj = await self.db.get(Licencia, licencia_id)
+        if not obj:
+            raise HTTPException(404, "LICENSE_NOT_FOUND")
+        return obj
+
+    async def list_licencia(self, licencia_id: int):
+        await self._ensure_licencia(licencia_id)
+        return (await self.db.execute(
+            select(Adjunto).where(Adjunto.LIC_Licencia == licencia_id).order_by(Adjunto.ADJ_Fecha_Subida.desc())
+        )).scalars().all()
+
+    async def upload_licencia(
+        self, licencia_id: int, file: UploadFile, descripcion: str | None = None,
+        usuario_id: uuid.UUID | None = None, ip: str | None = None,
+    ):
+        """Archivo de licencia (método «Archivo de licencia»)."""
+        await self._ensure_licencia(licencia_id)
+        return await self._upload("licencias", licencia_id, {"LIC_Licencia": licencia_id},
+                                  file, "otro", descripcion, usuario_id, ip)
+
     # --- Subida (genérica por dueño) ---
     async def upload(
         self, activo_id: uuid.UUID, file: UploadFile,
@@ -96,8 +118,16 @@ class AttachmentService:
     @transactional
     async def _upload(self, kind, owner_id, owner_fk: dict, file: UploadFile,
                       categoria, descripcion, usuario_id, ip):
-        categoria = (categoria or "otro").lower()
-        if categoria not in _VALID_CATEGORIES:
+        # La categoría es un código del catálogo de tipos de evidencia (los de
+        # sistema en minúscula: factura, foto, acta, reporte, otro).
+        from sqlalchemy import select as _select
+        from app.models.traceability import TipoEvidencia
+        validos = set((await self.db.execute(_select(TipoEvidencia.TEV_Codigo).where(
+            TipoEvidencia.TEV_Activo.is_(True), TipoEvidencia.TEV_Codigo.isnot(None)))).scalars())
+        categoria = (categoria or "otro").strip()
+        if categoria not in validos and categoria.lower() in validos:
+            categoria = categoria.lower()
+        if categoria not in validos:
             raise HTTPException(400, "INVALID_ATTACHMENT_CATEGORY")
 
         from app.core.file_types import contenido_coincide, mime_de, sanear_nombre

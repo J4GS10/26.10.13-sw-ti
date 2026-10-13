@@ -10,6 +10,8 @@ import { useConfirm } from '../../../components/confirm-context';
 import { catalogService } from '../catalogService';
 import { TipoActivo } from '../../../types/inventory';
 import { AssetTypeDialog } from './AssetTypeDialog';
+import { ReclasificarDialog } from './ReclasificarDialog';
+import SwapVertIcon from '@mui/icons-material/SwapVert';
 export const AssetTypesPage = () => {
     const { t } = useTranslation();
     const confirm = useConfirm();
@@ -18,6 +20,7 @@ export const AssetTypesPage = () => {
     const [loading, setLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [typeToEdit, setTypeToEdit] = useState<TipoActivo | undefined>(undefined);
+    const [reclasificar, setReclasificar] = useState<TipoActivo | null>(null);
     const loadData = async () => {
         try {
             const data = await catalogService.getTiposActivo();
@@ -62,12 +65,14 @@ export const AssetTypesPage = () => {
         actions={<Button variant="contained" startIcon={<AddIcon />} onClick={() => { setTypeToEdit(undefined); setIsDialogOpen(true); }}>{t('catalogs.types.new_btn')}</Button>}
       />
 
-      <AssetTypeDialog open={isDialogOpen} onClose={handleCloseDialog} typeToEdit={typeToEdit}/>
+      <AssetTypeDialog open={isDialogOpen} onClose={handleCloseDialog} typeToEdit={typeToEdit} tipos={tipos}/>
+      <ReclasificarDialog tipo={reclasificar} onClose={() => setReclasificar(null)}/>
 
       <DataTableShell
         columns={[
           { key: 'name', label: t('catalogs.types.table_name') },
           { key: 'prefix', label: t('catalogs.types.table_prefix') },
+          { key: 'class', label: t('asset_class.field') },
           { key: 'actions', label: t('common.actions'), align: 'right' },
         ]}
         rows={tipos}
@@ -78,7 +83,18 @@ export const AssetTypesPage = () => {
             <TableCell>
               {row.TAC_Prefijo ? (<Chip label={row.TAC_Prefijo} color="primary" size="small"/>) : (<Typography variant="caption" color="text.secondary">{t('catalogs.types.manual')}</Typography>)}
             </TableCell>
+            <TableCell>
+              <Tooltip title={row.TAC_Clase ? t(`asset_class.help.${row.TAC_Clase}`) : ''}>
+                <Chip size="small" variant="outlined" color={row.TAC_Clase === 'INSUMO' ? 'warning' : 'default'}
+                  label={t(`asset_class.names.${row.TAC_Clase ?? 'OTRO'}`)}/>
+              </Tooltip>
+            </TableCell>
             <TableCell align="right">
+              {row.TAC_Clase === 'INSUMO' && (<Tooltip title={t('reclassify.action')}>
+                <IconButton size="small" onClick={() => setReclasificar(row)} sx={{ color: 'warning.main' }}>
+                  <SwapVertIcon fontSize="small"/>
+                </IconButton>
+              </Tooltip>)}
               <Tooltip title={t('common.edit')}>
                 <IconButton size="small" onClick={() => handleEdit(row)} sx={{ color: 'primary.main' }}>
                   <EditIcon fontSize="small"/>

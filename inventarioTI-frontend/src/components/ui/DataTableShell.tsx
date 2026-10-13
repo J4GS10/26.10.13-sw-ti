@@ -44,6 +44,10 @@ interface DataTableShellProps<T> {
   toolbar?: ReactNode;
   stickyHeader?: boolean;
   rowsPerPageOptions?: number[];
+  /** Columnas ocultas por el usuario (claves); las celdas se ocultan por posición. */
+  hiddenColumns?: ReadonlySet<string>;
+  /** Densidad de las filas (preferencia del usuario). */
+  density?: 'compact' | 'comfortable';
 }
 
 const SKELETON_ROWS = 6;
@@ -70,6 +74,8 @@ export const DataTableShell = <T,>({
   toolbar,
   stickyHeader = false,
   rowsPerPageOptions = [10, 25, 50, 100],
+  hiddenColumns,
+  density = 'compact',
 }: DataTableShellProps<T>) => {
   const { t } = useTranslation();
   const showPagination = total !== undefined && onPageChange;
@@ -91,6 +97,9 @@ export const DataTableShell = <T,>({
           stickyHeader={stickyHeader}
           sx={{
             '& .MuiTableCell-root': { whiteSpace: { xs: 'nowrap', lg: 'normal' } },
+            ...(density === 'comfortable' ? { '& .MuiTableCell-root': { py: 1.5, whiteSpace: { xs: 'nowrap', lg: 'normal' } } } : {}),
+            ...Object.fromEntries(columns.flatMap((col, i) => (hiddenColumns?.has(col.key)
+              ? [[`& .MuiTableRow-root > .MuiTableCell-root:nth-of-type(${i + 1})`, { display: 'none' }]] : []))),
             // Acciones (columna alineada a la derecha): iconos siempre en una fila.
             '& .MuiTableCell-root.MuiTableCell-alignRight': { whiteSpace: 'nowrap', width: '1%' },
           }}

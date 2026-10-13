@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { Link as RouterLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { navItemFor } from '../../router/navigation';
+import { PageHelp, type ModuloAyuda } from './PageHelp';
 
 interface PageHeaderProps {
   title: string;
@@ -12,6 +13,8 @@ interface PageHeaderProps {
   actions?: ReactNode;
   /** Registro abierto (p. ej. el código del activo): se agrega a las migas de pan. */
   crumb?: string;
+  /** Módulo con ayuda contextual («¿Cómo se hace?» y recorrido la primera vez). */
+  help?: ModuloAyuda;
 }
 
 /** Migas de pan: grupo › página › registro. Siempre se sabe dónde se está. */
@@ -42,7 +45,7 @@ const Migas = ({ crumb }: { crumb?: string }) => {
  * Las acciones hacen wrap y en pantallas angostas pasan debajo del título, así
  * nunca se salen de la pantalla ni se sobreponen.
  */
-export const PageHeader = ({ title, subtitle, badge, actions, crumb }: PageHeaderProps) => (
+export const PageHeader = ({ title, subtitle, badge, actions, crumb, help }: PageHeaderProps) => (
   <Box
     sx={{
       display: 'flex',
@@ -69,6 +72,7 @@ export const PageHeader = ({ title, subtitle, badge, actions, crumb }: PageHeade
           {subtitle}
         </Typography>
       )}
+      {help && <Box sx={{ mt: 0.5 }}><PageHelp modulo={help} /></Box>}
     </Box>
 
     {actions && (

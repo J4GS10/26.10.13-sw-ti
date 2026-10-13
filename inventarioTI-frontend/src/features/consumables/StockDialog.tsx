@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Alert, Dialog, DialogTitle, DialogContent, DialogActions, Autocomplete, Box, Button, TextField, CircularProgress, Typography, Stack, } from '@mui/material';
+import { Alert, Dialog, DialogTitle, DialogContent, DialogActions, Autocomplete, Box, Button, TextField, CircularProgress, Typography, Stack, ToggleButton, ToggleButtonGroup, } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { MoneyField, SectionCard } from '../../components/ui';
 import { useSnackbar } from 'notistack';
@@ -12,6 +12,8 @@ import { PersonaResumen } from '../../types/users';
 import { createSearchFilter } from '../../utils/autocomplete';
 import { DEFAULT_CURRENCY } from '../../utils/currency';
 import { usePermissions } from '../../hooks/usePermissions';
+import { assetService } from '../assets/assetService';
+import type { Activo } from '../../types/inventory';
 export type StockModo = 'entrada' | 'salida' | 'ajuste';
 interface Props {
     open: boolean;
@@ -46,11 +48,17 @@ const personLabel = (person: PersonaResumen) => [
 export const StockDialog = ({ open, modo, consumible, onClose }: Props) => {
     const { t } = useTranslation();
     const { enqueueSnackbar } = useSnackbar();
-    const { canAdminInventory } = usePermissions();
+    const { canAdminInventory, canSeeCosts } = usePermissions();
     const { register, handleSubmit, reset, formState: { errors } } = useForm<StockFormValues>();
     const [loading, setLoading] = useState(false);
     const [personas, setPersonas] = useState<PersonaResumen[]>([]);
     const [persona, setPersona] = useState('');
+    // Salida a una persona o instalada en un equipo (tóner en una impresora).
+    const [destino, setDestino] = useState<'persona' | 'equipo'>('persona');
+    const [equipos, setEquipos] = useState<Activo[]>([]);
+    const [equipo, setEquipo] = useState<Activo | null>(null);
+    const [buscarEquipo, setBuscarEquipo] = useState('');
+    const [compatibles, setCompatibles] = useState<number[]>([]);
     const [precio, setPrecio] = useState('');
     const [moneda, setMoneda] = useState<string>(DEFAULT_CURRENCY);
     const [bajoMinimo, setBajoMinimo] = useState<MovimientoConsumible | null>(null);
@@ -59,6 +67,15 @@ export const StockDialog = ({ open, modo, consumible, onClose }: Props) => {
             return;
         reset({ MOC_Cantidad: modo === 'ajuste' ? consumible?.CON_Stock_Actual ?? 0 : 1, MOC_Motivo: '' });
         setPersona('');
+        setEquipo(null);
+        setDestino('persona');
+        setBuscarEquipo('');
+        setCompatibles([]);
+        if (modo === 'salida' && consumible) {
+            consumableService.compatibles(consumible.CON_Consumible)
+                .then((c) => { setCompatibles(c.map((x) => x.MOD_Modelo)); if (c.length) setDestino('equipo'); })
+                .catch(() => setCompatibles([]));
+        }
         setPrecio(consumible?.CON_Costo_Unitario != null ? String(consumible.CON_Costo_Unitario) : '');
         setMoneda(consumible?.CON_Moneda ?? DEFAULT_CURRENCY);
         setBajoMinimo(null);
@@ -66,16 +83,30 @@ export const StockDialog = ({ open, modo, consumible, onClose }: Props) => {
             personService.list().then((p) => setPersonas(p.filter((x) => x.PER_Estado !== false))).catch(() => setPersonas([]));
         }
     }, [open, reset, modo, consumible]);
+    useEffect(() => {
+        if (!open || modo !== 'salida' || destino !== 'equipo')
+            return;
+        const id = window.setTimeout(() => {
+            assetService.searchActivos({ q: buscarEquipo.trim() || undefined, per_page: 30 })
+                .then((r) => setEquipos(r.items)).catch(() => setEquipos([]));
+        }, 250);
+        return () => window.clearTimeout(id);
+    }, [open, modo, destino, buscarEquipo]);
+    // Primero los equipos de modelos compatibles.
+    const equiposOrdenados = [...equipos].sort((a, b) => Number(compatibles.includes(b.MOD_Modelo)) - Number(compatibles.includes(a.MOD_Modelo)));
     const onSubmit = async (data: StockFormValues) => {
         if (!consumible)
             return;
         setLoading(true);
         try {
             if (modo === 'ajuste') {
-                await consumableService.ajuste(consumible.CON_Consumible, {
+                const r = await consumableService.ajuste(consumible.CON_Consumible, {
                     CON_Stock_Real: Number(data.MOC_Cantidad), MOC_Motivo: data.MOC_Motivo.trim(),
                 });
-                enqueueSnackbar(t('consumables.adjust_done'), { variant: 'success' });
+                // Una disminución queda pendiente de aprobación del Jefe de TI.
+                const pendiente = 'APR_Aprobacion' in r;
+                enqueueSnackbar(t(pendiente ? 'consumables.adjust_requested' : 'consumables.adjust_done'),
+                    { variant: pendiente ? 'info' : 'success' });
                 onClose(true);
                 return;
             }
@@ -83,8 +114,10 @@ export const StockDialog = ({ open, modo, consumible, onClose }: Props) => {
                 MOC_Cantidad: Number(data.MOC_Cantidad),
                 MOC_Motivo: data.MOC_Motivo || undefined,
             };
-            if (modo === 'salida' && persona)
+            if (modo === 'salida' && destino === 'persona' && persona)
                 payload.PER_Persona = persona;
+            if (modo === 'salida' && destino === 'equipo' && equipo)
+                payload.ACT_Activo = equipo.ACT_Activo;
             if (modo === 'entrada' && precio !== '') {
                 payload.precio_unitario = precio;
                 payload.moneda = moneda;
@@ -142,9 +175,23 @@ export const StockDialog = ({ open, modo, consumible, onClose }: Props) => {
             label={modo === 'ajuste' ? t('consumables.counted_stock') : t('consumables.quantity')}
             {...register('MOC_Cantidad', { required: true, min: modo === 'ajuste' ? 0 : 1 })}
             error={!!errors.MOC_Cantidad} helperText={errors.MOC_Cantidad ? t('consumables.quantity_invalid') : undefined}/>
-          {modo === 'entrada' && (<MoneyField fullWidth margin="dense" label={t('consumables.unit_cost')} value={precio} onChange={setPrecio}
+          {modo === 'entrada' && canSeeCosts && (<MoneyField fullWidth margin="dense" label={t('consumables.unit_cost')} value={precio} onChange={setPrecio}
               currency={moneda} onCurrencyChange={setMoneda} helperText={t('consumables.unit_cost_help')}/>)}
-          {modo === 'salida' && (<Autocomplete fullWidth options={personas} value={personas.find((person) => person.PER_Persona === persona) ?? null} onChange={(_, person) => setPersona(person?.PER_Persona ?? '')} getOptionLabel={personLabel} filterOptions={personFilter} autoHighlight openOnFocus={false} isOptionEqualToValue={(option, selected) => option.PER_Persona === selected.PER_Persona} noOptionsText={t('common.type_to_search')} renderOption={(props, person) => (<Box component="li" {...props} key={person.PER_Persona}>
+          {modo === 'salida' && (<ToggleButtonGroup exclusive size="small" value={destino} onChange={(_, v) => v && setDestino(v)} sx={{ mt: 1 }}>
+              <ToggleButton value="persona">{t('consumables.to_person')}</ToggleButton>
+              <ToggleButton value="equipo">{t('consumables.to_asset')}</ToggleButton>
+            </ToggleButtonGroup>)}
+          {modo === 'salida' && destino === 'equipo' && (<Autocomplete fullWidth options={equiposOrdenados} value={equipo}
+              onChange={(_, v) => setEquipo(v)} onInputChange={(_, v, motivo) => { if (motivo === 'input') setBuscarEquipo(v); }}
+              filterOptions={(o) => o} getOptionLabel={(a) => `${a.ACT_Codigo_Interno}${a.ACT_Hostname ? ` · ${a.ACT_Hostname}` : ''}`}
+              isOptionEqualToValue={(a, b) => a.ACT_Activo === b.ACT_Activo} noOptionsText={t('common.type_to_search')}
+              renderOption={(props, a) => (<Box component="li" {...props} key={a.ACT_Activo}>
+                  <Typography variant="body2" sx={{ fontWeight: 700, mr: 1 }}>{a.ACT_Codigo_Interno}</Typography>
+                  {compatibles.includes(a.MOD_Modelo) && <Typography variant="caption" color="success.main">{t('consumables.compatible')}</Typography>}
+                </Box>)}
+              renderInput={(params) => (<TextField {...params} margin="dense" label={t('consumables.target_asset')}
+                helperText={equipo && compatibles.length > 0 && !compatibles.includes(equipo.MOD_Modelo) ? t('consumables.not_compatible') : undefined}/>)}/>)}
+          {modo === 'salida' && destino === 'persona' && (<Autocomplete fullWidth options={personas} value={personas.find((person) => person.PER_Persona === persona) ?? null} onChange={(_, person) => setPersona(person?.PER_Persona ?? '')} getOptionLabel={personLabel} filterOptions={personFilter} autoHighlight openOnFocus={false} isOptionEqualToValue={(option, selected) => option.PER_Persona === selected.PER_Persona} noOptionsText={t('common.type_to_search')} renderOption={(props, person) => (<Box component="li" {...props} key={person.PER_Persona}>
                   <Stack spacing={0.25} sx={{ minWidth: 0 }}>
                     <Typography variant="body2" sx={{ fontWeight: 700 }}>
                       {personLabel(person)}

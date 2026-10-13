@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, TableCell, TableRow,
-  TextField,
+  Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, Tab, TableCell, TableRow,
+  Tabs, TextField,
 } from '@mui/material';
+import { useSearchParams } from 'react-router-dom';
+import { FaltantesPanel } from './FaltantesPanel';
 import AddIcon from '@mui/icons-material/Add';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
 import { useTranslation } from 'react-i18next';
@@ -38,6 +40,9 @@ export const TomasPage = () => {
   const [area, setArea] = useState<number | ''>('');
   const [observacion, setObservacion] = useState('');
   const [guardando, setGuardando] = useState(false);
+  // «Faltantes»: lo que no apareció en las tomas, para investigar y resolver.
+  const [params, setParams] = useSearchParams();
+  const vista = params.get('vista') === 'faltantes' ? 'faltantes' : 'tomas';
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -82,6 +87,11 @@ export const TomasPage = () => {
         badge={tomas.length}
         actions={canOperate && <Button variant="contained" startIcon={<AddIcon />} onClick={() => setNueva(true)}>{t('inventory_count.new')}</Button>}
       />
+      <Tabs value={vista} onChange={(_, v) => setParams(v === 'faltantes' ? { vista: v } : {})} sx={{ mb: 2 }}>
+        <Tab value="tomas" label={t('inventory_count.tab_counts')}/>
+        <Tab value="faltantes" label={t('missing.tab')}/>
+      </Tabs>
+      {vista === 'faltantes' ? <FaltantesPanel areas={areas}/> : (
       <DataTableShell
         loading={loading}
         rows={tomas}
@@ -112,7 +122,7 @@ export const TomasPage = () => {
             </TableCell>
           </TableRow>
         )}
-      />
+      />)}
 
       <Dialog open={nueva} onClose={() => setNueva(false)} maxWidth="sm" fullWidth>
         <DialogTitle>{t('inventory_count.new')}</DialogTitle>

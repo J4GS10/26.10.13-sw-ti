@@ -22,9 +22,10 @@ import { TIPOS_EVENTO } from '../../types/kardex';
 import { formatDate, formatDateTimeValue, hoyLocal } from '../../utils/dates';
 import { formatMoneyTotals } from '../../utils/currency';
 import { typeLabel } from '../../utils/catalogLabels';
+import { ResumenMotivos, type ResumenMotivosData } from './ResumenMotivos';
 
-type Vista = 'kardex' | 'entradas_salidas' | 'reasignaciones' | 'custodia' | 'resumen';
-const VISTAS: Vista[] = ['kardex', 'entradas_salidas', 'reasignaciones', 'custodia', 'resumen'];
+type Vista = 'kardex' | 'entradas_salidas' | 'reasignaciones' | 'custodia' | 'resumen' | 'motivos';
+const VISTAS: Vista[] = ['kardex', 'entradas_salidas', 'reasignaciones', 'custodia', 'resumen', 'motivos'];
 const CATEGORIA: Partial<Record<Vista, KardexCategoria>> = {
   entradas_salidas: 'ENTRADAS_SALIDAS',
   reasignaciones: 'REASIGNACIONES',
@@ -71,6 +72,7 @@ export const TrazabilidadPage = () => {
   const [total, setTotal] = useState(0);
   const [custodia, setCustodia] = useState<CustodiaItem[]>([]);
   const [resumen, setResumen] = useState<ResumenEntradasSalidas | null>(null);
+  const [motivos, setMotivos] = useState<ResumenMotivosData | null>(null);
   const [loading, setLoading] = useState(true);
 
   const filtros = useMemo<KardexFiltros>(() => ({
@@ -90,6 +92,8 @@ export const TrazabilidadPage = () => {
         setCustodia(await inventarioService.custodia({ fecha, sede_id: sede || undefined }));
       } else if (vista === 'resumen') {
         setResumen(await inventarioService.entradasSalidas({ desde, hasta, sede_id: sede || undefined }));
+      } else if (vista === 'motivos') {
+        setMotivos(await inventarioService.resumenMotivos({ desde, hasta, sede_id: sede || undefined }));
       } else {
         const data = await inventarioService.kardex(filtros, rowsPerPage, page * rowsPerPage);
         setEventos(data.items);
@@ -126,14 +130,14 @@ export const TrazabilidadPage = () => {
       <PageHeader
         title={t('traceability.title')}
         subtitle={t('traceability.subtitle')}
-        badge={vista === 'custodia' ? custodia.length : vista === 'resumen' ? undefined : total}
+        badge={vista === 'custodia' ? custodia.length : vista === 'resumen' || vista === 'motivos' ? undefined : total}
         actions={<>
           {canVerifyKardex && (
             <Button variant="outlined" startIcon={verificando ? <CircularProgress size={16} /> : <VerifiedIcon />} onClick={verificar} disabled={verificando}>
               {t('traceability.verify.button')}
             </Button>
           )}
-          {canExport && vista !== 'resumen' && (
+          {canExport && vista !== 'resumen' && vista !== 'motivos' && (
             <ExportMenuButton onExport={exportar} disabled={vista === 'custodia' ? custodia.length === 0 : total === 0} />
           )}
         </>}
@@ -173,7 +177,7 @@ export const TrazabilidadPage = () => {
         storageKey="trazabilidad"
         summary={filtrosActivos > 0 && <Chip size="small" color="primary" variant="outlined"
           label={t('common.active_filters_count', { count: filtrosActivos })} />}
-        search={vista !== 'custodia' && vista !== 'resumen'
+        search={vista !== 'custodia' && vista !== 'resumen' && vista !== 'motivos'
           ? <SearchInput value={texto} onChange={(v) => { setTexto(v); setPage(0); }} placeholder={t('traceability.search')} />
           : undefined}
       >
@@ -189,7 +193,7 @@ export const TrazabilidadPage = () => {
                 onChange={(e) => { setHasta(e.target.value); setPage(0); }} InputLabelProps={{ shrink: true }} sx={filterSx} />
             </>
           )}
-          {vista !== 'custodia' && vista !== 'resumen' && (
+          {vista !== 'custodia' && vista !== 'resumen' && vista !== 'motivos' && (
             <>
               <TextField select size="small" label={t('traceability.object')} value={objeto}
                 onChange={(e) => { setObjeto(e.target.value as KardexObjeto | ''); setPage(0); }} sx={filterSx}>
@@ -228,7 +232,7 @@ export const TrazabilidadPage = () => {
                   <Typography variant="h5" sx={{ mt: 1 }}>{t('traceability.events_count', { count: r.eventos })}</Typography>
                   <Typography variant="body2" color="text.secondary">
                     {t('traceability.units_count', { count: r.cantidad })}
-                    {Object.keys(r.valor_por_moneda).length > 0 && ` · ${formatMoneyTotals(r.valor_por_moneda, i18n.language)}`}
+                    {r.valor_por_moneda && Object.keys(r.valor_por_moneda).length > 0 && ` · ${formatMoneyTotals(r.valor_por_moneda, i18n.language)}`}
                   </Typography>
                 </CardContent>
               </Card>
@@ -239,6 +243,8 @@ export const TrazabilidadPage = () => {
           )}
         </Grid>
       )}
+
+      {vista === 'motivos' && <ResumenMotivos data={motivos} desde={desde} hasta={hasta} />}
 
       {vista === 'custodia' && (
         <DataTableShell
@@ -267,7 +273,7 @@ export const TrazabilidadPage = () => {
         />
       )}
 
-      {vista !== 'custodia' && vista !== 'resumen' && (
+      {vista !== 'custodia' && vista !== 'resumen' && vista !== 'motivos' && (
         <DataTableShell
           loading={loading}
           rows={eventos}

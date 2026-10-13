@@ -16,6 +16,9 @@ import { MantenimientoCreate, TipoMantenimiento } from '../../types/maintenance'
 import { Activo } from '../../types/inventory';
 import { PersonaCombo } from '../../types/users';
 import { createSearchFilter } from '../../utils/autocomplete';
+import type { CatalogoItem } from '../../api/catalogoService';
+import { CatalogField } from '../../components/CatalogField';
+import { pideDetalle } from '../../hooks/useCatalogo';
 interface Props {
     open: boolean;
     onClose: (refresh?: boolean) => void;
@@ -26,6 +29,7 @@ interface MaintenanceFormValues {
     activo: Activo | null;
     persona: PersonaCombo | null;
     tipo_mantenimiento: number | '';
+    falla: CatalogoItem | null;
     descripcion: string;
     costo: string;
     moneda: string;
@@ -78,6 +82,7 @@ export const MaintenanceDialog = ({ open, onClose, activoInicialId }: Props) => 
                 activo: null,
                 persona: null,
                 tipo_mantenimiento: '',
+                falla: null,
                 descripcion: '',
                 costo: '',
                 moneda: DEFAULT_CURRENCY,
@@ -110,7 +115,8 @@ export const MaintenanceDialog = ({ open, onClose, activoInicialId }: Props) => 
                 ACT_Activo: data.activo.ACT_Activo,
                 PER_Persona_Solicita: data.persona.PER_Persona,
                 TMA_Tipo_Mantenimiento: Number(data.tipo_mantenimiento),
-                MAN_Descripcion_Falla: data.descripcion,
+                TFA_Tipo_Falla: data.falla?.id ?? null,
+                MAN_Descripcion_Falla: data.descripcion.trim(),
                 MAN_Costo_Total: Number(data.costo || 0),
                 MAN_Moneda: data.moneda || DEFAULT_CURRENCY,
             };
@@ -177,7 +183,8 @@ export const MaintenanceDialog = ({ open, onClose, activoInicialId }: Props) => 
               </Box>
 
               {/* 4. DESCRIPCIÓN */}
-              <Controller name="descripcion" control={control} rules={{ required: true, minLength: 5 }} defaultValue="" render={({ field, fieldState }) => (<TextField {...field} label={t('maintenance.failure_description')} multiline rows={4} required error={!!fieldState.error} helperText={fieldState.error ? t('maintenance.errors.short_action') : ''}/>)}/>
+              <Controller name="falla" control={control} rules={{ required: t('common.required') }} render={({ field, fieldState }) => (<CatalogField clave="tipos-falla" label={t('maintenance.failure_type')} required value={field.value?.id ?? null} onChange={(_v, item) => field.onChange(item)} error={!!fieldState.error} helperText={fieldState.error?.message}/>)}/>
+              <Controller name="descripcion" control={control} rules={{ validate: (v) => !pideDetalle(watch('falla')) || v.trim().length >= 5 || t('maintenance.errors.short_action') }} defaultValue="" render={({ field, fieldState }) => (<TextField {...field} label={t('maintenance.failure_description')} multiline rows={3} error={!!fieldState.error} helperText={fieldState.error?.message ?? t('maintenance.failure_description_help')}/>)}/>
               </Box>
               </SectionCard>
             </Stack>)}

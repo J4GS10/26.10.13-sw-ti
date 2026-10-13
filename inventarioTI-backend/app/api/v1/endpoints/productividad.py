@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUser, get_client_ip, require_admin
+from app.api.deps import CurrentUser, get_client_ip, require_admin, require_control_read, require_operativo, require_people
 from app.core.limiter import limiter
 from app.db.session import get_db
 from app.services.importacion_activos import MAX_BYTES, ImportacionActivosService
@@ -28,13 +28,20 @@ async def buscar(
     return await ProductividadService(db).buscar(q, current_user.USU_Rol)
 
 
-@router.get("/kit-sugerido/{persona_id}")
+@router.get("/kit-sugerido/{persona_id}", dependencies=[Depends(require_operativo)])
 async def kit_sugerido(persona_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     """Tipos de equipo que suelen tener las personas de su departamento, con disponibilidad."""
     return await ProductividadService(db).kit_sugerido(persona_id)
 
 
-@router.get("/calidad-datos")
+@router.get("/personas/{persona_id}/ficha", dependencies=[Depends(require_people)])
+async def ficha_persona(persona_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    """Ficha 360: datos, equipos en custodia, licencias y cuentas, consumibles e historial."""
+    from app.services.ficha_persona import FichaPersonaService
+    return await FichaPersonaService(db).ficha(persona_id)
+
+
+@router.get("/calidad-datos", dependencies=[Depends(require_control_read)])
 async def calidad_datos(db: AsyncSession = Depends(get_db)):
     """Verificaciones de datos incompletos o inconsistentes, con los registros afectados."""
     return await ProductividadService(db).calidad_datos()

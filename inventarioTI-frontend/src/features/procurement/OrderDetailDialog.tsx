@@ -30,7 +30,8 @@ type Accion = 'cancelar' | 'cerrar' | null;
  */
 export const OrderDetailDialog = ({ open, ordenId, onClose }: Props) => {
     const { t, i18n } = useTranslation();
-    const { canAdminInventory } = usePermissions();
+    // Compras cancela un borrador suyo; recibir y cerrar con faltante es de TI.
+    const { canAdminInventory, canPurchase } = usePermissions();
     const { enqueueSnackbar } = useSnackbar();
     const [orden, setOrden] = useState<OrdenCompra | null>(null);
     const [recepciones, setRecepciones] = useState<Recepcion[]>([]);
@@ -70,7 +71,8 @@ export const OrderDetailDialog = ({ open, ordenId, onClose }: Props) => {
                 await procurementService.cerrarConFaltante(orden.OCO_Orden, motivo.trim());
             else
                 await procurementService.cambiarEstado(orden.OCO_Orden, 'CANCELADA', motivo.trim() || undefined);
-            enqueueSnackbar(t(accion === 'cerrar' ? 'procurement.closed_ok' : 'procurement.cancelled_ok'), { variant: 'success' });
+            // Ambas se solicitan: las ejecuta el Jefe de TI al aprobarlas.
+            enqueueSnackbar(t(accion === 'cerrar' ? 'procurement.close_requested' : 'procurement.cancel_requested'), { variant: 'info' });
             setAccion(null);
             setMotivo('');
             setChanged(true);
@@ -172,7 +174,7 @@ export const OrderDetailDialog = ({ open, ordenId, onClose }: Props) => {
               </Stack>)}
         </DialogContent>
         <DialogActions sx={{ flexWrap: 'wrap', gap: 1 }}>
-          {recibible && canAdminInventory && sinRecepciones && (<Button color="error" onClick={() => { setMotivo(''); setAccion('cancelar'); }}>{t('procurement.cancel_order')}</Button>)}
+          {recibible && canPurchase && sinRecepciones && (<Button color="error" onClick={() => { setMotivo(''); setAccion('cancelar'); }}>{t('procurement.cancel_order')}</Button>)}
           {orden?.OCO_Estado === 'PARCIAL' && canAdminInventory && (<Button color="warning" onClick={() => { setMotivo(''); setAccion('cerrar'); }}>{t('procurement.close_with_shortage')}</Button>)}
           <Box sx={{ flex: 1 }}/>
           <Button onClick={() => onClose(changed)} color="inherit">{t('common.close')}</Button>
@@ -186,7 +188,7 @@ export const OrderDetailDialog = ({ open, ordenId, onClose }: Props) => {
         <DialogTitle>{accion === 'cerrar' ? t('procurement.close_with_shortage') : t('procurement.cancel_order')}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            {accion === 'cerrar' ? t('procurement.close_help') : t('procurement.confirm_cancel')}
+            {accion === 'cerrar' ? t('procurement.close_help') : t('procurement.confirm_cancel')} {t('procurement.needs_approval')}
           </Typography>
           <TextField autoFocus fullWidth multiline minRows={2} label={accion === 'cerrar' ? t('procurement.close_reason') : t('procurement.cancel_reason')}
             value={motivo} onChange={(e) => setMotivo(e.target.value)} inputProps={{ maxLength: 500 }}
@@ -195,7 +197,7 @@ export const OrderDetailDialog = ({ open, ordenId, onClose }: Props) => {
         <DialogActions>
           <Button color="inherit" onClick={() => setAccion(null)}>{t('common.cancel')}</Button>
           <Button variant="contained" color={accion === 'cerrar' ? 'warning' : 'error'} onClick={confirmarAccion}
-            disabled={enviando || (accion === 'cerrar' && motivo.trim().length < 5)}>
+            disabled={enviando || motivo.trim().length < 5}>
             {enviando ? <CircularProgress size={20}/> : accion === 'cerrar' ? t('procurement.close_with_shortage') : t('procurement.cancel_order')}
           </Button>
         </DialogActions>

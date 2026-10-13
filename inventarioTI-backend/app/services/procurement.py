@@ -149,7 +149,11 @@ class ProcurementService(BaseService[ProcurementRepository]):
         return await self.repo.get_orden(orden.OCO_Orden, with_lineas=True)
 
     @transactional
-    async def cambiar_estado(self, id: int, estado: str, usuario_id=None, ip=None, motivo: str | None = None):
+    async def cambiar_estado(self, id: int, estado: str, usuario_id=None, ip=None, motivo: str | None = None,
+                             aprobacion: dict | None = None):
+        """Cancela un borrador. Solo se ejecuta aprobada (AprobacionService.solicitar_cancelacion_orden)."""
+        if estado == "CANCELADA" and aprobacion is None:
+            raise HTTPException(409, "ORDER_CANCEL_REQUIRES_APPROVAL")
         orden = await self.repo.get_orden(id, with_lineas=True)
         if not orden:
             raise HTTPException(404, "PURCHASE_ORDER_NOT_FOUND")
@@ -171,14 +175,17 @@ class ProcurementService(BaseService[ProcurementRepository]):
             orden.OCO_Motivo_Cierre = motivo
         await self.gov_repo.create_audit_log(
             "UPDATE", "INV_ORDEN_COMPRA",
-            {"id": id, "diff": {"OCO_Estado": {"antes": orden.OCO_Estado, "despues": estado}}, "motivo": motivo},
+            {"id": id, "diff": {"OCO_Estado": {"antes": orden.OCO_Estado, "despues": estado}}, "motivo": motivo,
+             "aprobacion": {k: str(v) for k, v in (aprobacion or {}).items()} or None},
             usuario_id=usuario_id, ip_origen=ip, sede_id=orden.SED_Sede,
         )
         return await self.repo.get_orden(id, with_lineas=True)
 
     @transactional
-    async def cerrar_con_faltante(self, id: int, motivo: str, usuario_id=None, ip=None):
-        """Cierra una orden PARCIAL aceptando que lo pendiente no llegará."""
+    async def cerrar_con_faltante(self, id: int, motivo: str, usuario_id=None, ip=None, aprobacion: dict | None = None):
+        """Cierra una orden PARCIAL aceptando que lo pendiente no llegará (solo aprobada)."""
+        if aprobacion is None:
+            raise HTTPException(409, "ORDER_CLOSE_REQUIRES_APPROVAL")
         orden = await self.repo.get_orden(id, with_lineas=True, lock=True)
         if not orden:
             raise HTTPException(404, "PURCHASE_ORDER_NOT_FOUND")
@@ -193,7 +200,8 @@ class ProcurementService(BaseService[ProcurementRepository]):
         orden.OCO_Motivo_Cierre = motivo
         await self.gov_repo.create_audit_log(
             "CLOSE_WITH_SHORTAGE", "INV_ORDEN_COMPRA",
-            {"id": id, "numero": orden.OCO_Numero, "motivo": motivo, "faltantes": faltantes},
+            {"id": id, "numero": orden.OCO_Numero, "motivo": motivo, "faltantes": faltantes,
+             "aprobacion": {k: str(v) for k, v in aprobacion.items()}},
             usuario_id=usuario_id, ip_origen=ip, sede_id=orden.SED_Sede,
         )
         self._avisar_diferencias(orden, "cierre_con_faltante", faltantes, [], motivo)

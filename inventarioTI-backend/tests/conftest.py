@@ -44,6 +44,8 @@ os.environ["PASSWORD_RESET_REQUEST_COOLDOWN_MINUTES"] = "0"
 # MFA obligatorio por rol desactivado por defecto: el admin del fixture no tiene
 # MFA y la política lo bloquearía en todos los tests. test_iam.py la activa.
 os.environ["TWO_FACTOR_REQUIRED_ROLES"] = ""
+# Motivo obligatorio en los movimientos: test_motivo_unico.py lo activa.
+os.environ["MOVIMIENTO_EXIGE_MOTIVO"] = "false"
 
 import asyncio
 from typing import AsyncIterator
@@ -121,6 +123,9 @@ async def _postgres_engine():
             tables = ", ".join(f'"{t.name}"' for t in Base.metadata.sorted_tables)
             await conn.execute(text("SET LOCAL inventario.mantenimiento = 'on'"))
             await conn.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
+        # Filas de sistema de los catálogos estándar (como las deja la migración).
+        from app.db.catalogos_semilla import sembrar
+        await conn.run_sync(sembrar)
     return e
 
 

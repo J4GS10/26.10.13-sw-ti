@@ -20,7 +20,7 @@ import { ESTADOS_ORDEN } from '../../types/procurement';
 import { estadoOrdenColor, estadoOrdenLabel, ordenRecibible } from './orderStates';
 export const PurchaseOrdersPage = () => {
     const { t, i18n } = useTranslation();
-    const { canAdminInventory, canExport } = usePermissions();
+    const { canPurchase, canExportPurchases: canExport } = usePermissions();
     const { enqueueSnackbar } = useSnackbar();
     const [items, setItems] = useState<OrdenCompra[]>([]);
     const [loading, setLoading] = useState(true);
@@ -56,7 +56,7 @@ export const PurchaseOrdersPage = () => {
         badge={items.length}
         actions={<>
           {canExport && <ExportMenuButton onExport={(lang) => downloadCsv('/export/ordenes.csv', 'ordenes.csv', lang)}/>}
-          {canAdminInventory && (<Button variant="contained" startIcon={<AddIcon />} onClick={() => setDialogOpen(true)}>
+          {canPurchase && (<Button variant="contained" startIcon={<AddIcon />} onClick={() => setDialogOpen(true)}>
             {t('procurement.new_order')}
           </Button>)}
         </>}

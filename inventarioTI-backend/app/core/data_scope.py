@@ -214,10 +214,10 @@ def require_sede(sede_id: int | None, *, required: bool = True) -> int | None:
 # ---------------------------------------------------------------------------
 def _scope_options(scope: DataScope) -> list:
     from app.models.attachment import Adjunto
-    from app.models.consumable import Consumible, MovimientoConsumible
+    from app.models.consumable import Consumible, ConsumibleCompatible, MovimientoConsumible
     from app.models.core import Activo, Especificacion
     from app.models.governance import AuditoriaSistema
-    from app.models.inventario_fisico import LecturaToma, TomaInventario
+    from app.models.inventario_fisico import Faltante, LecturaToma, TomaInventario
     from app.models.kardex import Kardex
     from app.models.procurement import Recepcion, RecepcionLinea
     from app.models.organization import Persona
@@ -243,6 +243,10 @@ def _scope_options(scope: DataScope) -> list:
         Persona.PER_Persona.in_(select(Instalacion.PER_Persona).where(Instalacion.ACT_Activo.in_(activos))),
         Persona.PER_Persona.in_(
             select(MovimientoConsumible.PER_Persona).where(MovimientoConsumible.CON_Consumible.in_(consumibles))
+        ),
+        # Responsable de un equipo compartido visible.
+        Persona.PER_Persona.in_(
+            select(Activo.ACT_Responsable).where(Activo.SED_Sede.in_(sedes), Activo.ACT_Responsable.is_not(None))
         ),
     ]
     if scope.persona_id is not None:
@@ -291,6 +295,8 @@ def _scope_options(scope: DataScope) -> list:
             select(Recepcion.REC_Recepcion).where(Recepcion.OCO_Orden.in_(ordenes))
         ),
         TomaInventario: TomaInventario.SED_Sede.in_(sedes),
+        Faltante: Faltante.ACT_Activo.in_(activos),
+        ConsumibleCompatible: ConsumibleCompatible.CON_Consumible.in_(consumibles),
         LecturaToma: LecturaToma.TOM_Toma.in_(
             select(TomaInventario.TOM_Toma).where(TomaInventario.SED_Sede.in_(sedes))
         ),

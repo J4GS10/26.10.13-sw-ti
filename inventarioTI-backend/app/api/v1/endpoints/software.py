@@ -7,11 +7,15 @@ from app.api.deps import (
     get_client_ip,
     require_admin,
     require_operativo,
+    require_people,
 )
 from app.api.idempotency import idempotency_guard, _IdempotencyGuard
 from app.core.limiter import limiter
 from app.db.session import get_db
 from app.schemas.software import (
+    CredencialesLote,
+    CredencialRotar,
+    CredencialUpdate,
     InstalacionCreate,
     InstalacionDetalleResponse,
     InstalacionResponse,
@@ -182,12 +186,22 @@ async def list_licencias(
     return await service.list_licencias(software_id)
 
 
+@router.get("/licencias-disponibles")
+async def licencias_disponibles(
+    forma: str | None = Query(None, pattern="^(EQUIPO|PERSONA|CONCURRENTE|SITIO)$"),
+    todas: bool = Query(False, description="Incluir las sin cupo libre o vencidas (para configurar kits)"),
+    service: SoftwareService = Depends(get_service),
+):
+    """Licencias con cupo libre (o por sitio), filtradas por forma de conteo."""
+    return await service.licencias_disponibles(forma, todas)
+
+
 @router.get("/licencias/{id}", response_model=LicenciaResponse)
 async def get_licencia(id: int, service: SoftwareService = Depends(get_service)):
     return await service.get_licencia(id)
 
 
-@router.get("/licencias/{id}/historial")
+@router.get("/licencias/{id}/historial", dependencies=[Depends(require_people)])
 async def historial_licencia(id: int, service: SoftwareService = Depends(get_service)):
     """Asignaciones de la licencia, vigentes y retiradas (fecha y motivo del retiro)."""
     return await service.historial_licencia(id)
@@ -237,7 +251,7 @@ async def delete_licencia(
 # --- LICENCIAS INSTALADAS EN UN ACTIVO ---
 @router.get(
     "/activos/{activo_id}/instalaciones",
-    response_model=List[InstalacionDetalleResponse],
+    response_model=List[InstalacionDetalleResponse], dependencies=[Depends(require_people)],
 )
 async def list_instalaciones_activo(
     activo_id: _uuid.UUID,
@@ -250,7 +264,7 @@ async def list_instalaciones_activo(
 
 @router.get(
     "/personas/{persona_id}/instalaciones",
-    response_model=List[InstalacionDetalleResponse],
+    response_model=List[InstalacionDetalleResponse], dependencies=[Depends(require_people)],
 )
 async def list_instalaciones_persona(
     persona_id: _uuid.UUID,
@@ -300,3 +314,55 @@ async def desinstalar_software(
     return await service.desinstalar_software(
         schema, usuario_id=current_user.USU_Usuario, ip=get_client_ip(request)
     )
+
+
+# =====================================================================
+# CREDENCIALES / CUPOS (activación variable)
+# =====================================================================
+@router.get("/licencias/{id}/credenciales", dependencies=[Depends(require_admin)])
+async def listar_credenciales(id: int, db: AsyncSession = Depends(get_db)):
+    """Credenciales de la licencia, sin secretos ni keys completas."""
+    from app.services.licencias import CredencialService
+    return await CredencialService(db).listar(id)
+
+
+@router.post("/licencias/{id}/credenciales", status_code=201, dependencies=[Depends(require_admin)])
+async def crear_credenciales(
+    id: int, schema: CredencialesLote, request: Request, current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """Una o varias credenciales (p. ej. pegadas desde una lista, una por línea)."""
+    from app.services.licencias import CredencialService
+    service = CredencialService(db)
+    await service.crear(id, [c.model_dump() for c in schema.credenciales],
+                        usuario_id=current_user.USU_Usuario, ip=get_client_ip(request))
+    return await service.listar(id)
+
+
+@router.patch("/credenciales/{id}", status_code=204, dependencies=[Depends(require_admin)])
+async def editar_credencial(
+    id: int, schema: CredencialUpdate, request: Request, current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.licencias import CredencialService
+    await CredencialService(db).editar(id, schema.model_dump(exclude_unset=True),
+                                       usuario_id=current_user.USU_Usuario, ip=get_client_ip(request))
+
+
+@router.post("/credenciales/{id}/revelar", dependencies=[Depends(require_admin)])
+@limiter.limit("10/minute")
+async def revelar_credencial(id: int, request: Request, current_user: CurrentUser, db: AsyncSession = Depends(get_db)):
+    """Devuelve el secreto o la key; queda registrado (bitácora y kardex). La UI lo oculta a los 30 s."""
+    from app.services.licencias import CredencialService
+    return await CredencialService(db).revelar(id, usuario_id=current_user.USU_Usuario, ip=get_client_ip(request))
+
+
+@router.post("/credenciales/{id}/rotar", status_code=204, dependencies=[Depends(require_admin)])
+async def rotar_credencial(
+    id: int, schema: CredencialRotar, request: Request, current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.licencias import CredencialService
+    await CredencialService(db).rotar(id, schema.model_dump(exclude_none=True),
+                                      usuario_id=current_user.USU_Usuario, ip=get_client_ip(request))
+

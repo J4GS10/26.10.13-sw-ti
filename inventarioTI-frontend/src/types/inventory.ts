@@ -1,3 +1,4 @@
+import type { ClaseActivo, ReglasClase } from '../utils/clasesActivo';
 // --- CATÁLOGOS ---
 export interface Marca {
   MAR_Marca: number;
@@ -20,6 +21,9 @@ export interface TipoActivo {
   TAC_Tipo_Activo: number;
   TAC_Nombre: string;
   TAC_Prefijo: string | null;
+  /** Clase y reglas de operación (ver utils/clasesActivo.ts). */
+  TAC_Clase?: ClaseActivo;
+  reglas?: ReglasClase;
 }
 
 export interface EstadoOperativo {
@@ -56,6 +60,9 @@ export interface Activo {
   ACT_Baja_Documento?: string | null;
   /** Sede a la que pertenece (alcance de datos). */
   SED_Sede?: number | null;
+  /** Equipo compartido instalado en un área y su responsable (no es custodia). */
+  ACT_Instalado?: boolean;
+  ACT_Responsable?: string | null;
 
   especificaciones?: Especificacion[];
 }

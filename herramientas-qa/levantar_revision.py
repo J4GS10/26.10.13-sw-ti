@@ -3,7 +3,7 @@ Levanta un entorno de REVISIÓN aislado (proyecto docker `inv_ui`, https://local
 con el stack de producción y el inventario real de `codigo/dataset`.
 
 Uso (desde cualquier carpeta):  python levantar_revision.py [--sin-build]
-Credenciales: sa / Ui-Passw0rd-Revision!  (sa deberá enrolar MFA en su primer ingreso)
+La contraseña se toma de REVISION_ADMIN_PASSWORD o se genera aleatoriamente.
 Apagar y borrar datos:  docker compose -p inv_ui --env-file herramientas-qa/revision.env down -v
 """
 import base64
@@ -17,7 +17,7 @@ from cryptography.fernet import Fernet
 AQUI = os.path.dirname(os.path.abspath(__file__))
 DEPLOY = os.path.join(AQUI, "..", "inventarioTI-backend", "deploy")
 ENV = os.path.join(AQUI, "revision.env")
-PWD_SA = "Ui-Passw0rd-Revision!"
+PWD_SA = os.environ.get("REVISION_ADMIN_PASSWORD") or secrets.token_urlsafe(18)
 
 if not os.path.exists(ENV):
     base = open(os.path.join(DEPLOY, ".env.example"), encoding="utf-8").read().splitlines()

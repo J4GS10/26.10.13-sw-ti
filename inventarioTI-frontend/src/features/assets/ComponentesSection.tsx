@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
+import { catalogService } from '../catalogs/catalogService';
+import type { TipoActivo } from '../../types/inventory';
 import {
   Alert, Autocomplete, Box, Button, CircularProgress, IconButton, List, ListItem, ListItemText, MenuItem, Stack,
   TextField, Tooltip, Typography,
@@ -18,13 +20,16 @@ interface Props {
   activoId: string;
   canOperate: boolean;
   onChanged?: () => void;
+  /** Tipo del equipo y catálogo de tipos: solo se ofrecen los componentes que admite. */
+  tipoEquipo?: number;
+  tipos?: TipoActivo[];
 }
 
 /**
  * Componentes instalados en el equipo (disco, memoria, monitor, docking…) y su
  * historial. Instalar o retirar deja el evento en el kardex de ambos equipos.
  */
-export const ComponentesSection = ({ activoId, canOperate, onChanged }: Props) => {
+export const ComponentesSection = ({ activoId, canOperate, onChanged, tipoEquipo, tipos = [] }: Props) => {
   const { t } = useTranslation();
   const { enqueueSnackbar } = useSnackbar();
   const [data, setData] = useState<ComponentesActivo | null>(null);
@@ -37,6 +42,16 @@ export const ComponentesSection = ({ activoId, canOperate, onChanged }: Props) =
   const [retirando, setRetirando] = useState<string | null>(null);
   const [estadoRetiro, setEstadoRetiro] = useState<'Disponible' | 'En Bodega'>('En Bodega');
   const [guardando, setGuardando] = useState(false);
+  const [permitidos, setPermitidos] = useState<number[] | null>(null);
+
+  useEffect(() => {
+    if (tipoEquipo == null) { setPermitidos(null); return; }
+    catalogService.getComponentesTipo(tipoEquipo).then(setPermitidos).catch(() => setPermitidos(null));
+  }, [tipoEquipo]);
+  // Sin lista propia del tipo: cualquier tipo de clase «Componente».
+  const admite = (a: Activo) => (permitidos && permitidos.length
+    ? permitidos.includes(a.TAC_Tipo_Activo)
+    : tipos.length === 0 || tipos.find((x) => x.TAC_Tipo_Activo === a.TAC_Tipo_Activo)?.TAC_Clase === 'COMPONENTE');
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -58,13 +73,14 @@ export const ComponentesSection = ({ activoId, canOperate, onChanged }: Props) =
     const tm = window.setTimeout(async () => {
       try {
         const r = await assetService.searchActivos({ q, per_page: 20 });
-        if (vivo) setOpciones(r.items.filter((a) => a.ACT_Activo !== activoId && !a.ACT_Activo_Padre));
+        if (vivo) setOpciones(r.items.filter((a) => a.ACT_Activo !== activoId && !a.ACT_Activo_Padre && admite(a)));
       } catch {
         if (vivo) setOpciones([]);
       }
     }, 250);
     return () => { vivo = false; window.clearTimeout(tm); };
-  }, [activoId, agregando, busqueda]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- admite depende de permitidos/tipos, ya listados
+  }, [activoId, agregando, busqueda, permitidos, tipos]);
 
   const instalar = async () => {
     if (!elegido) return;

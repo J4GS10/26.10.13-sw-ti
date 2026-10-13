@@ -7,6 +7,7 @@ import { getApiErrorMessage } from '../../api/errors';
 import { softwareService } from './softwareService';
 import { Software, SoftwareCreate } from '../../types/software';
 import { SectionCard } from '../../components/ui';
+import { CatalogField } from '../../components/CatalogField';
 interface Props {
     open: boolean;
     onClose: (refresh?: boolean) => void;
@@ -15,6 +16,8 @@ interface Props {
 export const SoftwareDialog = ({ open, onClose, softwareToEdit }: Props) => {
     const { t } = useTranslation();
     const { register, handleSubmit, reset } = useForm<SoftwareCreate>();
+    // Fabricante = marca del catálogo (las marcas antiguas sin enlace se eligen de nuevo al editar).
+    const [marca, setMarca] = useState<number | null>(null);
     const [loading, setLoading] = useState(false);
     const { enqueueSnackbar } = useSnackbar();
     useEffect(() => {
@@ -22,16 +25,21 @@ export const SoftwareDialog = ({ open, onClose, softwareToEdit }: Props) => {
             if (softwareToEdit) {
                 reset({
                     SOF_Nombre: softwareToEdit.SOF_Nombre,
-                    SOF_Fabricante: softwareToEdit.SOF_Fabricante,
                     SOF_Version: softwareToEdit.SOF_Version ?? '',
                 });
             }
             else {
-                reset({ SOF_Nombre: '', SOF_Fabricante: '', SOF_Version: '' });
+                reset({ SOF_Nombre: '', SOF_Version: '' });
             }
+            setMarca(softwareToEdit?.MAR_Marca ?? null);
         }
     }, [open, softwareToEdit, reset]);
-    const onSubmit = async (data: SoftwareCreate) => {
+    const onSubmit = async (form: SoftwareCreate) => {
+        if (marca === null) {
+            enqueueSnackbar(t('software.manufacturer_required'), { variant: 'warning' });
+            return;
+        }
+        const data: SoftwareCreate = { ...form, MAR_Marca: marca };
         setLoading(true);
         try {
             if (softwareToEdit) {
@@ -59,7 +67,8 @@ export const SoftwareDialog = ({ open, onClose, softwareToEdit }: Props) => {
             <SectionCard title={t('software.sections.general')}>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <TextField fullWidth label={t('common.name')} placeholder="Microsoft 365, Adobe Acrobat..." {...register('SOF_Nombre', { required: true })}/>
-                <TextField fullWidth label={t('common.manufacturer')} placeholder="Microsoft, Adobe..." {...register('SOF_Fabricante', { required: true })}/>
+                <CatalogField clave="marcas" label={t('common.manufacturer')} required value={marca}
+                  onChange={(v) => setMarca(v as number | null)}/>
                 <TextField fullWidth label={`${t('common.version')} (${t('software.optional')})`} {...register('SOF_Version')}/>
               </Box>
             </SectionCard>

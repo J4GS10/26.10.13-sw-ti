@@ -84,7 +84,7 @@ async def test_numero_orden_duplicado_409(client, auth_headers, sa_user):
 
 
 @pytest.mark.asyncio
-async def test_cambiar_estado_orden(client, auth_headers, sa_user):
+async def test_cambiar_estado_orden(client, auth_headers, jefe_headers, sa_user):
     pid = (await _crear_proveedor(client, auth_headers)).json()["PRV_Proveedor"]
     oid = (await client.post("/api/v1/compras/ordenes", headers=auth_headers, json={
         "OCO_Numero": "OC-EST", "OCO_Fecha": "2026-06-01", "PRV_Proveedor": pid, "lineas": []})).json()["OCO_Orden"]
@@ -96,10 +96,16 @@ async def test_cambiar_estado_orden(client, auth_headers, sa_user):
     assert r.status_code == 409
     assert r.json()["detail"] == "ORDER_STATE_TRANSITION_NOT_ALLOWED"
 
+    # Cancelar exige motivo y aprobación del Jefe de TI.
     r = await client.patch(f"/api/v1/compras/ordenes/{oid}/estado", headers=auth_headers,
                            json={"OCO_Estado": "CANCELADA"})
-    assert r.status_code == 200
-    assert r.json()["OCO_Estado"] == "CANCELADA"
+    assert r.status_code == 422 and r.json()["detail"] == "CANCEL_REASON_REQUIRED"
+    r = await client.patch(f"/api/v1/compras/ordenes/{oid}/estado", headers=auth_headers,
+                           json={"OCO_Estado": "CANCELADA", "motivo": "Compra duplicada"})
+    assert r.status_code == 202
+    r = await client.post(f"/api/v1/aprobaciones/{r.json()['APR_Aprobacion']}/aprobar", headers=jefe_headers, json={})
+    assert r.status_code == 200, r.text
+    assert (await client.get(f"/api/v1/compras/ordenes/{oid}", headers=auth_headers)).json()["OCO_Estado"] == "CANCELADA"
 
     # Cancelada es final: no se reabre.
     r = await client.patch(f"/api/v1/compras/ordenes/{oid}/estado", headers=auth_headers,

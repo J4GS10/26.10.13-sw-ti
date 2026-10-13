@@ -81,6 +81,8 @@ class ActivoBase(Esquema):
     )
     # Moneda en que se pagó el costo (GTQ, USD, CHF). No se convierte.
     ACT_Moneda: CurrencyCode = DEFAULT_CURRENCY
+    PRV_Proveedor: Optional[int] = None
+    ACT_Factura: Optional[str] = Field(None, max_length=60)
 
     # FKs
     MOD_Modelo: int
@@ -103,6 +105,8 @@ class ActivoUpdate(Esquema):
     ACT_Moneda: Optional[CurrencyCode] = None
     ACT_Fecha_Compra: Optional[date] = None
     ACT_Fin_Garantia: Optional[date] = None
+    PRV_Proveedor: Optional[int] = None
+    ACT_Factura: Optional[str] = Field(None, max_length=60)
 
     MOD_Modelo: Optional[int] = None
     TAC_Tipo_Activo: Optional[int] = None
@@ -117,6 +121,9 @@ class ActivoResponse(ActivoBase):
     ACT_Baja_Fecha: Optional[date] = None
     ACT_Baja_Documento: Optional[str] = None
     ACT_Baja_Observacion: Optional[str] = None
+    # Equipo compartido instalado en un área y su responsable (no es custodia).
+    ACT_Instalado: bool = False
+    ACT_Responsable: Optional[uuid.UUID] = None
     # Incluimos las specs en la respuesta
     especificaciones: List[EspecificacionResponse] = []
     
@@ -128,6 +135,41 @@ class ActivoDetailResponse(ActivoResponse):
     modelo: Optional[ModeloAnidado] = None
     tipo_activo: Optional[TipoActivoAnidado] = None
     estado_operativo: Optional[EstadoAnidado] = None
+
+# =======================
+# EDICIÓN EN LOTE
+# =======================
+class EspecificacionLote(Esquema):
+    TES_Tipo_Especificacion: int
+    # Vacío = se quita la especificación.
+    valor: Optional[str] = Field(None, max_length=255)
+
+
+class CambiosLote(Esquema):
+    """Solo se aplican los campos enviados (los demás no se tocan)."""
+    ARE_Area_Ubicacion: Optional[int] = None
+    ACT_Costo: Optional[Decimal] = Field(None, ge=0, max_digits=12, decimal_places=2)
+    ACT_Moneda: Optional[CurrencyCode] = None
+    ACT_Fin_Garantia: Optional[date] = None
+    PRV_Proveedor: Optional[int] = None
+    ACT_Factura: Optional[str] = Field(None, max_length=60)
+    especificaciones: List[EspecificacionLote] = Field(default_factory=list, max_length=30)
+
+
+class EdicionLote(Esquema):
+    activos: List[uuid.UUID] = Field(..., min_length=1, max_length=500)
+    cambios: CambiosLote
+
+
+class RestaurarItem(Esquema):
+    ACT_Activo: uuid.UUID
+    cambios: CambiosLote
+
+
+class RestaurarLote(Esquema):
+    """Deshacer una edición en lote: cada activo vuelve a sus valores anteriores."""
+    items: List[RestaurarItem] = Field(..., min_length=1, max_length=500)
+
 
 class EtiquetasActivosRequest(Esquema):
     activos_ids: Optional[List[uuid.UUID]] = None
@@ -163,25 +205,19 @@ class ActivoFilter(Esquema):
 # =======================
 # BAJA FORMAL
 # =======================
-MOTIVOS_BAJA = ("OBSOLESCENCIA", "DANO_IRREPARABLE", "ROBO", "PERDIDA", "FIN_ARRENDAMIENTO",
-                "GARANTIA_REEMPLAZO", "OTRO")
-DESTINOS_BAJA = ("DESTRUCCION", "RECICLAJE", "DONACION", "VENTA", "DEVOLUCION_PROVEEDOR", "RESGUARDO", "OTRO")
+# Motivo y destino: códigos de los catálogos INV_MOTIVO_BAJA e INV_DESTINO_BAJA
+# (se validan contra el catálogo activo en CoreService.validar_baja).
+CODIGO_CATALOGO = r"^[A-Za-z0-9_]{1,30}$"
 
 
 class BajaActivo(Esquema):
-    motivo: str = Field(..., pattern="^(" + "|".join(MOTIVOS_BAJA) + ")$")
-    destino: str = Field(..., pattern="^(" + "|".join(DESTINOS_BAJA) + ")$")
+    motivo: str = Field(..., pattern=CODIGO_CATALOGO)
+    destino: str = Field(..., pattern=CODIGO_CATALOGO)
     fecha: Optional[date] = None
     documento: Optional[str] = Field(None, max_length=120)
     observacion: Optional[str] = Field(None, max_length=500)
     # Retirar en el mismo paso los componentes instalados en el equipo.
     retirar_componentes: bool = False
-
-    @model_validator(mode="after")
-    def _otro_exige_detalle(self):
-        if (self.motivo == "OTRO" or self.destino == "OTRO") and not (self.observacion or "").strip():
-            raise ValueError("OBSERVATION_REQUIRED_FOR_OTHER")
-        return self
 
 
 # =======================
@@ -205,3 +241,17 @@ class ComponenteResumen(Esquema):
     TAC_Tipo_Activo: int
     MOD_Modelo: int
     model_config = ConfigDict(from_attributes=True)
+
+
+# =======================
+# RECLASIFICACIÓN DE INSUMOS (activos → consumible)
+# =======================
+class ReclasificacionCreate(Esquema):
+    SED_Sede: int
+    # Consumible destino: si ya existe con ese nombre en la sede, recibe la entrada.
+    nombre: str = Field(..., min_length=2, max_length=100)
+    CON_Unidad: str = Field("unidad", min_length=1, max_length=20)
+    UME_Unidad: Optional[int] = None
+    CCO_Categoria: Optional[int] = None
+    CON_Stock_Minimo: int = Field(0, ge=0)
+    motivo: str = Field(..., min_length=5, max_length=500)

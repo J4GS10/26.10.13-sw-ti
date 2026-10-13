@@ -18,7 +18,8 @@ import { CollapsibleToolbar } from '../../components/CollapsibleToolbar';
 import { useConfirm } from '../../components/confirm-context';
 export const ProvidersPage = () => {
     const { t } = useTranslation();
-    const { canAdminInventory, canExport } = usePermissions();
+    // Compras crea y edita proveedores; borrarlos es de TI.
+    const { canAdminInventory, canPurchase, canExportPurchases: canExport } = usePermissions();
     const confirm = useConfirm();
     const { enqueueSnackbar } = useSnackbar();
     const [items, setItems] = useState<Proveedor[]>([]);
@@ -61,7 +62,7 @@ export const ProvidersPage = () => {
         badge={filtered.length}
         actions={<>
           {canExport && <ExportMenuButton onExport={(lang) => downloadCsv('/export/proveedores.csv', 'proveedores.csv', lang)}/>}
-          {canAdminInventory && (<Button variant="contained" startIcon={<AddIcon />} onClick={() => { setToEdit(null); setDialogOpen(true); }}>
+          {canPurchase && (<Button variant="contained" startIcon={<AddIcon />} onClick={() => { setToEdit(null); setDialogOpen(true); }}>
             {t('procurement.new_provider')}
           </Button>)}
         </>}
@@ -94,14 +95,12 @@ export const ProvidersPage = () => {
                   <TableCell sx={{ color: 'text.secondary' }}>{p.PRV_Email ?? '—'}</TableCell>
                   <TableCell sx={{ color: 'text.secondary' }}>{p.PRV_Telefono ?? '—'}</TableCell>
                   <TableCell align="right">
-                    {canAdminInventory && (<>
-                    <IconButton size="small" sx={{ color: 'primary.main' }} onClick={() => { setToEdit(p); setDialogOpen(true); }}>
+                    {canPurchase && (<IconButton size="small" sx={{ color: 'primary.main' }} onClick={() => { setToEdit(p); setDialogOpen(true); }}>
                       <EditIcon fontSize="small"/>
-                    </IconButton>
-                    <IconButton size="small" sx={{ color: 'error.main' }} onClick={() => handleDelete(p)}>
+                    </IconButton>)}
+                    {canAdminInventory && (<IconButton size="small" sx={{ color: 'error.main' }} onClick={() => handleDelete(p)}>
                       <DeleteIcon fontSize="small"/>
-                    </IconButton>
-                    </>)}
+                    </IconButton>)}
                   </TableCell>
                 </TableRow>)}
       />

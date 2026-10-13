@@ -28,7 +28,41 @@ function params(filtros: KardexFiltros & Record<string, unknown>): URLSearchPara
   return p;
 }
 
+export interface Faltante {
+  FAL_Faltante: number;
+  TOM_Toma: number | null;
+  ACT_Activo: string;
+  codigo: string;
+  serie: string;
+  tipo: string;
+  modelo: string;
+  area: string | null;
+  FAL_Estado: 'PENDIENTE' | 'EN_INVESTIGACION' | 'LOCALIZADO' | 'BAJA_SOLICITADA' | 'DADO_DE_BAJA';
+  FAL_Fecha: string;
+  FAL_Seguimiento: { fecha: string; usuario: string | null; accion: string; nota: string }[];
+  FAL_Resolucion: string | null;
+  FAL_Fecha_Resolucion: string | null;
+  APR_Aprobacion: number | null;
+}
+
 export const inventarioService = {
+  // --- Faltantes de la toma de inventario ---
+  faltantes: async (filtros: { estado?: string; abiertos?: boolean } = {}) =>
+    (await client.get<Faltante[]>(`/inventario/faltantes?${params(filtros)}`)).data,
+  notaFaltante: async (id: number, nota: string) =>
+    (await client.post<Faltante>(`/inventario/faltantes/${id}/seguimiento`, { nota })).data,
+  faltanteLocalizado: async (id: number, nota: string, ARE_Area?: number | null) =>
+    (await client.post<Faltante>(`/inventario/faltantes/${id}/localizado`, { nota, ARE_Area: ARE_Area ?? null })).data,
+  bajaFaltante: async (id: number, datos: { motivo: string; destino: string; observacion?: string; documento?: string }) =>
+    (await client.post<Faltante>(`/inventario/faltantes/${id}/baja`, datos)).data,
+
+  // --- Cierre mensual (Contabilidad) ---
+  cierreMensual: async (anio: number, mes: number, sede_id?: number) =>
+    (await client.get(`/inventario/cierre-mensual?${params({ anio, mes, sede_id })}`)).data,
+  cierreMensualXlsx: (anio: number, mes: number, sede_id: number | undefined, lang: SupportedLanguage) =>
+    downloadFile(`/inventario/cierre-mensual.xlsx?${params({ anio, mes, sede_id, lang })}`,
+      `cierre_${anio}${String(mes).padStart(2, '0')}.xlsx`),
+
   kardex: async (filtros: KardexFiltros, limite = 50, desplazamiento = 0): Promise<KardexPagina> =>
     (await client.get<KardexPagina>(`/inventario/kardex?${params({ ...filtros, limite, desplazamiento })}`)).data,
   kardexCsv: (filtros: KardexFiltros, lang: SupportedLanguage) =>
@@ -41,6 +75,9 @@ export const inventarioService = {
 
   entradasSalidas: async (filtros: { desde?: string; hasta?: string; sede_id?: number }) =>
     (await client.get<ResumenEntradasSalidas>(`/inventario/entradas-salidas?${params(filtros)}`)).data,
+
+  resumenMotivos: async (filtros: { desde?: string; hasta?: string; sede_id?: number }) =>
+    (await client.get(`/inventario/resumen-motivos?${params(filtros)}`)).data,
 
   atencion: async () => (await client.get<{ items: ItemAtencion[] }>('/inventario/atencion')).data.items,
 

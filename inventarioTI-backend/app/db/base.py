@@ -15,6 +15,7 @@ import app.models.location
 # 2. Catálogos y Core (Interdependientes)
 # Al importarlos aquí, el Registry de SQLAlchemy se llena correctamente.
 import app.models.catalogs      
+import app.models.catalogo_estandar
 import app.models.core         
 
 # 3. Resto de módulos

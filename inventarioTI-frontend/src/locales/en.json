@@ -108,7 +108,9 @@
         "clear_selection": "Clear selection",
         "error_delete": "Could not delete the record",
         "unknown": "Unknown",
-        "loading": "Loading…"
+        "loading": "Loading…",
+        "more_actions": "More actions",
+        "undo": "Undo"
     },
     "menu": {
         "dashboard": "Dashboard",
@@ -135,7 +137,9 @@
         "inventory_count": "Inventory count",
         "approvals": "Approvals",
         "onboarding": "Employee onboarding",
-        "import": "Import assets"
+        "import": "Import assets",
+        "catalog_center": "Catalog center",
+        "month_end": "Month-end close"
     },
     "audit": {
         "title": "Forensic audit",
@@ -551,14 +555,18 @@
         "field_access_type": "Access type (general or restricted)",
         "iso_required": "The ISO code is required (e.g. GT, MX)",
         "new_title": "Add {{level}}",
-        "edit_title": "Edit {{level}}"
+        "edit_title": "Edit {{level}}",
+        "field_area_type": "Area type",
+        "access": {
+            "General": "General",
+            "Restringido": "Restricted"
+        }
     },
     "operations": {
         "sections": {
             "document": "Document details",
             "asset": "Asset",
-            "assignment": "Assignment",
-            "notes": "Notes"
+            "assignment": "Assignment"
         },
         "title": "Movements",
         "new_btn": "New assignment",
@@ -570,7 +578,6 @@
             "select_type": "Movement type",
             "filter_category": "Filter by category",
             "asset_search_placeholder": "Code, serial or hostname",
-            "notes": "Notes",
             "auto_close_note": "If the asset was already assigned, the previous assignment will be automatically closed.",
             "hostname": "Device hostname",
             "hostname_help": "Leave it unchanged to keep the current one, or change it for this device or user.",
@@ -581,7 +588,6 @@
             "loan_return_date": "Expected return",
             "loan_return_help": "We will alert you if the loan expires without being returned.",
             "loan_date_required": "Please indicate the expected return date of the loan.",
-            "reason": "Reason (optional)",
             "transfer_reason": "Reason for the transfer"
         },
         "table": {
@@ -619,15 +625,16 @@
             "transferred": "{{code}} is now in the custody of {{person}} in {{area}}.",
             "next": "What would you like to do next?",
             "assign_another": "Assign another asset to the same person",
-            "download_acta": "Download handover record"
+            "download_acta": "Download handover record",
+            "undone": "The movement was undone: the equipment went back to where it was (reason “Reverted”)."
         }
     },
     "software": {
         "sections": {
             "general": "General information",
             "licensing": "Licensing",
-            "keys": "Activation keys",
-            "validity": "Seats and validity"
+            "validity": "Seats and validity",
+            "credentials": "Credentials or seats"
         },
         "page_title": "Software and licenses",
         "inventory_title": "Software catalog",
@@ -656,11 +663,9 @@
         "edit_license": "Edit license",
         "add_license_for": "Add license for: {{name}}",
         "license_type": "License type",
-        "activation_key": "Activation key (optional)",
         "seats": "Number of seats",
         "expiry": "Expiration date",
         "register_title": "Register software",
-        "digital_license": "Digital license",
         "license_key": "Activation key",
         "license_expiry": "Expiration date",
         "license_status": "Status",
@@ -668,38 +673,25 @@
         "not_applicable": "Not applicable",
         "created_ok": "Software registered successfully",
         "optional": "optional",
-        "individual_keys": "Individual keys, one per line",
-        "individual_keys_help": "If you paste keys here, the seat quantity is automatically adjusted to the number of keys.",
         "keys_available": "{{available}}/{{total}} keys",
-        "protected_license_keys": "Protected keys",
         "perpetual": "Perpetual",
         "sold_out": "Fully assigned",
         "available": "Available",
         "view_keys": "View keys",
         "hide_keys": "Hide keys",
-        "key_inventory": "Individual keys",
-        "keys_free_count_one": "{{count}} available",
-        "keys_free_count_other": "{{count}} available",
-        "keys_assigned_count_one": "{{count}} assigned",
-        "keys_assigned_count_other": "{{count}} assigned",
         "keys_load_error": "Could not load the keys for this license.",
-        "key_value": "Key",
         "key_reference": "Reference",
         "key_status": "Status",
         "key_status_DISPONIBLE": "Available",
         "key_status_ASIGNADA": "Assigned",
         "key_status_RETIRADA": "Retired",
         "key_assignment": "Assignment",
-        "key_created": "Date added",
         "assigned_person": "Person",
         "assigned_asset": "Asset",
-        "assigned_on": "Assigned",
         "key_unassigned": "Unassigned",
         "hide_key": "Hide key",
         "reveal_key": "Reveal key",
         "copy_key": "Copy key",
-        "key_copied": "Key copied",
-        "key_copy_error": "Could not copy the key",
         "no_keys": "No individual keys are registered.",
         "license_cost": "License cost",
         "license_cost_help": "Optional. The currency in which it was paid is kept.",
@@ -719,6 +711,86 @@
             "no_requerida": "No longer required",
             "reinstalacion": "Failure or reinstallation",
             "cambio_equipo": "Device replacement"
+        },
+        "manufacturer_required": "Choose the manufacturer.",
+        "commercial_model": "Commercial model",
+        "activation_method": "Activation method",
+        "method_help": "It decides what each credential requires (email and password, serial, server…).",
+        "method_locked": "It cannot be changed: the license already has credentials.",
+        "method_unknown": "Activation method not set",
+        "counting_method": "Counting method",
+        "counting_help": {
+            "EQUIPO": "Each device that uses it takes one seat.",
+            "PERSONA": "Each person receives their own account or seat.",
+            "CONCURRENTE": "Several devices share the credential; seats limit simultaneous use.",
+            "SITIO": "Unlimited use across the company: usage is recorded without consuming seats.",
+            "NONE": "Choose how seats are counted."
+        },
+        "seats_reference": "Seats (reference)",
+        "start_date": "Start date",
+        "auto_renewal": "Automatic renewal",
+        "notes": "Notes",
+        "expires_on": "expires {{date}}",
+        "key_status_SUSPENDIDA": "Suspended",
+        "key_status_BAJA": "Retired",
+        "cred": {
+            "intro": "Optional: add the accounts, serials or keys now, or later from the license.",
+            "choose_method": "First choose the activation method.",
+            "no_credentials": "This activation method does not use credentials.",
+            "one": "One at a time",
+            "paste": "Paste a list",
+            "file_ready": "File uploaded",
+            "file_after_create": "The license file is attached after creating the license, from “Credentials”.",
+            "generate": "Generate a secure password",
+            "add_to_list": "Add to the list",
+            "paste_label": "One credential per line",
+            "paste_help": "Format: {{format}} (separate with “;” or a tab).",
+            "paste_preview": "{{ok}} of {{total}} lines are valid.",
+            "add_valid_one": "Add {{count}} credential",
+            "add_valid_other": "Add {{count}} credentials",
+            "pending_one": "{{count}} credential to save",
+            "pending_other": "{{count}} credentials to save",
+            "title": "Credentials or seats",
+            "add": "Add credentials",
+            "identifier": "Credential",
+            "hides_in": "Hidden in {{seconds}} s",
+            "must_change": "Change the password",
+            "not_rotated": "Password not changed for a long time",
+            "show": "Show (this is recorded)",
+            "rotate": "Change the password",
+            "suspend": "Suspend",
+            "reactivate": "Reactivate",
+            "save_count_one": "Save {{count}} credential",
+            "save_count_other": "Save {{count}} credentials",
+            "rotate_title": "Change the password of {{name}}",
+            "rotate_help": "Enter the new password you set in the service. The previous one is no longer stored.",
+            "copied_logged": "Copied. The access was recorded.",
+            "shown_logged": "It is shown for 30 seconds. The access was recorded.",
+            "added_one": "{{count}} credential was added.",
+            "added_other": "{{count}} credentials were added.",
+            "rotated": "The password was changed and recorded.",
+            "excess": "There are more credentials than seats ({{max}})."
+        },
+        "cred_fields": {
+            "usuario": "User name",
+            "secreto": "Password",
+            "serial": "Serial number",
+            "clave": "Product key",
+            "servidor": "Server (host:port)",
+            "archivo": "License file",
+            "dispositivo": "USB dongle (identifier)"
+        },
+        "cred_labels": {
+            "CUENTA": {
+                "usuario": "Email",
+                "secreto": "Password"
+            },
+            "SERVIDOR": {
+                "servidor": "Server (host:port)"
+            },
+            "TOKEN": {
+                "secreto": "Token"
+            }
         }
     },
     "users": {
@@ -770,7 +842,9 @@
             "TECNICO": "Technician",
             "AUDITOR": "Auditor",
             "CONSULTA": "Read-only",
-            "JEFE_TI": "Head of IT"
+            "JEFE_TI": "Head of IT",
+            "COMPRAS": "Purchasing (Administration)",
+            "CONTABILIDAD": "Accounting (Administration)"
         },
         "messages": {
             "created_success": "User created successfully",
@@ -934,10 +1008,6 @@
         "size": "Size",
         "date": "Upload date",
         "download": "Download",
-        "cat_factura": "Invoice",
-        "cat_foto": "Photo",
-        "cat_acta": "Delivery record",
-        "cat_otro": "Other",
         "deleted": "File deleted",
         "err_size_max": "The file exceeds the maximum of {{max}} MB."
     },
@@ -1001,7 +1071,17 @@
         "order_created_hint": "Order created. When it is received, the stock will be added automatically.",
         "avg_cost": "Average cost",
         "initial_cost": "Unit cost of the opening balance",
-        "initial_cost_help": "Optional. Values the opening stock; the weighted average cost is used afterwards."
+        "initial_cost_help": "Optional. Values the opening stock; the weighted average cost is used afterwards.",
+        "unit_required": "Choose the unit of measure.",
+        "to_person": "To a person",
+        "to_asset": "To a device",
+        "target_asset": "Device (e.g. the printer)",
+        "compatible": "compatible",
+        "not_compatible": "This device is not listed as compatible with the consumable.",
+        "adjust_requested": "The decrease is awaiting approval by the Head of IT.",
+        "compatible_title": "Compatibility",
+        "compatible_help": "Device models it is used in (a toner and its printers).",
+        "compatible_models": "Compatible models"
     },
     "maintenance": {
         "sections": {
@@ -1033,7 +1113,7 @@
         "register": "Record maintenance",
         "service_type": "Service type",
         "estimated_cost": "Estimated cost",
-        "failure_description": "Failure or work description",
+        "failure_description": "Fault details",
         "cant_delete_open": "Only closed tickets can be deleted",
         "title": "Maintenance management",
         "new_ticket": "New ticket",
@@ -1042,7 +1122,9 @@
         "col_type": "Type",
         "col_failure": "Failure or work",
         "asset_to_repair": "Asset to repair",
-        "requester": "Requester"
+        "requester": "Requester",
+        "failure_type": "Fault type",
+        "failure_description_help": "Optional, unless the fault type requires a description."
     },
     "procurement": {
         "sections": {
@@ -1166,8 +1248,6 @@
         "close_reason": "Reason for closing",
         "close_reason_label": "Reason for closing or cancellation",
         "cancel_reason": "Reason for cancellation (optional)",
-        "closed_ok": "The order was closed with a shortage.",
-        "cancelled_ok": "The order was cancelled.",
         "receive_help_partial": "Record what arrived in this delivery. You can receive in parts: anything that does not arrive remains pending. If the quantity or price does not match the order, you will be asked for a justification.",
         "recv_document": "Delivery note or invoice",
         "recv_document_help": "Number of the document that came with the goods.",
@@ -1201,7 +1281,10 @@
         "recv_sent_title": "Delivery sent for approval · {{number}}",
         "recv_pending_approval": "The delivery includes a surplus and is pending (request #{{id}}). The inventory does not change until the Head of IT approves it.",
         "recv_nothing_yet": "Nothing has been recorded yet.",
-        "recv_handover": "Hand over to a person"
+        "recv_handover": "Hand over to a person",
+        "close_requested": "Closing with shortage is awaiting approval by the Head of IT.",
+        "cancel_requested": "The cancellation is awaiting approval by the Head of IT.",
+        "needs_approval": "It will be applied once the Head of IT approves it."
     },
     "directory": {
         "title": "Directory & notifications",
@@ -1622,7 +1705,7 @@
         "MAINTENANCE_TICKET_NOT_FOUND": "The maintenance ticket was not found.",
         "MAINTENANCE_TYPE_NOT_FOUND": "The maintenance type was not found.",
         "MODEL_NOT_FOUND": "The model was not found.",
-        "MOVEMENT_NOT_FOUND": "The movement was not found.",
+        "MOVEMENT_NOT_FOUND": "The movement does not exist.",
         "MOVEMENT_TYPE_NOT_FOUND": "The movement type was not found.",
         "NOTIFICATION_EVENT_NOT_FOUND": "The notification event was not found.",
         "OPERATIONAL_STATUS_NOT_FOUND": "The operational status was not found.",
@@ -1763,7 +1846,78 @@
         "IMPORT_TOO_MANY_ROWS": "The file exceeds the maximum of {{p1}} rows.",
         "IMPORT_HAS_ERRORS": "Some rows have errors: correct them or choose to skip them.",
         "IMPORT_NOTHING_TO_IMPORT": "There are no valid rows to import.",
-        "SYSTEM_CONFIG_ERROR_MISSING_MOVEMENT_TYPE": "A movement type is missing from the system configuration."
+        "SYSTEM_CONFIG_ERROR_MISSING_MOVEMENT_TYPE": "A movement type is missing from the system configuration.",
+        "CATALOG_NOT_FOUND": "The catalog does not exist.",
+        "CATALOG_ITEM_NOT_FOUND": "The catalog entry does not exist or is inactive.",
+        "CATALOG_ITEM_ALREADY_EXISTS": "An entry with that name already exists.",
+        "CATALOG_SYSTEM_ITEM": "It is a system entry: it cannot be renamed, deactivated or merged.",
+        "CATALOG_ITEM_MERGED": "The entry has already been merged into another one.",
+        "CATALOG_MERGE_SAME_ITEM": "Choose a different entry as the target.",
+        "CATALOG_MERGE_TARGET_INACTIVE": "The target entry is inactive.",
+        "CATALOG_MERGE_CONFLICT": "The merge could not be completed: the target already has equivalent records. Please review the duplicates.",
+        "CATALOG_MERGE_REQUIRES_GLOBAL_SCOPE": "Merging affects every site: only an account with global scope can do it.",
+        "CATALOG_FIELD_NOT_ALLOWED": "That field does not belong to this catalog.",
+        "CATALOG_FIELD_INVALID": "One of the values is not valid.",
+        "CATALOG_NAME_TOO_LONG": "The name is too long.",
+        "MOVEMENT_REASON_NOT_FOUND": "The chosen reason does not exist or is inactive.",
+        "MOVEMENT_REASON_NOT_APPLICABLE": "That reason does not apply to this type of movement.",
+        "MOVEMENT_REASON_DETAIL_REQUIRED": "This reason requires a written detail.",
+        "DECOMMISSION_REASON_NOT_FOUND": "The disposal reason does not exist or is inactive.",
+        "DECOMMISSION_DESTINATION_NOT_FOUND": "The disposal destination does not exist or is inactive.",
+        "FAULT_DESCRIPTION_REQUIRED": "Please describe the fault.",
+        "MAINTENANCE_ACTION_REQUIRED": "Choose the action performed or describe it with at least 5 characters.",
+        "MAINTENANCE_ACTION_DETAIL_REQUIRED": "This action requires a written detail.",
+        "SOFTWARE_MANUFACTURER_REQUIRED": "Please indicate the manufacturer.",
+        "STANDARD_KIT_NOT_FOUND": "The kit does not exist.",
+        "STANDARD_KIT_ALREADY_EXISTS": "There is already an active kit for that role or department.",
+        "STANDARD_KIT_EMPTY": "Add at least one item of equipment to the kit.",
+        "STANDARD_KIT_NEEDS_POSITION_OR_DEPARTMENT": "Indicate a role or a department (only one).",
+        "DUPLICATED_SPECIFICATION": "A specification appears twice.",
+        "LICENSE_FIELD_REQUIRED": "A field required by the activation method is missing.",
+        "LICENSE_FIELD_NOT_ALLOWED": "That field does not apply to the license activation method.",
+        "LICENSE_METHOD_HAS_NO_CREDENTIALS": "This activation method does not use credentials.",
+        "LICENSE_FILE_NOT_FOUND": "The license file does not belong to this license.",
+        "LICENSE_CREDENTIALS_EXCEED_SEATS": "There are more credentials than purchased seats.",
+        "LICENSE_CREDENTIAL_IN_USE": "The credential is assigned: release it before suspending it.",
+        "LICENSE_CREDENTIAL_HAS_NO_SECRET": "This credential has no stored password.",
+        "LICENSE_ROTATION_EMPTY": "Please enter the new password.",
+        "LICENSE_COUNTS_BY_DEVICE": "This license is counted per device: assign it to a device.",
+        "LICENSE_COUNTS_BY_PERSON": "This license is counted per person: assign it to a person.",
+        "LICENSE_METHOD_LOCKED": "The activation method cannot change once the license has credentials.",
+        "CATALOG_CLOSED": "This catalog does not accept new entries: the system relies on the existing ones.",
+        "ASSET_AREA_OTHER_SITE": "The area belongs to another site: to change site, transfer the equipment.",
+        "ASSET_LOCATION_FOLLOWS_CUSTODY": "The equipment is assigned: its location follows its custody.",
+        "SPECIFICATION_VALUE_NOT_ALLOWED": "That value is not among those allowed for this asset type.",
+        "MOVEMENT_UNDO_NOT_CURRENT": "It can no longer be undone: the equipment had another movement afterwards.",
+        "MOVEMENT_UNDO_WINDOW_EXPIRED": "It can only be undone within the following 30 minutes. Record a return or a transfer instead.",
+        "MOVEMENT_UNDO_NOT_OWNER": "Only the person who recorded the movement or an administrator can undo it.",
+        "MOVEMENT_REASON_REQUIRED": "Please state the reason for the movement.",
+        "ASSET_IS_SHARED_INSTALL_IN_AREA": "It is a shared device: install it in an area instead of assigning it to a person.",
+        "ASSET_TYPE_IS_SUPPLY": "That type is a supply: record it in Consumables (by quantity).",
+        "COMPONENT_INSTALLS_IN_EQUIPMENT": "A component is installed inside a device, not in an area.",
+        "ASSET_CLASS_NO_SOFTWARE": "This type of device does not carry software or licenses.",
+        "ASSET_CLASS_NO_COMPONENTS": "This type of device does not accept internal components.",
+        "COMPONENT_TYPE_NOT_ALLOWED": "That component does not belong to this type of device.",
+        "ASSET_NOT_AVAILABLE_FOR_INSTALLATION": "The device is not available to be installed.",
+        "ASSET_HAS_CUSTODIAN_RETURN_FIRST": "The device is assigned to a person: record the return first.",
+        "ASSET_ALREADY_INSTALLED_THERE": "The device is already installed in that area with that person in charge.",
+        "ASSET_NOT_INSTALLED": "The device is not installed in an area.",
+        "ASSET_ONLY_ON_STOCK_OUT": "Only a stock-out is recorded against a device.",
+        "STOCK_CHANGED_SINCE_REQUEST": "The stock changed since the adjustment was requested: reject it and request a new one with the current count.",
+        "STOCK_DECREASE_REQUIRES_APPROVAL": "A stock decrease requires approval.",
+        "STOCK_ADJUST_NOT_A_DECREASE": "The adjustment does not decrease the stock.",
+        "APPROVAL_ALREADY_PENDING": "There is already a pending request for this.",
+        "ORDER_CANCEL_REQUIRES_APPROVAL": "Cancelling an order requires approval.",
+        "ORDER_CLOSE_REQUIRES_APPROVAL": "Closing an order with shortage requires approval.",
+        "CANCEL_REASON_REQUIRED": "Please state why the order is cancelled.",
+        "RECLASSIFY_ASSETS_IN_USE": "There are assets of that type in use: release them before reclassifying.",
+        "RECLASSIFY_NOTHING_TO_CONVERT": "There are no assets of that type to convert.",
+        "RECLASSIFY_REQUIRES_APPROVAL": "The reclassification requires approval.",
+        "ASSET_TYPE_IS_NOT_SUPPLY": "That type is not marked as a supply.",
+        "CONSUMABLE_NAME_IN_OTHER_SEDE": "A consumable with that name already exists at another site: use a different name.",
+        "MISSING_ITEM_NOT_FOUND": "The missing item does not exist.",
+        "MISSING_ITEM_ALREADY_RESOLVED": "That missing item has already been resolved.",
+        "MISSING_ITEM_DECOMMISSION_REASON": "A missing item is written off for loss or theft."
     },
     "catalog": {
         "states": {
@@ -1772,7 +1926,8 @@
             "en_bodega": "In storage",
             "en_reparacion": "Under repair",
             "en_transito": "In transit",
-            "baja": "Decommissioned"
+            "baja": "Decommissioned",
+            "instalado": "Installed"
         },
         "movement_types": {
             "ingreso": "Intake",
@@ -2003,7 +2158,10 @@
             "LICENCIA_RETIRADA": "License removed",
             "LICENCIA_AJUSTE": "License adjustment",
             "CONSUMIBLE_TRASLADO": "Storage transfer",
-            "LICENCIA_BAJA": "License removed"
+            "LICENCIA_BAJA": "License removed",
+            "LICENCIA_CREDENCIAL_ALTA": "Credentials added",
+            "LICENCIA_SECRETO_CAMBIADO": "Account password changed",
+            "LICENCIA_SECRETO_VISTO": "Account password viewed"
         },
         "documentos": {
             "RECEPCION": "Receipt",
@@ -2034,7 +2192,8 @@
             "entradas_salidas": "Receipts and issues",
             "reasignaciones": "Reassignments",
             "custodia": "Custody on a date",
-            "resumen": "Period summary"
+            "resumen": "Period summary",
+            "motivos": "By reason"
         },
         "search": "Search by code, name, reason or document",
         "as_of": "As of",
@@ -2089,6 +2248,22 @@
             "last_seal": "Last seal",
             "sequence": "Event no. {{n}}",
             "anchor_hint": "Record this hash at each monthly close (outside the system): it proves that the history has not been rewritten."
+        },
+        "reasons": {
+            "movements": "Movements by reason",
+            "faults": "Maintenance by fault type",
+            "actions": "Maintenance actions performed",
+            "disposal_reasons": "Disposals by reason",
+            "disposal_destinations": "Disposals by destination",
+            "unclassified": "Unclassified",
+            "section": "Section",
+            "item": "Reason",
+            "detail": "Detail",
+            "total": "Total",
+            "file": "summary_by_reason",
+            "export": "Export CSV",
+            "count_one": "{{count}} record",
+            "count_other": "{{count}} records"
         }
     },
     "inventory_count": {
@@ -2158,21 +2333,12 @@
         "close_confirm": "Close count",
         "closed_ok": "Count closed. The result was saved to the history.",
         "final_summary": "Expected: {{expected}} · Found: {{found}} · Missing: {{missing}} · In another location: {{other}} · Not registered: {{unknown}}",
-        "download_report": "Download report"
+        "download_report": "Download report",
+        "tab_counts": "Counts"
     },
     "returns": {
         "title": "Return {{code}}",
         "current_custodian": "Current custodian: {{name}}",
-        "reason": "Reason for the return",
-        "choose_reason": "Choose a reason",
-        "reasons": {
-            "renuncia": "Person leaving",
-            "cambio_equipo": "Device replacement",
-            "fin_prestamo": "End of loan",
-            "falla": "Device failure",
-            "reasignacion": "Will be reassigned to someone else",
-            "otro": "Other"
-        },
         "detail": "Details (optional)",
         "detail_required": "Please describe the reason.",
         "storage_area": "Storage or area where it stays",
@@ -2197,24 +2363,6 @@
         "document_help": "Record number, technical report or invoice.",
         "note": "Note",
         "note_required": "Please explain the reason or destination chosen as “Other”.",
-        "reasons": {
-            "OBSOLESCENCIA": "Obsolescence",
-            "DANO_IRREPARABLE": "Irreparable damage",
-            "ROBO": "Theft",
-            "PERDIDA": "Loss",
-            "FIN_ARRENDAMIENTO": "End of lease",
-            "GARANTIA_REEMPLAZO": "Warranty replacement",
-            "OTRO": "Other"
-        },
-        "destinations": {
-            "DESTRUCCION": "Destruction",
-            "RECICLAJE": "Recycling",
-            "DONACION": "Donation",
-            "VENTA": "Sale",
-            "DEVOLUCION_PROVEEDOR": "Return to supplier",
-            "RESGUARDO": "Kept in storage",
-            "OTRO": "Other"
-        },
         "has_components_one": "The device has {{count}} installed component.",
         "has_components_other": "The device has {{count}} installed components.",
         "remove_components": "Remove them and keep them in storage",
@@ -2245,7 +2393,6 @@
         "removed_ok": "{{code}} was removed from the device."
     },
     "attention": {
-        "title": "Requires your attention",
         "all_clear": "All clear: there is nothing pending to resolve.",
         "go": "View",
         "more": "+{{count}} more",
@@ -2314,8 +2461,39 @@
                 "title_one": "{{count}} request is awaiting approval by the Head of IT",
                 "title_other": "{{count}} requests are awaiting approval by the Head of IT",
                 "hint": "Decommissions and purchase surpluses: the inventory does not change until they are approved."
+            },
+            "CUENTA_POR_CAMBIAR": {
+                "title_one": "{{count}} account must change its password",
+                "title_other": "{{count}} accounts must change their password",
+                "hint": "The person who used it has left: change the password in the service and record it."
+            },
+            "CUENTA_SIN_ROTAR": {
+                "title_one": "{{count}} account without a password change",
+                "title_other": "{{count}} accounts without a password change",
+                "hint": "They have had the same password for more than {{dias}} days."
+            },
+            "CUPOS_AGOTADOS": {
+                "title_one": "{{count}} license with no free seats",
+                "title_other": "{{count}} licenses with no free seats",
+                "hint": "Buy more seats or free the unused ones."
+            },
+            "FALTANTE_PENDIENTE": {
+                "title_one": "{{count}} unresolved missing item",
+                "title_other": "{{count}} unresolved missing items",
+                "hint": "Investigate, mark them as found or request their write-off."
+            },
+            "RESPONSABLE_INACTIVO": {
+                "title_one": "{{count}} shared device with an inactive person in charge",
+                "title_other": "{{count}} shared devices with an inactive person in charge",
+                "hint": "Relocate them with a new person in charge."
+            },
+            "INSUMOS_POR_RECLASIFICAR": {
+                "title_one": "{{count}} supply type with assets",
+                "title_other": "{{count}} supply types with assets",
+                "hint": "Move them to consumables with “Reclassify” in Types."
             }
-        }
+        },
+        "my_title": "My pending items"
     },
     "approvals": {
         "title": "Approvals",
@@ -2342,7 +2520,11 @@
         "resolution_note": "Resolution by {{name}}",
         "types": {
             "BAJA": "Asset decommission",
-            "RECEPCION_SOBRANTE": "Purchase surplus"
+            "RECEPCION_SOBRANTE": "Purchase surplus",
+            "AJUSTE_CONSUMIBLE": "Consumable adjustment",
+            "CIERRE_FALTANTE": "Close with shortage",
+            "CANCELACION_ORDEN": "Order cancellation",
+            "RECLASIFICACION": "Reclassification to consumable"
         },
         "states": {
             "PENDIENTE": "Pending",
@@ -2352,7 +2534,11 @@
         },
         "approve_effect": {
             "BAJA": "On approval, the device leaves the inventory, its licenses are released and the decommission is recorded in the kardex with your name as approver.",
-            "RECEPCION_SOBRANTE": "On approval, the full delivery (including the surplus) is recorded exactly as it was received."
+            "RECEPCION_SOBRANTE": "On approval, the full delivery (including the surplus) is recorded exactly as it was received.",
+            "AJUSTE_CONSUMIBLE": "On approval, the stock drops to the counted amount and the adjustment is recorded in the ledger. If the stock changed since the request, it is not applied.",
+            "CIERRE_FALTANTE": "On approval, the order is closed and the pending items will no longer be received.",
+            "CANCELACION_ORDEN": "On approval, the order is cancelled.",
+            "RECLASIFICACION": "On approval, the assets are retired as “Reclassified” and the consumable receives the same quantity."
         }
     },
     "workspace": {
@@ -2431,17 +2617,18 @@
         "export": "Export selection",
         "decommission": "Request decommission",
         "none_assigned": "None of the selected items is assigned.",
-        "no_matches": "No assets match the filters."
+        "no_matches": "No assets match the filters.",
+        "edit": "Edit in bulk"
     },
     "handover": {
         "title": "Workstation handover",
         "button": "Workstation handover",
-        "default_reason": "Workstation handover",
         "sections": {
             "recipient": "Recipient",
             "equipment_one": "Equipment ({{count}})",
             "equipment_other": "Equipment ({{count}})",
-            "record": "Record"
+            "record": "Record",
+            "licenses": "Licenses and accounts"
         },
         "person": "Receiving person",
         "area": "Destination area",
@@ -2461,7 +2648,6 @@
         "remove": "Remove from list",
         "empty_list": "Add items by scanning, searching or from the suggested kit.",
         "remove_owned": "Remove the items this person already has.",
-        "reason": "Reason",
         "ticket": "Ticket",
         "submit_one": "Hand over {{count}} item",
         "submit_other": "Hand over {{count}} items",
@@ -2474,7 +2660,16 @@
         "acta_file": "Handover_record",
         "discharge_file": "Return_record",
         "view_person": "View person profile",
-        "another": "New handover"
+        "another": "New handover",
+        "kit_standard": "Role kit “{{name}}”",
+        "licenses_none": "There are no per-person licenses with free seats.",
+        "licenses_help": "They are assigned in the same handover, each with its own account.",
+        "license_option_one": "{{name}} · {{count}} free",
+        "license_option_other": "{{name}} · {{count}} free",
+        "undo": "Undo the handover",
+        "undo_confirm_one": "Do you want to undo the handover of {{count}} item? It will go back to where it was and the assigned licenses will be released.",
+        "undo_confirm_other": "Do you want to undo the handover of {{count}} items? They will go back to where they were and the assigned licenses will be released.",
+        "undone": "The handover was undone. It was recorded in the history."
     },
     "returns_batch": {
         "title_one": "Return {{count}} item to storage",
@@ -2615,7 +2810,620 @@
             "modelos_sin_tipo": {
                 "title": "Models without an asset type",
                 "help": "Assign the type so that new assets suggest the category."
+            },
+            "marcas_similares": {
+                "title": "Nearly identical brands",
+                "help": "They differ only in case, accents or one or two letters: merge them in the catalog center."
+            },
+            "especificaciones_faltantes": {
+                "title": "Missing required specifications",
+                "help": "The asset type requires this data (Catalog center › Specifications by asset type)."
             }
         }
+    },
+    "catalog_center": {
+        "title": "Catalog center",
+        "subtitle": "Lists that standardize your data: reasons, disposals, units, faults and documents.",
+        "catalog": "Catalog",
+        "groups": {
+            "ACTIVOS": "Assets",
+            "MOVIMIENTOS": "Movements and disposals",
+            "LICENCIAS": "Licenses",
+            "CONSUMIBLES": "Consumables",
+            "MANTENIMIENTO": "Maintenance",
+            "UBICACIONES": "Locations",
+            "DOCUMENTOS": "Documents"
+        },
+        "catalogs": {
+            "marcas": "Brands",
+            "tipos-conexion": "Connection types",
+            "tipos-especificacion": "Specification types",
+            "unidades-medida": "Units of measure",
+            "motivos-movimiento": "Movement reasons",
+            "motivos-baja": "Disposal reasons",
+            "destinos-baja": "Disposal destinations",
+            "categorias-consumible": "Consumable categories",
+            "tipos-mantenimiento": "Maintenance types",
+            "tipos-falla": "Fault types",
+            "acciones-mantenimiento": "Maintenance actions",
+            "tipos-area": "Area types",
+            "tipos-documento": "Document types",
+            "tipos-evidencia": "Evidence and attachment types",
+            "modelos-comerciales": "Commercial models",
+            "metodos-activacion": "Activation methods",
+            "formas-conteo": "Counting methods",
+            "especificaciones-tipo": "Specifications by asset type",
+            "kits": "Standard role kits",
+            "modelos": "Models",
+            "tipos-activo": "Asset types",
+            "ubicaciones": "Locations"
+        },
+        "hints": {
+            "motivos-movimiento": "Why equipment is assigned, lent, transferred or returned. “Applies to” limits where each reason is offered.",
+            "motivos-baja": "The code is stored in the disposal history; system entries cannot be changed.",
+            "marcas": "Merge duplicated brands (for example “Kingstom” into “Kingston”): their models and assets move to the right brand."
+        },
+        "name": "Name",
+        "description": "Description",
+        "options": "Options",
+        "in_use": "In use",
+        "active": "Active",
+        "merge": "Merge into another",
+        "system": "System",
+        "system_hint": "System entry: the application relies on it, so it cannot be renamed or deactivated.",
+        "merged_into": "Merged into “{{name}}”",
+        "drag_hint": "Drag the rows to change the order in which they appear in forms.",
+        "show_inactive": "Show inactive",
+        "new_item": "New entry",
+        "created": "“{{name}}” was added.",
+        "add_named": "Add “{{name}}”",
+        "merge_title": "Merge “{{name}}”",
+        "merge_help": "Everything that uses this entry will move to the target entry. This one will become inactive and keep a reference to the target; the operation is recorded in the audit log.",
+        "merge_target": "Merge into",
+        "merge_nothing": "No records use it: it will only become inactive.",
+        "merge_preview_one": "{{count}} record will be moved:",
+        "merge_preview_other": "{{count}} records will be moved:",
+        "merge_confirm": "Merge",
+        "merge_done": "“{{from}}” was merged into “{{to}}”.",
+        "specs_help": "Choose an asset type and indicate which specifications must be recorded. Missing required ones appear in the data quality review.",
+        "asset_type": "Asset type",
+        "specification": "Specification",
+        "required": "Required",
+        "allowed_values": "Allowed values (optional)",
+        "specs_empty": "This type does not require any specifications yet.",
+        "values_placeholder": "Type and press Enter",
+        "move_up": "Move up",
+        "add_spec": "Add specification",
+        "kits_help": "Equipment a role or department receives when someone joins. The job handover proposes them first.",
+        "kit_new": "New kit",
+        "kit_edit": "Edit kit",
+        "kit_applies": "Applies to",
+        "kit_items": "Contents",
+        "kits_empty": "There are no role kits yet.",
+        "kit_for_position": "Role: {{name}}",
+        "kit_for_department": "Department: {{name}}",
+        "kit_delete_confirm": "Do you want to delete the kit “{{name}}”?",
+        "kit_by_position": "By role",
+        "kit_by_department": "By department",
+        "position": "Role",
+        "department": "Department",
+        "quantity": "Quantity",
+        "kit_add_item": "Add equipment",
+        "extras": {
+            "pide_detalle": "Requires written detail",
+            "MMO_Pide_Detalle": "Requires written detail",
+            "MBA_Pide_Detalle": "Requires a note",
+            "DBA_Pide_Detalle": "Requires a note",
+            "TFA_Pide_Detalle": "Requires a description",
+            "AMA_Pide_Detalle": "Requires written detail",
+            "UME_Simbolo": "Symbol (GB, m, kg…)",
+            "UME_Unidad": "Unit of measure"
+        },
+        "applies": {
+            "ALL": "All movements",
+            "ASIGNACION": "Assignment",
+            "PRESTAMO": "Loan",
+            "TRANSFERENCIA": "Transfer",
+            "DEVOLUCION": "Return",
+            "INSTALACION": "Installation in an area",
+            "RETIRO": "Removal from an area"
+        },
+        "refs": {
+            "INV_MODELO__MAR_Marca": "Models",
+            "INV_SOFTWARE__MAR_Marca": "Software",
+            "INV_ACTIVO__MAR_Marca": "Assets of those models",
+            "INV_MODELO__TCN_Tipo_Conexion": "Models",
+            "INV_ESPECIFICACION__TES_Tipo_Especificacion": "Asset specifications",
+            "INV_ESPECIFICACION_TIPO_ACTIVO__TES_Tipo_Especificacion": "Specifications by type",
+            "INV_TIPO_ESPECIFICACION__UME_Unidad": "Specification types",
+            "INV_CONSUMIBLE__UME_Unidad": "Consumables",
+            "INV_CONSUMIBLE__CCO_Categoria": "Consumables",
+            "INV_MOVIMIENTO__MMO_Motivo": "Movements",
+            "INV_MANTENIMIENTO__TMA_Tipo_Mantenimiento": "Maintenance tickets",
+            "INV_MANTENIMIENTO__TFA_Tipo_Falla": "Maintenance tickets",
+            "INV_DETALLE_MANT__AMA_Accion": "Recorded actions",
+            "INV_AREA__TAR_Tipo_Area": "Areas",
+            "INV_EVIDENCIA__TEV_Tipo_Evidencia": "Evidence",
+            "INV_ADJUNTO__ADJ_Categoria": "Attachments"
+        },
+        "kit_license": "License",
+        "kit_add_license": "Add license"
+    },
+    "catalog_items": {
+        "motivos-movimiento": {
+            "INGRESO_PERSONAL": "New hire",
+            "RENOVACION": "Renewal",
+            "REEMPLAZO_FALLA": "Replacement due to fault",
+            "VISITA_PRESENCIAL": "On-site visit",
+            "PRESTAMO_TEMPORAL": "Temporary loan",
+            "CAMBIO_PUESTO": "Role change",
+            "RENUNCIA": "Employee departure",
+            "CAMBIO_EQUIPO": "Equipment replacement",
+            "FIN_PRESTAMO": "End of loan",
+            "FALLA": "Equipment fault",
+            "REASIGNACION": "Reassignment",
+            "REVERTIDO": "Reverted",
+            "OTRO": "Other",
+            "INSTALACION_NUEVA": "New installation",
+            "REUBICACION": "Relocation",
+            "RETIRO_USO": "No longer used in the area",
+            "RETIRO_FALLA": "Removed due to a fault",
+            "PERDIDA_ROBO": "Loss or theft"
+        },
+        "motivos-baja": {
+            "OBSOLESCENCIA": "Obsolescence",
+            "DANO_IRREPARABLE": "Irreparable damage",
+            "ROBO": "Theft",
+            "PERDIDA": "Loss",
+            "FIN_ARRENDAMIENTO": "End of lease",
+            "GARANTIA_REEMPLAZO": "Warranty replacement",
+            "OTRO": "Other",
+            "RECLASIFICACION": "Reclassified as consumable"
+        },
+        "destinos-baja": {
+            "DESTRUCCION": "Destruction",
+            "RECICLAJE": "Recycling",
+            "DONACION": "Donation",
+            "VENTA": "Sale",
+            "DEVOLUCION_PROVEEDOR": "Return to supplier",
+            "RESGUARDO": "Kept in storage",
+            "OTRO": "Other",
+            "NO_RECUPERADO": "Not recovered (loss or theft)",
+            "CONSUMIBLES": "Moved to consumables"
+        },
+        "unidades-medida": {
+            "UNIDAD": "Unit",
+            "CAJA": "Box",
+            "PAQUETE": "Pack",
+            "ROLLO": "Roll",
+            "LITRO": "Liter",
+            "ML": "Milliliter",
+            "METRO": "Meter",
+            "KG": "Kilogram",
+            "G": "Gram",
+            "GB": "Gigabyte",
+            "TB": "Terabyte",
+            "MHZ": "Megahertz",
+            "GHZ": "Gigahertz",
+            "PULGADAS": "Inches",
+            "W": "Watt",
+            "VA": "Volt-ampere",
+            "MAH": "Milliampere-hour",
+            "NUCLEOS": "Cores",
+            "PORCENTAJE": "Percentage",
+            "CICLOS": "Cycles"
+        },
+        "categorias-consumible": {
+            "LIMPIEZA": "Cleaning",
+            "CABLES": "Cables",
+            "TINTAS_TONER": "Ink and toner",
+            "BATERIAS": "Batteries",
+            "HERRAMIENTA": "Tools",
+            "OTRO": "Other"
+        },
+        "tipos-area": {
+            "OFICINA": "Office",
+            "BODEGA": "Storage",
+            "REMOTO": "Remote work",
+            "SERVICIO_TECNICO": "Technical service",
+            "OTRO": "Other"
+        },
+        "tipos-falla": {
+            "NO_ENCIENDE": "Does not turn on",
+            "PANTALLA": "Screen",
+            "BATERIA": "Battery",
+            "DISCO": "Disk",
+            "TECLADO_TOUCHPAD": "Keyboard or touchpad",
+            "RED": "Network",
+            "SOFTWARE_SO": "Software or operating system",
+            "DANO_FISICO": "Physical damage",
+            "OTRO": "Other"
+        },
+        "acciones-mantenimiento": {
+            "LIMPIEZA": "Cleaning",
+            "CAMBIO_PIEZA": "Part replacement",
+            "REINSTALACION_SO": "Operating system reinstallation",
+            "ACTUALIZACION": "Update",
+            "GARANTIA": "Warranty",
+            "OTRO": "Other"
+        },
+        "tipos-documento": {
+            "FACTURA": "Invoice",
+            "TICKET": "Ticket",
+            "ACTA": "Record",
+            "ORDEN_COMPRA": "Purchase order",
+            "RECEPCION": "Receipt",
+            "MOVIMIENTO": "Movement",
+            "BAJA": "Disposal",
+            "OFFBOARDING": "Employee offboarding",
+            "TOMA_INVENTARIO": "Inventory count",
+            "OTRO": "Other"
+        },
+        "tipos-evidencia": {
+            "factura": "Invoice",
+            "foto": "Photo",
+            "acta": "Signed record",
+            "reporte": "Technical report",
+            "otro": "Other"
+        },
+        "modelos-comerciales": {
+            "PERPETUA": "Perpetual",
+            "SUSCRIPCION": "Subscription",
+            "OEM": "OEM",
+            "VOLUMEN": "Volume",
+            "SAAS": "SaaS",
+            "PRUEBA": "Trial",
+            "GRATUITA": "Free / open source"
+        },
+        "metodos-activacion": {
+            "SERIAL": "Serial number",
+            "PRODUCT_KEY": "Product key",
+            "SERIAL_KEY": "Serial + key",
+            "CUENTA": "Account (email + password)",
+            "SERVIDOR": "License server",
+            "ARCHIVO": "License file",
+            "DONGLE": "USB dongle",
+            "TOKEN": "Token / API key",
+            "SIN_CREDENCIAL": "No credential"
+        },
+        "formas-conteo": {
+            "EQUIPO": "Per device",
+            "PERSONA": "Per person (named user)",
+            "CONCURRENTE": "Concurrent",
+            "SITIO": "Site / unlimited"
+        }
+    },
+    "row_actions": {
+        "menu": "Actions for {{code}}",
+        "assign": "Assign",
+        "transfer": "Transfer to another person",
+        "return": "Return",
+        "maintenance": "Open a maintenance ticket",
+        "open_ticket": "View the maintenance ticket",
+        "history": "Asset history",
+        "label": "Print label"
+    },
+    "batch_edit": {
+        "title_one": "Edit {{count}} asset",
+        "title_other": "Edit {{count}} assets",
+        "help": "Tick only what you want to change; everything else stays the same. If one asset does not accept the change, it is applied to none.",
+        "location": "Location",
+        "area": "Area",
+        "location_help": "Only equipment without custody: the location of assigned equipment follows its custody.",
+        "cost": "Cost",
+        "warranty": "Warranty end",
+        "purchase": "Supplier and invoice",
+        "supplier": "Supplier",
+        "invoice": "Invoice",
+        "specification": "Specification",
+        "value": "Value",
+        "value_help": "Leave it empty to remove it.",
+        "apply_one": "Apply to {{count}} asset",
+        "apply_other": "Apply to {{count}} assets",
+        "done_one": "{{count}} asset was updated.",
+        "done_other": "{{count}} assets were updated.",
+        "undone": "The previous values were restored."
+    },
+    "asset_page": {
+        "back_to_list": "Back to the list",
+        "open_as_page": "Open as a page"
+    },
+    "person_file": {
+        "return_all": "Return everything",
+        "assign_license": "Assign license",
+        "assign": "Assign",
+        "consolidated_record": "Consolidated record",
+        "email": "Email",
+        "phone": "Phone",
+        "status": "Status",
+        "tabs": {
+            "equipos": "Equipment in custody",
+            "licencias": "Licenses and accounts",
+            "consumibles": "Consumables received",
+            "historial": "History"
+        },
+        "code": "Code",
+        "type": "Type",
+        "area": "Area",
+        "since": "Since",
+        "due": "Due back on {{date}}",
+        "software": "Software",
+        "account": "Account",
+        "release_license": "Release the license",
+        "item": "Item",
+        "quantity": "Quantity",
+        "date": "Date",
+        "event": "Event",
+        "reference": "Reference",
+        "reason": "Reason",
+        "no_licenses": "No licenses or accounts are assigned.",
+        "no_consumables": "No consumables have been received.",
+        "no_history": "There are no movements yet.",
+        "licenses_assigned_one": "{{count}} license was assigned.",
+        "licenses_assigned_other": "{{count}} licenses were assigned.",
+        "license_released": "The license was released."
+    },
+    "notifications": {
+        "title_one": "{{count}} pending notice",
+        "title_other": "{{count}} pending notices"
+    },
+    "help": {
+        "how_to": "How is it done?",
+        "back": "Back",
+        "next": "Next",
+        "done": "Got it",
+        "skip": "Skip",
+        "assets": {
+            "title": "Assets",
+            "step1_title": "Search and filter",
+            "step1": "Type the code, serial number or hostname, or filter by type and status. Filters stay in the address and can be saved as a view.",
+            "step2_title": "Open the record",
+            "step2": "Click a row to see the full record: details, software, components, history and attachments.",
+            "step3_title": "Use the “⋯” menu",
+            "step3": "Each row offers only what can be done for its status: assign, return, transfer, open a ticket or print the label.",
+            "step4_title": "Work in bulk",
+            "step4": "Select several assets to hand them over, return them, edit cost, warranty or location, or dispose of them at once."
+        },
+        "movements": {
+            "title": "Movements",
+            "step1_title": "Record an assignment",
+            "step1": "Choose the equipment, the person and the area; the system suggests the usual area and the reason.",
+            "step2_title": "Choose the reason",
+            "step2": "Reasons come from the catalog center; “Other” asks for a written detail.",
+            "step3_title": "Download the record",
+            "step3": "When finished, download the handover record for the person to sign.",
+            "step4_title": "Review the history",
+            "step4": "Every movement is recorded in the equipment ledger and in the person's record."
+        },
+        "software": {
+            "title": "Software and licenses",
+            "step1_title": "Register the software",
+            "step1": "Enter the name, version and manufacturer (from the brand list).",
+            "step2_title": "Add the license",
+            "step2": "Choose the commercial model, the activation method and how seats are counted; the form asks for exactly what that activation needs.",
+            "step3_title": "Load the accounts",
+            "step3": "Paste a list (one account per line) and review the preview before saving.",
+            "step4_title": "Protect the passwords",
+            "step4": "“Show” displays the password for 30 seconds and is recorded; after a person leaves, change their account password."
+        },
+        "catalogs": {
+            "title": "Catalog center",
+            "step1_title": "Choose a catalog",
+            "step1": "Catalogs are grouped by topic on the left.",
+            "step2_title": "Add and edit",
+            "step2": "Type a new entry at the top; names are edited directly in the table.",
+            "step3_title": "Order and deactivate",
+            "step3": "Drag rows to set the order in forms; deactivate instead of deleting.",
+            "step4_title": "Merge duplicates",
+            "step4": "“Merge” moves everything using a duplicate entry to the right one and leaves a record in the audit log."
+        },
+        "persons": {
+            "title": "Employees",
+            "step1_title": "Find the person",
+            "step1": "Filter by name, email or department.",
+            "step2_title": "Open their 360 record",
+            "step2": "You will see their equipment, licenses and accounts, consumables and history on a single page.",
+            "step3_title": "Hand over the workstation",
+            "step3": "“Job handover” assigns several devices and licenses in a single operation.",
+            "step4_title": "Record the departure",
+            "step4": "The departure returns their equipment, releases their accounts and flags which passwords to change."
+        },
+        "maintenance": {
+            "title": "Maintenance",
+            "step1_title": "Open the ticket",
+            "step1": "Choose the equipment, who requests it and the fault type; the equipment moves to “Under repair”.",
+            "step2_title": "Record the work done",
+            "step2": "Add each action from the catalog with its cost.",
+            "step3_title": "Close the ticket",
+            "step3": "When closed, the equipment becomes available again and the cost stays in its history.",
+            "step4_title": "Review old tickets",
+            "step4": "Tickets open for more than 15 days appear in “My pending items”."
+        }
+    },
+    "table_settings": {
+        "button": "Columns",
+        "columns": "Visible columns",
+        "density": "Density",
+        "compact": "Compact",
+        "comfortable": "Comfortable",
+        "reset": "Reset"
+    },
+    "asset_class": {
+        "field": "Class",
+        "auto": "If left empty it is inferred from the name (Laptop → Computing, Printer → Printing).",
+        "auto_option": "Infer from the name",
+        "supply_notice": "A supply is not registered as an asset: it is tracked by quantity in Consumables. Existing assets of this type can be converted with “Reclassify”.",
+        "components_title": "Internal components it accepts",
+        "components_field": "Component types",
+        "components_help": "For example, a laptop accepts RAM, disk and battery. Empty: any type of the “Component” class.",
+        "components_none": "There are no types of the “Component” class.",
+        "names": {
+            "COMPUTO": "Computing",
+            "MOVIL": "Mobile",
+            "PERIFERICO": "Peripheral",
+            "IMPRESION": "Printing",
+            "RED": "Network",
+            "ENERGIA": "Power",
+            "AUDIOVISUAL": "Audiovisual",
+            "COMPONENTE": "Component",
+            "HERRAMIENTA": "Tool",
+            "INSUMO": "Supply",
+            "OTRO": "Other"
+        },
+        "help": {
+            "COMPUTO": "Assigned to a person; carries software, licenses and internal components (RAM, disk, battery).",
+            "MOVIL": "Assigned to a person; carries software; identified by IMEI and line number.",
+            "PERIFERICO": "Assigned to a person; no software or components.",
+            "IMPRESION": "Installed in an area (optional person in charge); uses compatible consumables such as toner or ink.",
+            "RED": "Installed in an area; has IP, MAC, ports and firmware.",
+            "ENERGIA": "Installed in an area; accepts batteries as components.",
+            "AUDIOVISUAL": "Installed in an area (projector, screen); may use consumables.",
+            "COMPONENTE": "Installed inside another device, or kept in storage as a spare.",
+            "HERRAMIENTA": "IT team tool; lent or assigned to a person.",
+            "INSUMO": "Not an asset: tracked by quantity in Consumables.",
+            "OTRO": "Assigned to a person; no software or components."
+        }
+    },
+    "reclassify": {
+        "action": "Reclassify as consumable",
+        "title": "Reclassify “{{tipo}}”",
+        "explain_one": "{{count}} asset of this type will become stock of a consumable. It is retired as “Reclassified” and its history is kept.",
+        "explain_other": "{{count}} assets of this type will become stock of a consumable. They are retired as “Reclassified” and their history is kept.",
+        "blocked": "These assets must be released first:",
+        "reasons": {
+            "ASIGNADO": "Assigned to a person (record the return)",
+            "INSTALADO_EN_AREA": "Installed in an area (remove it)",
+            "INSTALADO_EN_EQUIPO": "Installed inside another device",
+            "EN_MANTENIMIENTO": "With an open maintenance ticket"
+        },
+        "site": "Site",
+        "count_one": "{{count}} asset",
+        "count_other": "{{count}} assets",
+        "consumable_name": "Consumable",
+        "consumable_help": "If it already exists at the site it receives the stock; otherwise it is created.",
+        "reason": "Reason",
+        "approval_note": "The Head of IT carries it out upon approval (Approvals).",
+        "submit": "Request reclassification",
+        "requested": "Sent to the Head of IT for approval."
+    },
+    "shared": {
+        "install": "Install in an area",
+        "move": "Relocate",
+        "remove": "Remove from area",
+        "install_title": "Install {{code}} in an area",
+        "move_title": "Relocate {{code}}",
+        "remove_title": "Remove {{code}} from its area",
+        "install_help": "A shared device is not in anyone's custody: it stays in the area and, if you wish, with a person in charge who reports faults or receives the toner.",
+        "remove_help": "The device goes back to storage. If it is damaged, open a maintenance ticket afterwards.",
+        "area": "Area where it stays",
+        "responsible": "Person in charge",
+        "responsible_help": "Optional. It does not count as a device in their custody.",
+        "installed": "{{code}} was installed in {{area}}.",
+        "moved": "{{code}} was relocated to {{area}}.",
+        "removed": "{{code}} was removed from the area and is in storage.",
+        "installed_in": "Installed in",
+        "not_installed": "Not installed in an area"
+    },
+    "movement_reason": {
+        "reason": "Reason",
+        "note": "Note",
+        "note_help": "Optional unless the reason requires it. It is kept in the history and in the handover record.",
+        "required": "Choose a reason.",
+        "section": "Reason for the movement"
+    },
+    "asset_supplies": {
+        "tab": "Consumables",
+        "title": "Device consumables",
+        "subtitle": "Compatible toner, ink or cartridges and every recorded change.",
+        "compatible": "Compatible with this model",
+        "no_compatible": "No consumable is marked as compatible with this model (Consumables → edit → Compatibility).",
+        "stock_one": "{{count}} {{unit}} in stock",
+        "stock_other": "{{count}} {{unit}} in stock",
+        "history": "Recorded changes",
+        "no_history": "No consumable has been recorded for this device yet.",
+        "date": "Date",
+        "item": "Consumable",
+        "by": "Recorded by"
+    },
+    "missing": {
+        "tab": "Missing items",
+        "help": "What did not turn up in a count: investigate it, mark it as found or request its write-off for loss or theft.",
+        "only_open": "Unresolved only",
+        "empty_open": "There are no unresolved missing items.",
+        "empty": "There are no missing items recorded.",
+        "asset": "Device",
+        "last_area": "Last location",
+        "since": "Since",
+        "follow_up": "Follow-up",
+        "states": {
+            "PENDIENTE": "Pending",
+            "EN_INVESTIGACION": "Under investigation",
+            "LOCALIZADO": "Found",
+            "BAJA_SOLICITADA": "Write-off requested",
+            "DADO_DE_BAJA": "Written off"
+        },
+        "add_note": "Note",
+        "found": "Found",
+        "write_off": "Write off",
+        "titles": {
+            "nota": "Follow-up of {{code}}",
+            "localizado": "{{code}} turned up",
+            "baja": "Write-off for loss or theft of {{code}}"
+        },
+        "write_off_help": "It goes to the Head of IT for approval. If the device was assigned, first record the return with the reason “Loss or theft”.",
+        "document_help": "Police report or record, if any.",
+        "found_area": "Where it turned up",
+        "found_area_help": "Corrects the location of the device.",
+        "note": "What was investigated",
+        "explanation": "Explanation",
+        "submit": {
+            "nota": "Save note",
+            "localizado": "Mark as found",
+            "baja": "Request write-off"
+        },
+        "done": {
+            "nota": "Note recorded.",
+            "localizado": "Missing item resolved: the device turned up.",
+            "baja": "The write-off is awaiting approval by the Head of IT."
+        }
+    },
+    "month_end": {
+        "title": "Month-end close",
+        "subtitle": "Inventory value at the start and end of the month and what changed, by site and currency (not converted).",
+        "export": "Export to Excel",
+        "month": "Month",
+        "year": "Year",
+        "all_sites": "All sites",
+        "empty": "No activity in the period.",
+        "assets": "Assets by site and currency",
+        "currency": "Currency",
+        "opening_qty": "Opening",
+        "opening": "Opening value",
+        "additions_qty": "Additions",
+        "additions": "Additions value",
+        "disposals_qty": "Disposals",
+        "disposals": "Disposals value",
+        "closing_qty": "Closing",
+        "closing": "Closing value",
+        "no_cost": "No cost",
+        "additions_detail": "Additions this month",
+        "disposals_detail": "Disposals this month",
+        "invoice": "Invoice",
+        "disposal_date": "Disposal date",
+        "consumables": "Valued consumables",
+        "in_qty": "Inflows",
+        "in_value": "Inflows value",
+        "out_qty": "Outflows",
+        "out_value": "Outflows value",
+        "adjustments": "Adjustments",
+        "purchases": "Purchases received",
+        "order": "Order",
+        "supplier": "Supplier",
+        "value": "Value",
+        "maintenance": "Maintenance closed this month",
+        "tickets": "Tickets",
+        "licenses": "Licenses active at month end",
+        "quantity": "Quantity",
+        "expiry": "Expiry"
     }
 }

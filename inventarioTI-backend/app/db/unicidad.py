@@ -18,6 +18,7 @@ from __future__ import annotations
 from sqlalchemy import Index, func
 
 import app.models.attachment  # noqa: F401  (registra todas las tablas)
+import app.models.catalogo_estandar  # noqa: F401
 import app.models.consumable  # noqa: F401
 import app.models.procurement  # noqa: F401
 from app.db.base import Base
@@ -47,6 +48,15 @@ INDICES_CI: list[tuple[str, str, tuple[str, ...], tuple[str, ...], str]] = [
     ("uq_ci_tipo_mantenimiento_nombre", "INV_TIPO_MANTENIMIENTO", ("TMA_Nombre",), (),
      "MAINTENANCE_TYPE_ALREADY_EXISTS"),
     ("uq_ci_tipo_movimiento_nombre", "INV_TIPO_MOVIMIENTO", ("TMO_Nombre",), (), "MOVEMENT_TYPE_ALREADY_EXISTS"),
+    # Catálogos estándar (app/models/catalogo_estandar.py).
+    *[(f"uq_ci_{tabla[4:].lower()}_nombre", tabla, (f"{prefijo}_Nombre",), (), "CATALOG_ITEM_ALREADY_EXISTS")
+      for tabla, prefijo in (
+          ("INV_MOTIVO_MOVIMIENTO", "MMO"), ("INV_MOTIVO_BAJA", "MBA"), ("INV_DESTINO_BAJA", "DBA"),
+          ("INV_UNIDAD_MEDIDA", "UME"), ("INV_CATEGORIA_CONSUMIBLE", "CCO"), ("INV_TIPO_AREA", "TAR"),
+          ("INV_TIPO_FALLA", "TFA"), ("INV_ACCION_MANTENIMIENTO", "AMA"), ("INV_TIPO_DOCUMENTO", "TDO"),
+          ("INV_MODELO_COMERCIAL", "MCO"), ("INV_METODO_ACTIVACION", "MAC"), ("INV_FORMA_CONTEO", "FCO"),
+      )],
+    ("uq_ci_tipo_evidencia_nombre", "INV_TIPO_EVIDENCIA", ("TEV_Nombre",), (), "CATALOG_ITEM_ALREADY_EXISTS"),
 ]
 
 # Restricciones exactas ya existentes → mismo código de error.

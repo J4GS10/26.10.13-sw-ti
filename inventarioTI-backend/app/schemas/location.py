@@ -119,6 +119,8 @@ class AreaBase(Esquema):
     ARE_Tipo_Acceso: str = "General"
     ARE_Descripcion: Optional[str] = Field(None, max_length=255)
     NIV_Nivel: int # FK
+    # Tipo de área del catálogo (BODEGA, OFICINA, REMOTO…).
+    TAR_Tipo_Area: Optional[int] = None
 
 class AreaCreate(AreaBase):
     pass
@@ -127,6 +129,7 @@ class AreaUpdate(Esquema):
     ARE_Nombre: Optional[str] = Field(None, min_length=2, max_length=150)
     ARE_Tipo_Acceso: Optional[str] = None
     ARE_Descripcion: Optional[str] = Field(None, max_length=255)
+    TAR_Tipo_Area: Optional[int] = None
 
 class AreaResponse(AreaBase):
     ARE_Area: int

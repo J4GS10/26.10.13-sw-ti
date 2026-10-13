@@ -7,6 +7,9 @@ import EditIcon from '@mui/icons-material/Edit';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import SaveIcon from '@mui/icons-material/Save';
 import { useTranslation } from 'react-i18next';
+import type { CatalogoItem } from '../../api/catalogoService';
+import { CatalogField } from '../../components/CatalogField';
+import { pideDetalle, useCatalogo } from '../../hooks/useCatalogo';
 import { EmptyState } from '../../components/ui';
 import { useConfirm } from '../../components/confirm-context';
 import { MoneyField, SectionCard } from '../../components/ui';
@@ -30,6 +33,8 @@ export const MaintenanceDetailDialog = ({ open, ticket, onClose, onChanged }: Pr
     // Form: nuevo detalle
     const [addingDet, setAddingDet] = useState(false);
     const [detAccion, setDetAccion] = useState('');
+    const [detAccionItem, setDetAccionItem] = useState<CatalogoItem | null>(null);
+    const { items: acciones } = useCatalogo('acciones-mantenimiento');
     const [detCosto, setDetCosto] = useState('');
     // Form: editar detalle
     const [editingDet, setEditingDet] = useState<DetalleMantenimiento | null>(null);
@@ -69,12 +74,14 @@ export const MaintenanceDetailDialog = ({ open, ticket, onClose, onChanged }: Pr
         return null;
     const resetDetForm = () => {
         setDetAccion('');
+        setDetAccionItem(null);
         setDetCosto('');
         setEditingDet(null);
         setAddingDet(false);
     };
     const handleSaveDetalle = async () => {
-        if (detAccion.trim().length < 5) {
+        // Acción del catálogo obligatoria; el detalle, solo si la acción lo pide.
+        if (!detAccionItem || (pideDetalle(detAccionItem) && detAccion.trim().length < 5)) {
             enqueueSnackbar(t('maintenance.errors.short_action'), {
                 variant: 'warning',
             });
@@ -83,6 +90,7 @@ export const MaintenanceDetailDialog = ({ open, ticket, onClose, onChanged }: Pr
         try {
             const payload: DetalleCreate = {
                 DMA_Accion_Realizada: detAccion.trim(),
+                AMA_Accion: detAccionItem.id,
                 DMA_Costo_Item: detCosto ? Number(detCosto) : 0,
             };
             if (editingDet) {
@@ -118,6 +126,7 @@ export const MaintenanceDetailDialog = ({ open, ticket, onClose, onChanged }: Pr
         setEditingDet(det);
         setAddingDet(true);
         setDetAccion(det.DMA_Accion_Realizada);
+        setDetAccionItem(acciones.find((a) => a.id === det.AMA_Accion) ?? null);
         setDetCosto(String(det.DMA_Costo_Item ?? 0));
     };
     const handleClose = async () => {
@@ -222,8 +231,13 @@ export const MaintenanceDetailDialog = ({ open, ticket, onClose, onChanged }: Pr
             <Typography variant="subtitle2" gutterBottom>
               {editingDet ? t('common.edit') : t('maintenance.add_detail')}
             </Typography>
-            <Stack direction="row" spacing={2}>
-              <TextField fullWidth size="small" label={t('maintenance.col_action')} value={detAccion} onChange={(e) => setDetAccion(e.target.value)}/>
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+              <Box sx={{ minWidth: 220 }}>
+                <CatalogField size="small" clave="acciones-mantenimiento" required label={t('maintenance.col_action')}
+                  value={detAccionItem?.id ?? null} onChange={(_v, item) => setDetAccionItem(item)}/>
+              </Box>
+              <TextField fullWidth size="small" label={t('returns.detail')} value={detAccion} onChange={(e) => setDetAccion(e.target.value)}
+                error={pideDetalle(detAccionItem) && detAccion.trim().length < 5}/>
               <MoneyField size="small" label={t('maintenance.col_cost')} value={detCosto} onChange={setDetCosto} currency={ticket.MAN_Moneda ?? DEFAULT_CURRENCY} sx={{ width: 200 }}/>
               <Button onClick={resetDetForm}>{t('common.cancel')}</Button>
               <Button variant="contained" onClick={handleSaveDetalle} startIcon={<SaveIcon />}>

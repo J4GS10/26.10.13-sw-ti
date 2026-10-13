@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import {
   Alert, Button, Checkbox, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel,
-  MenuItem, Stack, TextField,
+  Stack, TextField,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { useSnackbar } from 'notistack';
 import { inventarioService } from '../../api/inventarioService';
 import { getApiErrorCode, getApiErrorMessage, getApiErrorParams } from '../../api/errors';
-import { DESTINOS_BAJA, MOTIVOS_BAJA, type BajaPayload } from '../../types/kardex';
+import type { CatalogoItem } from '../../api/catalogoService';
+import { CatalogField } from '../../components/CatalogField';
+import { pideDetalle } from '../../hooks/useCatalogo';
 import { hoyLocal } from '../../utils/dates';
 
 type ActivoRef = { ACT_Activo: string; ACT_Codigo_Interno: string };
@@ -29,8 +31,10 @@ export const BajaDialog = ({ open, activo, activos, onClose }: Props) => {
   const lote = activos && activos.length > 0 ? activos : null;
   const { t } = useTranslation();
   const { enqueueSnackbar } = useSnackbar();
-  const [motivo, setMotivo] = useState<BajaPayload['motivo'] | ''>('');
-  const [destino, setDestino] = useState<BajaPayload['destino'] | ''>('');
+  const [motivoItem, setMotivoItem] = useState<CatalogoItem | null>(null);
+  const [destinoItem, setDestinoItem] = useState<CatalogoItem | null>(null);
+  const motivo = motivoItem?.codigo ?? '';
+  const destino = destinoItem?.codigo ?? '';
   const [fecha, setFecha] = useState(hoyLocal());
   const [documento, setDocumento] = useState('');
   const [observacion, setObservacion] = useState('');
@@ -40,8 +44,8 @@ export const BajaDialog = ({ open, activo, activos, onClose }: Props) => {
 
   useEffect(() => {
     if (!open) return;
-    setMotivo('');
-    setDestino('');
+    setMotivoItem(null);
+    setDestinoItem(null);
     setFecha(hoyLocal());
     setDocumento('');
     setObservacion('');
@@ -49,7 +53,7 @@ export const BajaDialog = ({ open, activo, activos, onClose }: Props) => {
     setRetirar(false);
   }, [open]);
 
-  const requiereDetalle = motivo === 'OTRO' || destino === 'OTRO';
+  const requiereDetalle = pideDetalle(motivoItem) || pideDetalle(destinoItem);
   const valido = !!motivo && !!destino && (!requiereDetalle || !!observacion.trim()) && (componentes == null || retirar);
 
   const confirmarLote = async (lista: ActivoRef[]) => {
@@ -106,14 +110,10 @@ export const BajaDialog = ({ open, activo, activos, onClose }: Props) => {
         <Stack spacing={2} sx={{ mt: 1 }}>
           <Alert severity="warning">{t('decommission.warning')}</Alert>
           <Alert severity="info">{t('decommission.approval_note')}</Alert>
-          <TextField select required label={t('decommission.reason')} value={motivo}
-            onChange={(e) => setMotivo(e.target.value as BajaPayload['motivo'])}>
-            {MOTIVOS_BAJA.map((m) => <MenuItem key={m} value={m}>{t(`decommission.reasons.${m}`)}</MenuItem>)}
-          </TextField>
-          <TextField select required label={t('decommission.destination')} value={destino}
-            onChange={(e) => setDestino(e.target.value as BajaPayload['destino'])}>
-            {DESTINOS_BAJA.map((d) => <MenuItem key={d} value={d}>{t(`decommission.destinations.${d}`)}</MenuItem>)}
-          </TextField>
+          <CatalogField clave="motivos-baja" valueBy="codigo" required label={t('decommission.reason')}
+            value={motivo || null} onChange={(_v, item) => setMotivoItem(item)} />
+          <CatalogField clave="destinos-baja" valueBy="codigo" required label={t('decommission.destination')}
+            value={destino || null} onChange={(_v, item) => setDestinoItem(item)} />
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
             <TextField type="date" label={t('decommission.date')} value={fecha} onChange={(e) => setFecha(e.target.value)}
               InputLabelProps={{ shrink: true }} inputProps={{ max: hoyLocal() }} fullWidth />

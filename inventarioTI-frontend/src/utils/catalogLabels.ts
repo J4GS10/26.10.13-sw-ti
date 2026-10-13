@@ -18,6 +18,8 @@ export const movementTypeLabel = (t: TFunction, name?: string | null): string =>
 const STATE_VARIANT: Record<string, StatusVariant> = {
   disponible: 'disponible',
   asignado: 'asignado',
+  // Equipo compartido en uso en un área: mismo tono que «en uso».
+  instalado: 'asignado',
   en_bodega: 'bodega',
   en_reparacion: 'reparacion',
   en_transito: 'por_vencer',
@@ -35,3 +37,20 @@ export const typeLabel = (t: TFunction, name?: string | null): string =>
 /** Tipos de mantenimiento (Preventivo, Correctivo, Predictivo) en el idioma de la aplicación. */
 export const maintenanceTypeLabel = (t: TFunction, name?: string | null): string =>
   name ? t(`catalog.maintenance_types.${catalogSlug(name)}`, { defaultValue: name }) : '—';
+
+/**
+ * Nombre visible de un registro de catálogo estándar: los de sistema se
+ * traducen por su código (`catalog_items.<catálogo>.<CÓDIGO>`); los que crea
+ * el usuario se muestran tal cual.
+ */
+export const catalogItemLabel = (
+  t: TFunction, clave: string, item?: { nombre: string; codigo: string | null; sistema: boolean } | null,
+): string => {
+  if (!item) return '—';
+  if (item.sistema && item.codigo) return t(`catalog_items.${clave}.${item.codigo}`, { defaultValue: item.nombre });
+  return item.nombre;
+};
+
+/** Igual que catalogItemLabel, cuando solo se conoce el código guardado (p. ej. en el kardex). */
+export const catalogCodeLabel = (t: TFunction, clave: string, codigo?: string | null, fallback?: string | null): string =>
+  codigo ? t(`catalog_items.${clave}.${codigo}`, { defaultValue: fallback || codigo }) : '—';

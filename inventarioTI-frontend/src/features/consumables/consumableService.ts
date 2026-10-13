@@ -35,10 +35,18 @@ export const consumableService = {
   },
 
   /** Ajuste por conteo físico: fija la existencia real (con motivo). */
-  ajuste: async (id: number, data: StockAjusteCreate): Promise<MovimientoConsumible> => {
-    const r = await client.post<MovimientoConsumible>(`/consumibles/${id}/ajuste`, data);
+  ajuste: async (id: number, data: StockAjusteCreate): Promise<MovimientoConsumible | { APR_Aprobacion: number }> => {
+    // Si baja la existencia, el servidor responde 202 con la solicitud de aprobación.
+    const r = await client.post<MovimientoConsumible | { APR_Aprobacion: number }>(`/consumibles/${id}/ajuste`, data);
     return r.data;
   },
+
+  /** Modelos de equipo con los que es compatible (tóner → impresoras). */
+  compatibles: async (id: number): Promise<{ MOD_Modelo: number; modelo: string; marca: string }[]> =>
+    (await client.get(`/consumibles/${id}/compatibles`)).data,
+
+  setCompatibles: async (id: number, modelos: number[]) =>
+    (await client.put(`/consumibles/${id}/compatibles`, { modelos })).data,
 
   movimientos: async (id: number): Promise<MovimientoConsumible[]> => {
     const r = await client.get<MovimientoConsumible[]>(`/consumibles/${id}/movimientos`);

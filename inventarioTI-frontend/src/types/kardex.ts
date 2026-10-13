@@ -82,17 +82,21 @@ export interface CustodiaItem {
 
 export interface ResumenEntradasSalidas {
   por_tipo: Array<{ tipo: TipoEvento; clase: 'ENTRADA' | 'SALIDA'; eventos: number; cantidad: number;
-    valor_por_moneda: Record<string, number> }>;
+    valor_por_moneda?: Record<string, number> }>;
 }
 
 export type SeveridadAtencion = 'alta' | 'media' | 'baja';
 export interface ItemAtencion {
   clave: 'ASIGNADO_SIN_CUSTODIO' | 'ALMACEN_CON_CUSTODIO' | 'PERSONA_INACTIVA_CON_EQUIPOS' | 'PRESTAMO_VENCIDO'
-    | 'STOCK_BAJO' | 'ORDEN_PARCIAL' | 'BAJA_CON_CUSTODIA' | 'APROBACION_PENDIENTE' | 'TICKET_ANTIGUO' | 'GARANTIA_POR_VENCER' | 'LICENCIA_POR_VENCER' | 'DATOS_INCOMPLETOS';
+    | 'STOCK_BAJO' | 'ORDEN_PARCIAL' | 'BAJA_CON_CUSTODIA' | 'APROBACION_PENDIENTE' | 'TICKET_ANTIGUO' | 'GARANTIA_POR_VENCER' | 'LICENCIA_POR_VENCER' | 'DATOS_INCOMPLETOS'
+    | 'CUENTA_POR_CAMBIAR' | 'CUENTA_SIN_ROTAR' | 'CUPOS_AGOTADOS' | 'FALTANTE_PENDIENTE' | 'RESPONSABLE_INACTIVO'
+    | 'INSUMOS_POR_RECLASIFICAR';
   severidad: SeveridadAtencion;
   total: number;
   items: Array<Record<string, unknown>>;
   sin_garantia?: number;
+  /** CUENTA_SIN_ROTAR: días sin cambiar la clave que disparan el aviso. */
+  dias?: number;
   sin_costo?: number;
 }
 
@@ -161,14 +165,10 @@ export interface ComponentesActivo {
   historial: KardexEvento[];
 }
 
-export const MOTIVOS_BAJA = ['OBSOLESCENCIA', 'DANO_IRREPARABLE', 'ROBO', 'PERDIDA', 'FIN_ARRENDAMIENTO',
-  'GARANTIA_REEMPLAZO', 'OTRO'] as const;
-export const DESTINOS_BAJA = ['DESTRUCCION', 'RECICLAJE', 'DONACION', 'VENTA', 'DEVOLUCION_PROVEEDOR',
-  'RESGUARDO', 'OTRO'] as const;
-
 export interface BajaPayload {
-  motivo: typeof MOTIVOS_BAJA[number];
-  destino: typeof DESTINOS_BAJA[number];
+  /** Códigos de los catálogos «motivos-baja» y «destinos-baja». */
+  motivo: string;
+  destino: string;
   fecha?: string;
   documento?: string;
   observacion?: string;
@@ -178,6 +178,9 @@ export interface BajaPayload {
 export interface DevolucionPayload {
   ACT_Activo: string;
   MOV_Motivo?: string;
+  /** Motivo del catálogo (motivos-movimiento) y su detalle escrito. */
+  MMO_Motivo?: number | null;
+  MOV_Motivo_Detalle?: string | null;
   ARE_Area_Destino?: number | null;
   condicion?: 'BUENO' | 'CON_DANO';
 }

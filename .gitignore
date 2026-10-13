@@ -20,3 +20,14 @@ dist/
 # Respaldos locales del stack
 inventarioTI-backend/deploy/backups/
 inventarioTI-backend/deploy/backups-revision/
+
+# Notas locales de sesiones y planes de trabajo (no forman parte del producto)
+CONTINUAR.md
+ESTADO_*.md
+PROGRESS.md
+PROMPT_QA.md
+INFORME_EJECUTIVO_Y_PLAN.md
+PLAN_*.md
+herramientas-qa/INFORME_QA.md
+inventarioTI-backend/SESSION_PROGRESS.md
+inventarioTI-backend/implementation_plan.md

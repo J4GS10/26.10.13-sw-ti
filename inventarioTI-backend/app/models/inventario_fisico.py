@@ -72,3 +72,34 @@ class LecturaToma(Base):
             name="ck_toma_lectura_resultado",
         ),
     )
+
+
+ESTADOS_FALTANTE = ("PENDIENTE", "EN_INVESTIGACION", "LOCALIZADO", "BAJA_SOLICITADA", "DADO_DE_BAJA")
+
+
+class Faltante(Base):
+    """
+    Equipo que no apareció en una toma. Se investiga y se resuelve:
+    LOCALIZADO (apareció; también al leerlo en otra toma) o baja por pérdida o
+    robo (BAJA_SOLICITADA → DADO_DE_BAJA al aprobarse; si se rechaza, vuelve a
+    investigación). El seguimiento guarda cada nota con su autor y fecha.
+    """
+    __tablename__ = "INV_FALTANTE"
+
+    FAL_Faltante = Column(Integer, primary_key=True, autoincrement=True)
+    TOM_Toma = Column(Integer, ForeignKey("INV_TOMA_INVENTARIO.TOM_Toma", ondelete="SET NULL"), nullable=True,
+                      index=True)
+    ACT_Activo = Column(Uuid, ForeignKey("INV_ACTIVO.ACT_Activo", ondelete="CASCADE"), nullable=False, index=True)
+    SED_Sede = Column(Integer, ForeignKey("INV_SEDE.SED_Sede", ondelete="RESTRICT"), nullable=True, index=True)
+    FAL_Estado = Column(String(20), nullable=False, default="PENDIENTE")
+    FAL_Fecha = Column(DateTime, nullable=False, default=_utcnow_naive)
+    FAL_Seguimiento = Column(PortableJSON(), nullable=True)
+    FAL_Resolucion = Column(String(500), nullable=True)
+    FAL_Fecha_Resolucion = Column(DateTime, nullable=True)
+    APR_Aprobacion = Column(Integer, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "\"FAL_Estado\" IN ('PENDIENTE', 'EN_INVESTIGACION', 'LOCALIZADO', 'BAJA_SOLICITADA', 'DADO_DE_BAJA')",
+            name="ck_faltante_estado"),
+    )

@@ -144,6 +144,9 @@ class InventarioFisicoService:
         self.db.add(lectura)
         await self.db.flush()
         await self.db.refresh(lectura)
+        if activo is not None and resultado in ("ENCONTRADO", "OTRA_UBICACION"):
+            from app.services.faltantes import FaltanteService
+            await FaltanteService(self.db).resolver_por_lectura(activo.ACT_Activo, toma_id, usuario_id=usuario_id)
         esperados = await self._esperados(toma)
         leidos = {le.ACT_Activo for le in lecturas if le.ACT_Activo} | ({activo.ACT_Activo} if activo else set())
         # De otra sede solo se informa el código (no sus datos: fuera del alcance).
@@ -226,6 +229,9 @@ class InventarioFisicoService:
                         .values(ARE_Area_Ubicacion=item["area"])
                     )
         resumen["ubicaciones_actualizadas"] = bool(actualizar_ubicacion)
+        # Lo que no apareció queda para investigar (Tomas → Faltantes).
+        from app.services.faltantes import FaltanteService
+        resumen["faltantes_nuevos"] = await FaltanteService(self.db).registrar_de_toma(toma, resumen["faltantes"])
         toma.TOM_Estado = "CERRADA"
         toma.TOM_Fecha_Cierre = utcnow_naive()
         toma.TOM_Resumen = resumen

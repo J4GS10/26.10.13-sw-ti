@@ -123,6 +123,11 @@ class Area(Base):
     ARE_Area = Column(Integer, primary_key=True, index=True, autoincrement=True)
     ARE_Nombre = Column(String(150), nullable=False)
     ARE_Tipo_Acceso = Column(String(50), default="General", nullable=False)
+    # Tipo de área del catálogo (BODEGA, OFICINA, REMOTO…). Distinto de
+    # ARE_Tipo_Acceso, que es el nivel de acceso (General / Restringido).
+    TAR_Tipo_Area = Column(
+        Integer, ForeignKey("INV_TIPO_AREA.TAR_Tipo_Area", ondelete="RESTRICT"), nullable=True, index=True,
+    )
     ARE_Descripcion = Column(String(255), nullable=True)
 
     NIV_Nivel = Column(

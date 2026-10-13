@@ -11,17 +11,23 @@ export interface KitTipo {
   frecuencia: number;
   disponibles: number;
   ya_tiene: boolean;
+  /** Kit estándar: cuántos equipos de este tipo. */
+  cantidad?: number;
 }
 
 export interface KitSugerido {
-  origen: 'departamento' | 'general';
+  /** «kit»: el kit estándar del cargo o del departamento (Centro de catálogos). */
+  origen: 'kit' | 'departamento' | 'general';
+  kit?: string;
   departamento: string;
   personas_referencia: number;
   tipos: KitTipo[];
+  /** Licencias que incluye el kit estándar. */
+  licencias: number[];
 }
 
 export interface ItemVerificacion {
-  tipo: 'activo' | 'persona' | 'modelo';
+  tipo: 'activo' | 'persona' | 'modelo' | 'marca';
   id: string;
   codigo?: string;
   titulo: string;
@@ -44,6 +50,8 @@ export interface ResultadoLote {
   total: number;
   movimientos: string[];
   items: Array<{ ACT_Activo: string; codigo: string; MOV_Movimiento: string; operacion?: string; estado?: string }>;
+  /** Licencias asignadas en la misma entrega. */
+  licencias?: Array<{ LIC_Licencia: number; INS_Instalacion: number; LCL_Licencia_Clave: number | null }>;
 }
 
 export interface EntregaLote {
@@ -51,13 +59,21 @@ export interface EntregaLote {
   ARE_Area: number;
   activos: string[];
   MOV_Motivo?: string;
+  /** Motivo del catálogo (motivos-movimiento) y su detalle escrito. */
+  MMO_Motivo?: number | null;
+  MOV_Motivo_Detalle?: string | null;
   MOV_Observacion?: string;
   ticket?: string;
+  /** Licencias por persona que se asignan en la misma transacción. */
+  licencias?: number[];
 }
 
 export interface DevolucionLote {
   activos: string[];
   MOV_Motivo?: string;
+  /** Motivo del catálogo (motivos-movimiento) y su detalle escrito. */
+  MMO_Motivo?: number | null;
+  MOV_Motivo_Detalle?: string | null;
   ARE_Area_Destino?: number | null;
   condicion?: 'BUENO' | 'CON_DANO';
 }

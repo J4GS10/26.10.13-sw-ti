@@ -4,7 +4,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUser, get_client_ip, require_admin
+from app.api.deps import CurrentUser, get_client_ip, require_admin, require_purchase
 from app.api.idempotency import _IdempotencyGuard, idempotency_guard
 from app.core.limiter import limiter
 from app.db.session import get_db, get_read_db
@@ -16,7 +16,10 @@ from app.services.procurement import ProcurementService
 
 router = APIRouter()
 
+# Compras (Administración) crea proveedores y órdenes; recibir en bodega,
+# cerrar con faltante y borrar proveedores es de TI.
 ADMIN = [Depends(require_admin)]
+COMPRAS = [Depends(require_purchase)]
 
 
 def get_service(db: AsyncSession = Depends(get_db)) -> ProcurementService:
@@ -45,7 +48,7 @@ async def get_proveedor(id: int, service: ProcurementService = Depends(get_servi
     return await service.get_proveedor(id)
 
 
-@router.post("/proveedores", response_model=ProveedorResponse, status_code=201, dependencies=ADMIN)
+@router.post("/proveedores", response_model=ProveedorResponse, status_code=201, dependencies=COMPRAS)
 async def create_proveedor(
     schema: ProveedorCreate, request: Request, current_user: CurrentUser,
     service: ProcurementService = Depends(get_service),
@@ -53,7 +56,7 @@ async def create_proveedor(
     return await service.create_proveedor(schema, **_ctx(request, current_user))
 
 
-@router.patch("/proveedores/{id}", response_model=ProveedorResponse, dependencies=ADMIN)
+@router.patch("/proveedores/{id}", response_model=ProveedorResponse, dependencies=COMPRAS)
 async def update_proveedor(
     id: int, schema: ProveedorUpdate, request: Request, current_user: CurrentUser,
     service: ProcurementService = Depends(get_service),
@@ -83,7 +86,7 @@ async def get_orden(id: int, service: ProcurementService = Depends(get_service))
     return await service.get_orden(id)
 
 
-@router.post("/ordenes", response_model=OrdenDetalleResponse, status_code=201, dependencies=ADMIN)
+@router.post("/ordenes", response_model=OrdenDetalleResponse, status_code=201, dependencies=COMPRAS)
 @limiter.limit("30/minute")
 async def create_orden(
     schema: OrdenCreate, request: Request, current_user: CurrentUser,
@@ -92,21 +95,27 @@ async def create_orden(
     return await service.create_orden(schema, **_ctx(request, current_user))
 
 
-@router.patch("/ordenes/{id}/estado", response_model=OrdenDetalleResponse, dependencies=ADMIN)
+@router.patch("/ordenes/{id}/estado", status_code=202, dependencies=COMPRAS)
 async def cambiar_estado_orden(
     id: int, schema: OrdenEstadoUpdate, request: Request, current_user: CurrentUser,
-    service: ProcurementService = Depends(get_service),
+    db: AsyncSession = Depends(get_db),
 ):
-    return await service.cambiar_estado(id, schema.OCO_Estado, motivo=schema.motivo, **_ctx(request, current_user))
+    """Cancelar una orden se solicita (202): la ejecuta el Jefe de TI al aprobarla."""
+    from fastapi import HTTPException
+    from app.services.aprobaciones import AprobacionService
+    if schema.OCO_Estado != "CANCELADA":
+        raise HTTPException(409, "ORDER_STATE_TRANSITION_NOT_ALLOWED")
+    return await AprobacionService(db).solicitar_cancelacion_orden(id, schema.motivo, **_ctx(request, current_user))
 
 
-@router.post("/ordenes/{id}/cerrar", response_model=OrdenDetalleResponse, dependencies=ADMIN)
+@router.post("/ordenes/{id}/cerrar", status_code=202, dependencies=ADMIN)
 async def cerrar_orden_con_faltante(
     id: int, schema: OrdenCierre, request: Request, current_user: CurrentUser,
-    service: ProcurementService = Depends(get_service),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Cierra una orden parcialmente recibida aceptando que lo pendiente no llegará (con motivo)."""
-    return await service.cerrar_con_faltante(id, schema.motivo, **_ctx(request, current_user))
+    """Solicita cerrar una orden parcial aceptando el faltante (202): se cierra al aprobarse."""
+    from app.services.aprobaciones import AprobacionService
+    return await AprobacionService(db).solicitar_cierre_orden(id, schema.motivo, **_ctx(request, current_user))
 
 
 @router.get("/ordenes/{id}/recepciones", response_model=List[RecepcionResponse])

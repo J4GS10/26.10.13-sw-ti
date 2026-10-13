@@ -36,6 +36,7 @@ class AssetStateMachine:
     TRANSITIONS: Dict[EstadoOperativoEnum, Set[EstadoOperativoEnum]] = {
         EstadoOperativoEnum.DISPONIBLE: {
             EstadoOperativoEnum.ASIGNADO,     # Asignación/Préstamo
+            EstadoOperativoEnum.INSTALADO,    # Equipo compartido instalado en un área
             EstadoOperativoEnum.BODEGA,       # Movimiento interno
             EstadoOperativoEnum.REPARACION,   # Envío a taller
             EstadoOperativoEnum.BAJA,         # Retiro
@@ -43,6 +44,7 @@ class AssetStateMachine:
         },
         EstadoOperativoEnum.BODEGA: {
             EstadoOperativoEnum.ASIGNADO,
+            EstadoOperativoEnum.INSTALADO,
             EstadoOperativoEnum.DISPONIBLE,
             EstadoOperativoEnum.REPARACION,
             EstadoOperativoEnum.BAJA,
@@ -57,7 +59,15 @@ class AssetStateMachine:
             # al cerrar el ticket vuelve a "Asignado" con la misma persona.
             EstadoOperativoEnum.REPARACION,
         },
+        EstadoOperativoEnum.INSTALADO: {
+            EstadoOperativoEnum.INSTALADO,    # Reubicación a otra área
+            EstadoOperativoEnum.BODEGA,       # Retiro del área
+            EstadoOperativoEnum.DISPONIBLE,
+            EstadoOperativoEnum.REPARACION,   # Al cerrar el ticket vuelve a «Instalado»
+            EstadoOperativoEnum.TRANSITO,
+        },
         EstadoOperativoEnum.REPARACION: {
+            EstadoOperativoEnum.INSTALADO,
             EstadoOperativoEnum.BODEGA,       # Retorno de taller
             EstadoOperativoEnum.DISPONIBLE,
             EstadoOperativoEnum.BAJA,         # Si no tiene reparación

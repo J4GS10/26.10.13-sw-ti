@@ -19,6 +19,8 @@ import { getApiErrorMessage } from '../../api/errors';
 import { ActivoUpdate, assetService } from './assetService';
 import { Activo, ActivoCreate, EstadoOperativo, Marca, ModeloFlat, TipoActivo } from '../../types/inventory';
 import { useEntityContext } from '../../hooks/useEntityContext';
+import { usePermissions } from '../../hooks/usePermissions';
+import { reglasDe } from '../../utils/clasesActivo';
 import { useSuggestion } from '../../hooks/useSuggestion';
 import { suggestionService } from '../../api/suggestionService';
 interface Props {
@@ -60,6 +62,7 @@ const modelLabel = (m: ModeloFlat) => (m.MAR_Nombre ? `${m.MAR_Nombre} · ${m.MO
 const modelFilter = createFilterOptions<ModeloFlat>({ ignoreAccents: true, ignoreCase: true, trim: true, limit: 50, stringify: modelLabel });
 export const AssetDialog = ({ open, assetToEdit, onClose }: Props) => {
     const { t, i18n } = useTranslation();
+    const { canSeeCosts } = usePermissions();
     const { enqueueSnackbar } = useSnackbar();
     const isEdit = !!assetToEdit;
     // Tras crear: el diálogo propone el siguiente paso (asignar, etiqueta, otro igual).
@@ -218,8 +221,8 @@ export const AssetDialog = ({ open, assetToEdit, onClose }: Props) => {
                 ACT_Hostname: data.ACT_Hostname || null,
                 ACT_Fecha_Compra: data.ACT_Fecha_Compra,
                 ACT_Fin_Garantia: data.ACT_Fin_Garantia || null,
-                ACT_Costo: data.ACT_Costo ? Number(data.ACT_Costo) : null,
-                ACT_Moneda: data.ACT_Moneda,
+                // Quien no ve costos no los envía (el servidor también los ignora).
+                ...(canSeeCosts ? { ACT_Costo: data.ACT_Costo ? Number(data.ACT_Costo) : null, ACT_Moneda: data.ACT_Moneda } : {}),
                 TAC_Tipo_Activo: Number(data.TAC_Tipo_Activo),
                 MOD_Modelo: Number(data.MOD_Modelo),
                 EOP_Estado_Operativo: Number(data.EOP_Estado_Operativo),
@@ -304,8 +307,10 @@ export const AssetDialog = ({ open, assetToEdit, onClose }: Props) => {
 
             <Box sx={{ flex: 1, minWidth: 0, width: '100%' }}>
             <Controller name="TAC_Tipo_Activo" control={control} rules={{ required: true }} render={({ field }) => (<TextField {...field} select fullWidth label={t('assets.dialog.type')} error={!!errors.TAC_Tipo_Activo} helperText={tipoHint ? undefined : t('assets.dialog.prefix_hint')}>
-                  {tipos.map((ti) => (<MenuItem key={ti.TAC_Tipo_Activo} value={ti.TAC_Tipo_Activo}>
+                  {/* Un insumo no se registra como activo (se controla en Consumibles). */}
+                  {tipos.filter((ti) => ti.TAC_Clase !== 'INSUMO' || ti.TAC_Tipo_Activo === assetToEdit?.TAC_Tipo_Activo).map((ti) => (<MenuItem key={ti.TAC_Tipo_Activo} value={ti.TAC_Tipo_Activo}>
                       {ti.TAC_Nombre} {ti.TAC_Prefijo ? `(${ti.TAC_Prefijo})` : ''}
+                      {ti.TAC_Clase && <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>· {t(`asset_class.names.${ti.TAC_Clase}`)}</Typography>}
                     </MenuItem>))}
                 </TextField>)}/>
             <SuggestionHint hint={tipoHint}/>
@@ -317,7 +322,8 @@ export const AssetDialog = ({ open, assetToEdit, onClose }: Props) => {
           <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
             <Controller name="ACT_Serie_Fabricante" control={control} rules={{ required: true }} render={({ field }) => (<TextField {...field} fullWidth label={t('assets.dialog.serial')} error={!!errors.ACT_Serie_Fabricante} helperText={errors.ACT_Serie_Fabricante ? t('common.required') : undefined} required/>)}/>
             <Controller name="ACT_Codigo_Interno" control={control} render={({ field }) => (<TextField {...field} fullWidth label={t('assets.dialog.code')} placeholder={t('assets.dialog.code_placeholder')} helperText={codeHelp} disabled={isEdit}/>)} />
-            <Controller name="ACT_Hostname" control={control} render={({ field }) => <TextField {...field} fullWidth label={t('assets.dialog.hostname')}/>}/>
+            {/* Hostname solo en equipos con identidad de red (no en un mouse o un monitor). */}
+            {(!tipoActual || reglasDe(tipoActual).red || !!watch('ACT_Hostname')) && <Controller name="ACT_Hostname" control={control} render={({ field }) => <TextField {...field} fullWidth label={t('assets.dialog.hostname')}/>}/>}
           </Box>
           <Box sx={{ mt: 2 }}>
             <Controller name="SED_Sede" control={control} rules={{ required: !isEdit }} render={({ field }) => (<SedeField value={field.value} onChange={field.onChange} sedes={sedes} loading={loadingSedes} required={!isEdit} error={!!errors.SED_Sede} helperText={sedeHint ? undefined : t('scope.asset_sede_help')}/>)}/>
@@ -329,7 +335,7 @@ export const AssetDialog = ({ open, assetToEdit, onClose }: Props) => {
           <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
             <Controller name="ACT_Fecha_Compra" control={control} rules={{ required: true }} render={({ field }) => (<TextField {...field} type="date" fullWidth label={t('assets.dialog.purchase_date')} InputLabelProps={{ shrink: true }} error={!!errors.ACT_Fecha_Compra} helperText={errors.ACT_Fecha_Compra ? t('common.required') : undefined} required/>)}/>
             <Controller name="ACT_Fin_Garantia" control={control} render={({ field }) => (<TextField {...field} type="date" fullWidth label={t('assets.dialog.warranty_end')} InputLabelProps={{ shrink: true }}/>)}/>
-            <Controller name="ACT_Moneda" control={control} render={({ field: moneda }) => (<Controller name="ACT_Costo" control={control} render={({ field }) => (<MoneyField name={field.name} value={field.value} onChange={field.onChange} onBlur={field.onBlur} currency={moneda.value} onCurrencyChange={moneda.onChange} fullWidth label={t('assets.dialog.cost')}/>)}/>)}/>
+            {canSeeCosts && <Controller name="ACT_Moneda" control={control} render={({ field: moneda }) => (<Controller name="ACT_Costo" control={control} render={({ field }) => (<MoneyField name={field.name} value={field.value} onChange={field.onChange} onBlur={field.onBlur} currency={moneda.value} onCurrencyChange={moneda.onChange} fullWidth label={t('assets.dialog.cost')}/>)}/>)}/>}
             <Controller name="EOP_Estado_Operativo" control={control} rules={{ required: true }} render={({ field }) => (<TextField {...field} select fullWidth label={t('assets.dialog.operational_status')} error={!!errors.EOP_Estado_Operativo} disabled={estadoBloqueado} helperText={estadoBloqueado ? t('assets.dialog.state_locked_help') : errors.EOP_Estado_Operativo ? t('common.required') : t('assets.dialog.state_storage_help')}>
                   {estadosPermitidos.map((e) => (<MenuItem key={e.EOP_Estado_Operativo} value={e.EOP_Estado_Operativo}>
                       {stateLabel(t, e.EOP_Nombre)}

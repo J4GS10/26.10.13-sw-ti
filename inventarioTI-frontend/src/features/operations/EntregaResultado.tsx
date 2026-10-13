@@ -9,19 +9,41 @@ import { guardarArchivo, type ResultadoLote } from '../../api/productividadServi
 import { normalizeLanguage } from '../../types/language';
 import { assetService } from '../assets/assetService';
 import { movementService } from './movementService';
+import client from '../../api/axios';
+import { useConfirm } from '../../components/confirm-context';
 
 interface Props {
   resultado: ResultadoLote;
   /** Texto principal («Se entregaron 7 equipos a …»). */
   mensaje: string;
   tipoActa: 'entrega' | 'descargo';
+  /** Entregas: permite deshacerla (dentro de los 30 min siguientes); se llama al terminar. */
+  onDeshecho?: () => void;
 }
 
 /** Cierre de una operación en lote: un solo documento y las etiquetas de todos los equipos. */
-export const EntregaResultado = ({ resultado, mensaje, tipoActa }: Props) => {
+export const EntregaResultado = ({ resultado, mensaje, tipoActa, onDeshecho }: Props) => {
   const { t, i18n } = useTranslation();
   const { enqueueSnackbar } = useSnackbar();
-  const [ocupado, setOcupado] = useState<'acta' | 'etiquetas' | null>(null);
+  const [ocupado, setOcupado] = useState<'acta' | 'etiquetas' | 'deshacer' | null>(null);
+  const confirm = useConfirm();
+
+  const deshacer = async () => {
+    if (!(await confirm({ message: t('handover.undo_confirm', { count: resultado.total }), confirmText: t('common.undo') }))) return;
+    setOcupado('deshacer');
+    try {
+      await client.post('/trazabilidad/movimientos/revertir', {
+        movimientos: resultado.movimientos,
+        instalaciones: (resultado.licencias ?? []).map((l) => l.INS_Instalacion),
+      });
+      enqueueSnackbar(t('handover.undone'), { variant: 'info' });
+      onDeshecho?.();
+    } catch (err) {
+      enqueueSnackbar(getApiErrorMessage(err, t('common.error_save')), { variant: 'error', autoHideDuration: 8000 });
+    } finally {
+      setOcupado(null);
+    }
+  };
   const lang = normalizeLanguage(i18n.resolvedLanguage);
 
   const descargarActa = async () => {
@@ -64,6 +86,11 @@ export const EntregaResultado = ({ resultado, mensaje, tipoActa }: Props) => {
           <Button variant="outlined" onClick={etiquetas} disabled={!!ocupado}
             startIcon={ocupado === 'etiquetas' ? <CircularProgress size={16} /> : <QrCode2Icon />}>
             {t('handover.print_labels', { count: resultado.total })}
+          </Button>
+        )}
+        {tipoActa === 'entrega' && onDeshecho && (
+          <Button color="warning" onClick={() => void deshacer()} disabled={!!ocupado}>
+            {t('handover.undo')}
           </Button>
         )}
       </Stack>

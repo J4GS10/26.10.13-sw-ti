@@ -41,6 +41,7 @@ export const EntregaPuestoDialog = ({ open, activosIniciales, personaInicial, on
             resultado={hecho.res}
             tipoActa="entrega"
             mensaje={t('handover.done', { count: hecho.res.total, person: nombrePersona(hecho.persona) })}
+            onDeshecho={cerrar}
           />
         ) : open && (
           <EntregaPuestoForm

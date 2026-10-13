@@ -9,7 +9,7 @@ debajo del mínimo se considera "bajo stock" (alerta). Los movimientos de stock
 import uuid
 from sqlalchemy import (
     Column, Integer, String, Boolean, DateTime, ForeignKey, Numeric, Uuid, func,
-    CheckConstraint,
+    CheckConstraint, UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 
@@ -29,6 +29,13 @@ class Consumible(Base):
     CON_Categoria = Column(String(50), nullable=True)
     # Unidad de medida: unidad, caja, metro, litro, etc.
     CON_Unidad = Column(String(20), nullable=False, default="unidad")
+    # Catálogos; CON_Categoria y CON_Unidad conservan el nombre legible.
+    CCO_Categoria = Column(
+        Integer, ForeignKey("INV_CATEGORIA_CONSUMIBLE.CCO_Categoria", ondelete="RESTRICT"), nullable=True, index=True,
+    )
+    UME_Unidad = Column(
+        Integer, ForeignKey("INV_UNIDAD_MEDIDA.UME_Unidad", ondelete="RESTRICT"), nullable=True, index=True,
+    )
 
     CON_Stock_Actual = Column(Integer, nullable=False, default=0)
     CON_Stock_Minimo = Column(Integer, nullable=False, default=0)
@@ -88,6 +95,8 @@ class MovimientoConsumible(Base):
         ForeignKey("INV_PERSONA.PER_Persona", ondelete="SET NULL"),
         nullable=True,
     )
+    # Equipo en que se instaló (tóner en una impresora): la salida queda en su historial.
+    ACT_Activo = Column(Uuid, ForeignKey("INV_ACTIVO.ACT_Activo", ondelete="SET NULL"), nullable=True, index=True)
     # Usuario que ejecutó el movimiento (operador).
     USU_Usuario = Column(
         Uuid,
@@ -105,3 +114,17 @@ class MovimientoConsumible(Base):
             name="ck_moc_tipo_valido",
         ),
     )
+
+
+# ==========================================
+# 3. COMPATIBILIDAD (tóner HP 26A → modelos de impresora)
+# ==========================================
+class ConsumibleCompatible(Base):
+    __tablename__ = "INV_CONSUMIBLE_COMPATIBLE"
+
+    CCM_Compatible = Column(Integer, primary_key=True, autoincrement=True)
+    CON_Consumible = Column(Integer, ForeignKey("INV_CONSUMIBLE.CON_Consumible", ondelete="CASCADE"), nullable=False,
+                            index=True)
+    MOD_Modelo = Column(Integer, ForeignKey("INV_MODELO.MOD_Modelo", ondelete="CASCADE"), nullable=False, index=True)
+
+    __table_args__ = (UniqueConstraint("CON_Consumible", "MOD_Modelo", name="uq_consumible_compatible"),)

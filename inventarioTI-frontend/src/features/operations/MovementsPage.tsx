@@ -181,7 +181,7 @@ export const MovementsPage = () => {
         }
     };
     return (<Box>
-      <PageHeader
+      <PageHeader help="movements"
         title={t('operations.title')}
         badge={filteredMovs.length}
         actions={<>

@@ -149,7 +149,7 @@ async def test_linea_solo_recibe_lo_que_es(client, auth_headers, domain_seed):
 
 
 @pytest.mark.asyncio
-async def test_cierre_con_faltante_y_sin_cancelar_con_recepciones(client, auth_headers, domain_seed):
+async def test_cierre_con_faltante_y_sin_cancelar_con_recepciones(client, auth_headers, jefe_headers, domain_seed):
     h = auth_headers
     pid = await _proveedor(client, h)
     cid = await _consumible(client, h, "Mouse QA")
@@ -162,9 +162,14 @@ async def test_cierre_con_faltante_y_sin_cancelar_con_recepciones(client, auth_h
     r = await client.patch(f"{BASE}/ordenes/{oid}/estado", headers=h, json={"OCO_Estado": "CANCELADA"})
     assert r.status_code == 409 and r.json()["detail"] == "ORDER_HAS_RECEIPTS_CLOSE_WITH_SHORTAGE"
     assert (await client.post(f"{BASE}/ordenes/{oid}/cerrar", headers=h, json={"motivo": "x"})).status_code == 422
+    # Cerrar con faltante se solicita y lo aprueba el Jefe de TI.
     r = await client.post(f"{BASE}/ordenes/{oid}/cerrar", headers=h,
                           json={"motivo": "El proveedor descontinuó el modelo"})
+    assert r.status_code == 202 and r.json()["APR_Tipo"] == "CIERRE_FALTANTE", r.text
+    assert (await client.get(f"{BASE}/ordenes/{oid}", headers=h)).json()["OCO_Estado"] == "PARCIAL"
+    r = await client.post(f"/api/v1/aprobaciones/{r.json()['APR_Aprobacion']}/aprobar", headers=jefe_headers, json={})
     assert r.status_code == 200, r.text
+    r = await client.get(f"{BASE}/ordenes/{oid}", headers=h)
     assert r.json()["OCO_Estado"] == "CERRADA_CON_FALTANTE"
     assert r.json()["OCO_Motivo_Cierre"] == "El proveedor descontinuó el modelo"
     # Cerrada es final: no se recibe más.

@@ -1,19 +1,22 @@
 """Activos (Core). Lectura: cualquier autenticado. Mutación: TECNICO+."""
-from typing import List
+from typing import List, Optional
 import uuid
 
 from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUser, PaginationParams, get_client_ip, require_admin, require_operativo
+from app.api.deps import (
+    CurrentUser, PaginationParams, get_client_ip, require_admin, require_inventory, require_operativo, require_people,
+)
 from app.api.idempotency import _IdempotencyGuard, idempotency_guard
 from app.core.limiter import limiter
+from app.core.ocultar_costos import descartar_costos
 from app.db.session import get_db
 from app.schemas.common import PaginatedResponse
 from app.schemas.core import (
-    ActivoCreate, ActivoDetailResponse, ActivoFilter, ActivoResponse, ActivoUpdate,
-    BajaActivo, ComponenteInstalar, ComponenteRetirar,
+    ActivoCreate, ActivoDetailResponse, ActivoFilter, ActivoResponse, ActivoUpdate, ReclasificacionCreate,
+    BajaActivo, ComponenteInstalar, ComponenteRetirar, EdicionLote, RestaurarLote,
     EspecificacionCreate, EspecificacionDetalle, EspecificacionValorUpdate,
     EtiquetasActivosRequest,
 )
@@ -81,10 +84,28 @@ async def create_activo(
     service: CoreService = Depends(get_service),
     idempotency: _IdempotencyGuard = Depends(idempotency_guard),
 ):
+    descartar_costos(schema, current_user.USU_Rol, "ACT_Costo")
     return await idempotency.execute(
         lambda: service.create_activo(schema, usuario_id=current_user.USU_Usuario),
         status_code=201,
     )
+
+
+# Edición en lote (antes de /activos/{activo_id}: «lote» no es un id).
+@router.patch("/activos/lote", dependencies=ADMIN)
+async def editar_lote(schema: EdicionLote, request: Request, current_user: CurrentUser, db: AsyncSession = Depends(get_db)):
+    """Ubicación, costo y moneda, garantía, proveedor/factura y especificaciones para varios activos a la vez."""
+    from app.services.edicion_lote import EdicionLoteService
+    return await EdicionLoteService(db).aplicar([(a, schema.cambios) for a in schema.activos], **_ctx(request, current_user))
+
+
+@router.post("/activos/lote/restaurar", dependencies=ADMIN)
+async def restaurar_lote(schema: RestaurarLote, request: Request, current_user: CurrentUser,
+                         db: AsyncSession = Depends(get_db)):
+    """Deshacer una edición en lote: cada activo vuelve a sus valores anteriores (con su evento en el kardex)."""
+    from app.services.edicion_lote import EdicionLoteService
+    return await EdicionLoteService(db).aplicar([(i.ACT_Activo, i.cambios) for i in schema.items],
+                                                accion="UPDATE_BATCH_UNDO", **_ctx(request, current_user))
 
 
 @router.patch("/activos/{activo_id}", response_model=ActivoResponse, dependencies=OPERATIVO)
@@ -92,6 +113,7 @@ async def update_activo(
     activo_id: uuid.UUID, schema: ActivoUpdate, request: Request, current_user: CurrentUser,
     service: CoreService = Depends(get_service),
 ):
+    descartar_costos(schema, current_user.USU_Rol, "ACT_Costo", "ACT_Moneda")
     return await service.update_activo(activo_id, schema, usuario_id=current_user.USU_Usuario)
 
 
@@ -227,7 +249,31 @@ def _componentes_json(data: dict) -> dict:
     }
 
 
-@router.get("/activos/{id}/contexto")
+@router.get("/activos/{id}/consumibles", dependencies=[Depends(require_inventory)])
+async def consumibles_del_activo(id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    """Consumibles instalados en el equipo (tóner de una impresora) y los compatibles con su modelo."""
+    from app.services.consumable import ConsumableService
+    return await ConsumableService(db).consumo_de_equipo(id)
+
+
+@router.get("/tipos-activo/{tipo_id}/reclasificar", dependencies=ADMIN)
+async def vista_reclasificacion(tipo_id: int, sede: Optional[int] = None, db: AsyncSession = Depends(get_db)):
+    """Cuántos activos de un tipo «insumo» pasarían a consumible y cuáles lo impiden."""
+    from app.services.reclasificacion import ReclasificacionService
+    return await ReclasificacionService(db).vista_previa(tipo_id, sede)
+
+
+@router.post("/tipos-activo/{tipo_id}/reclasificar", status_code=202, dependencies=ADMIN)
+async def solicitar_reclasificacion(
+    tipo_id: int, schema: ReclasificacionCreate, request: Request, current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """Solicita convertir los activos de un tipo «insumo» en un consumible (se ejecuta al aprobarse)."""
+    from app.services.aprobaciones import AprobacionService
+    return await AprobacionService(db).solicitar_reclasificacion(tipo_id, schema, **_ctx(request, current_user))
+
+
+@router.get("/activos/{id}/contexto", dependencies=[Depends(require_people)])
 async def activo_contexto(id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     """Custodio y área actuales del activo y el tipo de movimiento lógico."""
     return await SuggestionService(db).activo(id)

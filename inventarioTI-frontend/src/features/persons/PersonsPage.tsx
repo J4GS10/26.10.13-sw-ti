@@ -94,7 +94,7 @@ export const PersonsPage = () => {
             .some((v) => v.toLowerCase().includes(q)));
     }, [personas, search]);
     return (<Box>
-      <PageHeader
+      <PageHeader help="persons"
         title={t('persons.title')}
         subtitle={t('persons.subtitle')}
         badge={filtered.length}

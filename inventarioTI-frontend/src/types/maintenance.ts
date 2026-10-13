@@ -16,11 +16,15 @@ export interface DetalleMantenimiento {
   DMA_Detalle_Mant: number;
   DMA_Accion_Realizada: string;
   DMA_Costo_Item: number;
+  /** Acción del catálogo (acciones-mantenimiento). */
+  AMA_Accion?: number | null;
 }
 
 export interface DetalleCreate {
+  /** Detalle escrito; con acción del catálogo es opcional. */
   DMA_Accion_Realizada: string;
   DMA_Costo_Item: number;
+  AMA_Accion?: number | null;
 }
 
 export interface Mantenimiento {
@@ -28,6 +32,8 @@ export interface Mantenimiento {
   MAN_Fecha_Ingreso: string;
   MAN_Fecha_Cierre: string | null;
   MAN_Descripcion_Falla: string;
+  /** Tipo de falla del catálogo (tipos-falla). */
+  TFA_Tipo_Falla?: number | null;
   MAN_Costo_Total: number;
   /** Moneda del ticket: aplica al total y a cada detalle. */
   MAN_Moneda: string;
@@ -47,6 +53,7 @@ export interface MantenimientoCreate {
   PER_Persona_Solicita: string;
   TMA_Tipo_Mantenimiento: number;
   MAN_Descripcion_Falla: string;
+  TFA_Tipo_Falla?: number | null;
   MAN_Costo_Total?: number;
   MAN_Moneda?: string;
   detalles?: DetalleCreate[];

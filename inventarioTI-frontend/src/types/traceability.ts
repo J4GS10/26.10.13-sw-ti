@@ -46,6 +46,9 @@ export interface MovimientoCreate {
   /** Préstamos: fecha comprometida de devolución (YYYY-MM-DD). */
   MOV_Fecha_Prevista_Devolucion?: string | null;
   MOV_Motivo?: string;
+  /** Motivo del catálogo (motivos-movimiento) y su detalle escrito. */
+  MMO_Motivo?: number | null;
+  MOV_Motivo_Detalle?: string | null;
 }
 
 export interface TransferenciaCreate {
@@ -54,4 +57,7 @@ export interface TransferenciaCreate {
   ARE_Area_Destino: number;
   MOV_Observacion?: string;
   MOV_Motivo?: string;
+  /** Motivo del catálogo (motivos-movimiento) y su detalle escrito. */
+  MMO_Motivo?: number | null;
+  MOV_Motivo_Detalle?: string | null;
 }
