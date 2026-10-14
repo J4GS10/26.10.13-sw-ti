@@ -261,7 +261,7 @@ sus tokens sin afectar a las demás.
 |---|---|---|
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | 15 | Vida del access token (en memoria del navegador) |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | 30 | Máximo técnico del refresh token; nunca supera la sesión absoluta |
-| `SESSION_IDLE_TIMEOUT_MINUTES` | 720 | Inactividad máxima aplicada por el servidor (12 horas) |
+| `SESSION_IDLE_TIMEOUT_MINUTES` | 120 | Inactividad máxima aplicada por el servidor (2 horas) |
 | `SESSION_ABSOLUTE_MAX_HOURS` | 720 | Duración máxima absoluta desde el login (30 días) |
 | `REFRESH_COOKIE_PERSISTENT` | false | `false` = la sesión muere al cerrar el navegador |
 | `REFRESH_REUSE_GRACE_SECONDS` | 30 | Reusar un refresh ya rotado fuera de esta ventana se trata como robo: se cierran **todas** las sesiones del usuario (auditoría `REFRESH_TOKEN_REUSE`) |

@@ -20,7 +20,7 @@ def test_refresh_policy_defaults_to_30_days_but_idle_is_12_hours():
     s = _settings()
     assert s.REFRESH_TOKEN_EXPIRE_DAYS == 30
     assert s.SESSION_ABSOLUTE_MAX_HOURS == 720
-    assert s.SESSION_IDLE_TIMEOUT_MINUTES == 720
+    assert s.SESSION_IDLE_TIMEOUT_MINUTES == 120
     assert s.REFRESH_COOKIE_PERSISTENT is False
 
 
@@ -32,3 +32,8 @@ def test_refresh_policy_rejects_more_than_30_days():
 def test_refresh_policy_rejects_idle_longer_than_absolute():
     with pytest.raises(ValueError):
         _settings(SESSION_IDLE_TIMEOUT_MINUTES=721, SESSION_ABSOLUTE_MAX_HOURS=12)
+
+
+def test_refresh_policy_rejects_idle_longer_than_two_hours():
+    with pytest.raises(ValueError):
+        _settings(SESSION_IDLE_TIMEOUT_MINUTES=121)

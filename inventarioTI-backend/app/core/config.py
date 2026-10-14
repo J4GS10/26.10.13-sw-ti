@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     # tiempo y se renueva con cada uso (actividad). Sin actividad, la sesión
     # muere aunque el navegador quede abierto. Debe ser > ACCESS_TOKEN_EXPIRE_MINUTES.
     # La inactividad corta el refresh aunque el máximo técnico sea 30 días.
-    SESSION_IDLE_TIMEOUT_MINUTES: int = 720  # 12 horas
+    SESSION_IDLE_TIMEOUT_MINUTES: int = 120  # 2 horas
     # False = cookie de sesión (se borra al cerrar el navegador). True = persiste
     # hasta la expiración del refresh ("recordarme").
     # Persistencia sólo si el entorno la habilita explícitamente.
@@ -273,6 +273,8 @@ class Settings(BaseSettings):
             self.SESSION_IDLE_TIMEOUT_MINUTES = self.ACCESS_TOKEN_EXPIRE_MINUTES * 2
         if self.REFRESH_TOKEN_EXPIRE_DAYS < 1 or self.REFRESH_TOKEN_EXPIRE_DAYS > 30:
             raise ValueError("REFRESH_TOKEN_EXPIRE_DAYS debe estar entre 1 y 30")
+        if self.SESSION_IDLE_TIMEOUT_MINUTES > 120:
+            raise ValueError("SESSION_IDLE_TIMEOUT_MINUTES no puede superar 120 minutos")
         if self.SESSION_ABSOLUTE_MAX_HOURS < self.ACCESS_TOKEN_EXPIRE_MINUTES / 60:
             raise ValueError("SESSION_ABSOLUTE_MAX_HOURS no puede ser menor que la vida del access token")
         if self.SESSION_IDLE_TIMEOUT_MINUTES > self.SESSION_ABSOLUTE_MAX_HOURS * 60:
