@@ -13,6 +13,9 @@ import AddBoxIcon from '@mui/icons-material/AddBox';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import BuildIcon from '@mui/icons-material/Build';
+import Inventory2Icon from '@mui/icons-material/Inventory2';
 import KeyboardIcon from '@mui/icons-material/Keyboard';
 import type { SvgIconComponent } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
@@ -100,6 +103,9 @@ const PaletteBody = ({ onClose, recientes, favoritos, onEntrega, onAtajos, onAbr
       canAdminInventory && { clave: 'a-alta', grupo: 'actions', titulo: t('palette.actions.onboarding'), subtitulo: t('palette.actions.onboarding_help'), icono: PersonAddIcon, ejecutar: ir('/operaciones/alta-empleado') },
       { clave: 'a-scanner', grupo: 'actions', titulo: t('palette.actions.scan'), icono: QrCodeScannerIcon, ejecutar: ir('/scanner') },
       canAdminInventory && { clave: 'a-import', grupo: 'actions', titulo: t('palette.actions.import'), icono: UploadFileIcon, ejecutar: ir('/config/importar') },
+      canOperate && { clave: 'a-movimientos', grupo: 'actions', titulo: t('palette.actions.movements'), subtitulo: t('palette.actions.movements_help'), icono: SwapHorizIcon, ejecutar: ir('/operaciones/movimientos') },
+      canOperate && { clave: 'a-maintenance', grupo: 'actions', titulo: t('palette.actions.maintenance'), icono: BuildIcon, ejecutar: ir('/mantenimiento') },
+      canOperate && { clave: 'a-consumables', grupo: 'actions', titulo: t('palette.actions.consumables'), icono: Inventory2Icon, ejecutar: ir('/consumibles') },
       { clave: 'a-atajos', grupo: 'actions', titulo: t('palette.actions.shortcuts'), icono: KeyboardIcon, etiqueta: '?', ejecutar: () => { onClose(); onAtajos(); } },
     ].filter((x): x is Item => !!x && coincide(x.titulo));
 

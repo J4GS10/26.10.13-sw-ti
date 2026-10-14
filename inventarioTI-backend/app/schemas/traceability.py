@@ -60,6 +60,15 @@ class MovimientoCreate(MovimientoBase):
     MMO_Motivo: Optional[int] = None
     MOV_Motivo_Detalle: Optional[str] = Field(None, max_length=255)
 
+    from pydantic import field_validator
+
+    @field_validator("MOV_Fecha_Prevista_Devolucion")
+    @classmethod
+    def fecha_prevista_no_puede_ser_pasada(cls, value: Optional[date]) -> Optional[date]:
+        if value is not None and value < date.today():
+            raise ValueError("La fecha prevista de devolución no puede estar en el pasado")
+        return value
+
 class MovimientoResponse(MovimientoBase):
     MOV_Movimiento: uuid.UUID
     MOV_Fecha_Asignacion: datetime

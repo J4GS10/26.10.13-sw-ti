@@ -80,3 +80,26 @@ jobs:
         run: python ../herramientas-qa/verify.py
         env:
           PYTHONIOENCODING: utf-8
+
+  oracle-compatibility:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: inventarioTI-backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - name: Compilar modelos con dialecto Oracle 21c
+        env:
+          POSTGRES_SERVER: oracle
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: ORCLPDB1
+          DB_ENGINE: oracle
+          SECRET_KEY: ci-only-secret-key-not-used-anywhere-0123456789
+        run: |
+          python -c "from sqlalchemy.dialects import oracle; from sqlalchemy.schema import CreateTable; from app.db.base import Base; import app.models; [CreateTable(t).compile(dialect=oracle.dialect()) for t in Base.metadata.tables.values()]; print(f'Oracle DDL OK: {len(Base.metadata.tables)} tablas')"
+          python -m compileall -q app

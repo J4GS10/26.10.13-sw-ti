@@ -2570,6 +2570,10 @@
             "onboarding_help": "Persona, equipos y acceso en un solo recorrido",
             "scan": "Escanear códigos",
             "import": "Importar activos desde Excel",
+            "movements": "Registrar movimiento",
+            "movements_help": "Asignar, devolver o transferir un activo",
+            "maintenance": "Abrir mantenimiento",
+            "consumables": "Gestionar consumibles",
             "shortcuts": "Atajos de teclado"
         },
         "footer": {
