@@ -55,16 +55,20 @@ class Settings(BaseSettings):
     SECRET_KEY: str = Field(..., min_length=32)
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 1
+    # Sesión recordada: hasta 30 días en el navegador/dispositivo confiable.
+    # Un navegador nuevo o un equipo nuevo sigue pasando por MFA.
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     # Duración máxima ABSOLUTA de una sesión desde el login, aunque haya
     # actividad y el refresh rote (evita sesiones eternas en equipos compartidos).
-    SESSION_ABSOLUTE_MAX_HOURS: int = 12
+    SESSION_ABSOLUTE_MAX_HOURS: int = 720  # 30 días
     # Inactividad máxima aplicada por el SERVIDOR: el refresh token vive este
     # tiempo y se renueva con cada uso (actividad). Sin actividad, la sesión
     # muere aunque el navegador quede abierto. Debe ser > ACCESS_TOKEN_EXPIRE_MINUTES.
-    SESSION_IDLE_TIMEOUT_MINUTES: int = 30
+    # La inactividad corta el refresh aunque el máximo técnico sea 30 días.
+    SESSION_IDLE_TIMEOUT_MINUTES: int = 720  # 12 horas
     # False = cookie de sesión (se borra al cerrar el navegador). True = persiste
     # hasta la expiración del refresh ("recordarme").
+    # Persistencia sólo si el entorno la habilita explícitamente.
     REFRESH_COOKIE_PERSISTENT: bool = False
     # Ventana en la que reusar un refresh ya rotado se considera una carrera
     # legítima (respuesta perdida, dos pestañas). Fuera de ella = posible robo
@@ -267,6 +271,12 @@ class Settings(BaseSettings):
                     "(si no, el refresh expira antes de poder usarse)."
                 )
             self.SESSION_IDLE_TIMEOUT_MINUTES = self.ACCESS_TOKEN_EXPIRE_MINUTES * 2
+        if self.REFRESH_TOKEN_EXPIRE_DAYS < 1 or self.REFRESH_TOKEN_EXPIRE_DAYS > 30:
+            raise ValueError("REFRESH_TOKEN_EXPIRE_DAYS debe estar entre 1 y 30")
+        if self.SESSION_ABSOLUTE_MAX_HOURS < self.ACCESS_TOKEN_EXPIRE_MINUTES / 60:
+            raise ValueError("SESSION_ABSOLUTE_MAX_HOURS no puede ser menor que la vida del access token")
+        if self.SESSION_IDLE_TIMEOUT_MINUTES > self.SESSION_ABSOLUTE_MAX_HOURS * 60:
+            raise ValueError("La inactividad no puede superar la vida absoluta de la sesión")
         return self
 
     @model_validator(mode="after")
