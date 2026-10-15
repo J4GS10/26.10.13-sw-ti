@@ -22,10 +22,15 @@ class Settings(BaseSettings):
     DB_READ_DSN: str | None = None
     DB_WRITE_HOST: str | None = None
     DB_READ_HOST: str | None = None
-    POSTGRES_SERVER: str
-    POSTGRES_USER: str
-    POSTGRES_PASSWORD: str
-    POSTGRES_DB: str
+    POSTGRES_SERVER: str | None = None
+    POSTGRES_USER: str | None = None
+    POSTGRES_PASSWORD: str | None = None
+    POSTGRES_DB: str | None = None
+    ORACLE_HOST: str | None = None
+    ORACLE_PORT: int = 1521
+    ORACLE_SERVICE_NAME: str | None = None
+    ORACLE_USER: str | None = None
+    ORACLE_PASSWORD: str | None = None
     POSTGRES_PORT: int = 5432
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20
@@ -65,11 +70,11 @@ class Settings(BaseSettings):
     # tiempo y se renueva con cada uso (actividad). Sin actividad, la sesión
     # muere aunque el navegador quede abierto. Debe ser > ACCESS_TOKEN_EXPIRE_MINUTES.
     # La inactividad corta el refresh aunque el máximo técnico sea 30 días.
-    SESSION_IDLE_TIMEOUT_MINUTES: int = 120  # 2 horas
+    SESSION_IDLE_TIMEOUT_MINUTES: int = 43200  # 30 días
     # False = cookie de sesión (se borra al cerrar el navegador). True = persiste
     # hasta la expiración del refresh ("recordarme").
     # Persistencia sólo si el entorno la habilita explícitamente.
-    REFRESH_COOKIE_PERSISTENT: bool = False
+    REFRESH_COOKIE_PERSISTENT: bool = True
     # Ventana en la que reusar un refresh ya rotado se considera una carrera
     # legítima (respuesta perdida, dos pestañas). Fuera de ella = posible robo
     # → se revocan TODAS las sesiones del usuario.
@@ -273,8 +278,8 @@ class Settings(BaseSettings):
             self.SESSION_IDLE_TIMEOUT_MINUTES = self.ACCESS_TOKEN_EXPIRE_MINUTES * 2
         if self.REFRESH_TOKEN_EXPIRE_DAYS < 1 or self.REFRESH_TOKEN_EXPIRE_DAYS > 30:
             raise ValueError("REFRESH_TOKEN_EXPIRE_DAYS debe estar entre 1 y 30")
-        if self.SESSION_IDLE_TIMEOUT_MINUTES > 120:
-            raise ValueError("SESSION_IDLE_TIMEOUT_MINUTES no puede superar 120 minutos")
+        if self.SESSION_IDLE_TIMEOUT_MINUTES > self.SESSION_ABSOLUTE_MAX_HOURS * 60:
+            raise ValueError("La inactividad no puede superar la vida absoluta de la sesión")
         if self.SESSION_ABSOLUTE_MAX_HOURS < self.ACCESS_TOKEN_EXPIRE_MINUTES / 60:
             raise ValueError("SESSION_ABSOLUTE_MAX_HOURS no puede ser menor que la vida del access token")
         if self.SESSION_IDLE_TIMEOUT_MINUTES > self.SESSION_ABSOLUTE_MAX_HOURS * 60:
@@ -322,14 +327,23 @@ class Settings(BaseSettings):
         encoded_password = quote_plus(password)
         return f"postgresql+psycopg://{user}:{encoded_password}@{server}:{port}/{db}"
 
+    def _oracle_uri(self) -> str:
+        user = self.ORACLE_USER or self.POSTGRES_USER
+        password = self.ORACLE_PASSWORD or self.POSTGRES_PASSWORD
+        host = self.ORACLE_HOST or self.DB_WRITE_HOST or self.POSTGRES_SERVER
+        service = self.ORACLE_SERVICE_NAME or self.POSTGRES_DB
+        if not all((user, password, host, service)):
+            raise ValueError("Oracle requiere ORACLE_USER, ORACLE_PASSWORD, ORACLE_HOST y ORACLE_SERVICE_NAME")
+        return f"oracle+oracledb://{quote_plus(user)}:{quote_plus(password)}@{host}:{self.ORACLE_PORT}/?service_name={quote_plus(service)}"
+
     def _normalize_dsn(self, dsn: str) -> str:
         """Normaliza DSN comunes al driver async elegido por SQLAlchemy."""
         replacements = {
             "postgresql://": "postgresql+psycopg://",
             "postgres://": "postgresql+psycopg://",
             "mysql://": "mysql+asyncmy://",
-            "oracle://": "oracle+oracledb_async://",
-            "oracle+oracledb://": "oracle+oracledb_async://",
+            "oracle://": "oracle+oracledb://",
+            "oracle+oracledb_async://": "oracle+oracledb://",
         }
         for prefix, async_prefix in replacements.items():
             if dsn.startswith(prefix):
@@ -342,6 +356,8 @@ class Settings(BaseSettings):
             return self._normalize_dsn(self.DB_WRITE_DSN)
         if self.DB_ENGINE == "sqlite" or self.POSTGRES_SERVER == "sqlite":
             return "sqlite+aiosqlite:///./inventario.db"
+        if self.DB_ENGINE == "oracle":
+            return self._oracle_uri()
         if self.DB_ENGINE != "postgres":
             raise ValueError(
                 f"DB_WRITE_DSN es obligatorio cuando DB_ENGINE={self.DB_ENGINE}"
